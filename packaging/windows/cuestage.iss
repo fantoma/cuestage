@@ -3,7 +3,7 @@
 ; Prende la cartella creata da PyInstaller (dist\CueStage) e produce dist\CueStage-<versione>-windows-setup.exe
 
 #ifndef AppVersion
-  #define AppVersion "1.0.0"
+  #define AppVersion "1.0.1"
 #endif
 #define Root "..\.."
 

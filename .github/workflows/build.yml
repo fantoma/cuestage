@@ -97,7 +97,7 @@ jobs:
           path: build/cache
           key: appimage-cache-${{ hashFiles('packaging/build_appimage.sh') }}
       - name: Librerie per la prova di avvio
-        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 libasound2 libpulse0 libx11-6 libxext6 libxrandr2
       - name: Costruisci
         run: packaging/build_appimage.sh
       - name: Allega alla Release
