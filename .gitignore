@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+/build/
+/dist/
+.venv/
+*.AppImage
+*.AppImage.part*
+*.dmg
+*.zip
+*.sha256
+*.autosave

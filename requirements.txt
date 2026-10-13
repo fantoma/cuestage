@@ -1,0 +1,6 @@
+PySide6>=6.6,<6.12   # 6.12.0 crasha su Python < 3.12 (bug di refcount di None)
+numpy>=1.24
+sounddevice>=0.4.6
+python-osc>=1.8
+mido>=1.3
+python-rtmidi>=1.5

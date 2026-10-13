@@ -1,0 +1,19 @@
+#!/bin/sh
+# Avvio di CueStage dall'AppImage (la cartella di lavoro resta quella di partenza).
+HERE="$(dirname "$(readlink -f "$0")")"
+
+# ffmpeg e ffprobe inclusi hanno la precedenza; amixer di sistema, se c'è, è preferito a quello incluso
+export PATH="$HERE/usr/bin:$PATH:$HERE/usr/fallback-bin"
+export CUESTAGE_APPIMAGE_DIR="$HERE"
+export PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1
+unset PYTHONHOME PYTHONPATH
+
+# librerie di riserva, usate solo se il sistema non le ha (libjack del sistema = PipeWire/JACK dell'utente)
+LDP="$HERE/usr/lib"
+for pair in "libjack.so.0:jack" "libxcb-cursor.so.0:xcb"; do
+    lib="${pair%%:*}"; dir="${pair##*:}"
+    /sbin/ldconfig -p 2>/dev/null | grep -q "$lib" || LDP="$LDP:$HERE/usr/lib/fallback/$dir"
+done
+export LD_LIBRARY_PATH="$LDP${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+exec "$HERE/usr/python/bin/python3" -I "$HERE/usr/app/launch.py" "$@"

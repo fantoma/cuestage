@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=CueStage
+GenericName=Show control
+Comment=Cue audio, video, luci e mixer per lo spettacolo
+Exec=cuestage %f
+Icon=cuestage
+Terminal=false
+Categories=AudioVideo;Audio;Video;
+MimeType=application/x-cuestage;
+Keywords=cue;show;theatre;teatro;qlab;

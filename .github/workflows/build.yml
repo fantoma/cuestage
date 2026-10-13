@@ -1,0 +1,209 @@
+# Costruisce e prova CueStage su Linux, Windows e macOS.
+#
+#  push sul ramo main / pull request  → solo test su Linux (veloce, consuma pochi minuti)
+#  tag «v1.2.3»                       → test sui 3 sistemi + pacchetti allegati alla Release «v1.2.3»
+#  Actions › Build › Run workflow     → test sui 3 sistemi + pacchetti scaricabili da «Artifacts» per 3 giorni
+#
+# Repository privato con piano Free: 2000 minuti/mese (Windows conta ×2, macOS ×10) e 500 MB di artifact.
+# Una costruzione completa usa circa 300–400 minuti «Linux equivalenti»: vedi GITHUB.md.
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  # ------------------------------------------------------------------ test dai sorgenti
+  test:
+    name: Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON((startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') && '["ubuntu-22.04","windows-latest","macos-15"]' || '["ubuntu-22.04"]') }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Dipendenze di sistema (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg libportaudio2 libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - name: ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg -y --no-progress
+      - name: ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: brew install ffmpeg
+      - name: Librerie Python
+        run: python -m pip install -r requirements.txt pyflakes
+      - name: Controllo statico
+        run: python -m pyflakes cuestage tests packaging/launch.py
+      - name: Test di regressione
+        run: python tests/test_smoke.py
+      - name: Prova di avvio dai sorgenti
+        run: python packaging/launch.py --self-test
+
+  # ------------------------------------------------------------------ Release (solo sui tag v*)
+  release:
+    name: Prepara la Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Il tag corrisponde alla versione?
+        run: |
+          V=$(sed -n 's/^__version__ *= *"\(.*\)"/\1/p' cuestage/__init__.py)
+          if [ "v$V" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Il tag è ${GITHUB_REF_NAME} ma cuestage/__init__.py dice $V: allineali"; exit 1
+          fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: CueStage ${{ github.ref_name }}
+          generate_release_notes: true
+
+  # ------------------------------------------------------------------ Linux: AppImage
+  linux:
+    name: Linux AppImage
+    needs: [test, release]
+    if: ${{ !failure() && !cancelled() && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') }}
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: build/cache
+          key: appimage-cache-${{ hashFiles('packaging/build_appimage.sh') }}
+      - name: Librerie per la prova di avvio
+        run: sudo apt-get update && sudo apt-get install -y libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - name: Costruisci
+        run: packaging/build_appimage.sh
+      - name: Allega alla Release
+        if: env.IS_TAG == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.AppImage
+      - name: Artifact (esecuzione manuale)
+        if: env.IS_TAG != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CueStage-linux
+          path: dist/*.AppImage
+          retention-days: 3
+
+  # ------------------------------------------------------------------ Windows: installatore + zip portable
+  windows:
+    name: Windows
+    needs: [test, release]
+    if: ${{ !failure() && !cancelled() && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') }}
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Costruisci
+        shell: pwsh
+        env:
+          PYTHON: python
+        run: packaging/build_windows.ps1
+      - name: Allega alla Release
+        if: env.IS_TAG == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*-windows-setup.exe
+            dist/*-windows-portable.zip
+      - name: Artifact (esecuzione manuale)
+        if: env.IS_TAG != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CueStage-windows
+          path: |
+            dist/*-windows-setup.exe
+            dist/*-windows-portable.zip
+          retention-days: 3
+
+  # ------------------------------------------------------------------ macOS: .dmg per Apple Silicon e per Intel
+  macos:
+    name: macOS (${{ matrix.arch }})
+    needs: [test, release]
+    if: ${{ !failure() && !cancelled() && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch') }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15           # Apple Silicon (M1…M4)
+            arch: arm64
+          - runner: macos-15-intel     # Mac con processore Intel (togli queste 2 righe se non ti serve)
+            arch: x86_64
+    env:
+      # facoltativi: senza questi segreti l'app è firmata «ad hoc» (al primo avvio: tasto destro › Apri)
+      MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+      MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+      CUESTAGE_CODESIGN_ID: ${{ secrets.MACOS_CODESIGN_ID }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Certificato Developer ID (solo se configurato)
+        if: env.MACOS_CERT_P12 != ''
+        run: |
+          echo "$MACOS_CERT_P12" | base64 --decode > cert.p12
+          security create-keychain -p ci build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p ci build.keychain
+          security import cert.p12 -k build.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k ci build.keychain
+          rm cert.p12
+      - name: Costruisci
+        env:
+          PYTHON: python
+        run: packaging/build_macos.sh
+      - name: Allega alla Release
+        if: env.IS_TAG == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.dmg
+      - name: Artifact (esecuzione manuale)
+        if: env.IS_TAG != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CueStage-macos-${{ matrix.arch }}
+          path: dist/*.dmg
+          retention-days: 3
