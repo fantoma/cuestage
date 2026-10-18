@@ -48,6 +48,16 @@ def run(sec):
         time.sleep(0.003)
 
 
+def wait_until(cond, timeout=5.0):
+    """Aspetta che cond() sia vera (le macchine lente, come i Mac di GitHub, hanno tempi più lunghi)."""
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if cond():
+            return True
+        run(0.02)
+    return cond()
+
+
 def tone(name, sec=5.0, freq=440):
     path = os.path.join(TMP, name)
     t = np.arange(int(48000 * sec)) / 48000
@@ -182,17 +192,19 @@ def t_grid_and_stop_panel(w):
     can = w.grid.canvas
     r = can.cell_rect(1, 2).center()
     QTest.mouseClick(can, Qt.LeftButton, Qt.NoModifier, QPoint(int(r.x()), int(r.y())))
-    run(0.2)
+    wait_until(lambda: lst.cues[1].id in w.ctrl.instances)
     assert lst.cues[1].id in w.ctrl.instances, "il clic sulla casella non avvia"
     QTest.keyClick(w, Qt.Key_F4)
-    run(0.2)
+    wait_until(lambda: c0.id in w.ctrl.instances)
     assert c0.id in w.ctrl.instances, "la scorciatoia non avvia"
     w.ctrl.trigger(sh.main.cues[0], cascade=False)
     run(0.2)
-    w.ctrl.start_cue(sh.main.cues[1], cascade=False)       # Stop panel «Tutti»
-    run(0.6)
-    alive = sorted(w.show_data.by_id(k).name for k, i in w.ctrl.instances.items() if not i.done)
-    assert alive == ["Main"], alive
+    w.ctrl.start_cue(sh.main.cues[1], cascade=False)       # Stop panel «Tutti» (fade 0,2 s)
+
+    def alive():
+        return sorted(w.show_data.by_id(k).name for k, i in w.ctrl.instances.items() if not i.done)
+    wait_until(lambda: alive() == ["Main"])
+    assert alive() == ["Main"], alive()
     p = os.path.join(TMP, "grid.cueshow")
     w.show_data.save(p)
     l2 = Show.load(p).lists[1]
@@ -219,7 +231,7 @@ def t_tap_tempo(w):
         assert g.group_bpm == 240.0, g.group_bpm
         w.go()
         seen, t0 = [], time.monotonic()
-        while time.monotonic() - t0 < 0.95:
+        while time.monotonic() - t0 < 3.0 and len(seen) < 3:
             run(0.01)
             for k2, inst in w.ctrl.instances.items():
                 n = w.show_data.by_id(k2).name

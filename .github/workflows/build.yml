@@ -38,8 +38,8 @@ jobs:
       QT_QPA_PLATFORM: offscreen
       PYTHONIOENCODING: utf-8
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -70,14 +70,14 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Il tag corrisponde alla versione?
         run: |
           V=$(sed -n 's/^__version__ *= *"\(.*\)"/\1/p' cuestage/__init__.py)
           if [ "v$V" != "${GITHUB_REF_NAME}" ]; then
             echo "::error::Il tag è ${GITHUB_REF_NAME} ma cuestage/__init__.py dice $V: allineali"; exit 1
           fi
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           name: CueStage ${{ github.ref_name }}
           generate_release_notes: true
@@ -91,8 +91,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - uses: actions/checkout@v6
+      - uses: actions/cache@v5
         with:
           path: build/cache
           key: appimage-cache-${{ hashFiles('packaging/build_appimage.sh') }}
@@ -102,12 +102,12 @@ jobs:
         run: packaging/build_appimage.sh
       - name: Allega alla Release
         if: env.IS_TAG == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*.AppImage
       - name: Artifact (esecuzione manuale)
         if: env.IS_TAG != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: CueStage-linux
           path: dist/*.AppImage
@@ -122,8 +122,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Inno Setup
@@ -137,14 +137,14 @@ jobs:
         run: packaging/build_windows.ps1
       - name: Allega alla Release
         if: env.IS_TAG == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*-windows-setup.exe
             dist/*-windows-portable.zip
       - name: Artifact (esecuzione manuale)
         if: env.IS_TAG != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: CueStage-windows
           path: |
@@ -177,8 +177,8 @@ jobs:
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Certificato Developer ID (solo se configurato)
@@ -197,12 +197,12 @@ jobs:
         run: packaging/build_macos.sh
       - name: Allega alla Release
         if: env.IS_TAG == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: dist/*.dmg
       - name: Artifact (esecuzione manuale)
         if: env.IS_TAG != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: CueStage-macos-${{ matrix.arch }}
           path: dist/*.dmg
