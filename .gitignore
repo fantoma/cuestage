@@ -9,3 +9,4 @@ __pycache__/
 *.zip
 *.sha256
 *.autosave
+*.patch
