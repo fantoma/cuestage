@@ -325,25 +325,28 @@ def t_ducking(w):
     duck.open = lambda: False               # niente schede in ingresso nei test: ascolto simulato
     w.set_ducking({"enabled": True, "threshold_db": -30, "attack_ms": 0, "hold_ms": 0, "release_ms": 0})
     duck.stream = FakeStream()
-    c = Cue("audio", number="1", file=tone("duck.wav", sec=6, freq=500), duck_db=20.0)
+    msgs = []
+    w.ctrl.message.connect(msgs.append)
+    # tono lungo: sui Mac di GitHub i tempi si allungano e la cue non deve finire durante la prova
+    c = Cue("audio", number="1", file=tone("duck.wav", sec=30, freq=500), duck_db=20.0)
     g = Cue("group", number="2", group_mode="all", duck_db=12.0)
     m = Cue("audio", number="3", file=c.file, group=g.id)
     sh.main.cues[:] = [c, g, m]
     w.ctrl.trigger(c, cascade=False)
-    wait_until(lambda: c.id in w.ctrl.instances and w.ctrl.instances[c.id].voice is not None
-               and float(w.ctrl.instances[c.id].voice.meter.max()) > 0.05)
+
+    def vmeter():
+        i = w.ctrl.instances.get(c.id)
+        return float(i.voice.meter.max()) if i is not None and i.voice is not None else -1.0
+    assert wait_until(lambda: vmeter() > 0.02, 15), (vmeter(), msgs, duck.error, w.audio.status)
     run(0.3)
     inst = w.ctrl.instances[c.id]
-    m0 = float(inst.voice.meter.max())
+    m0 = vmeter()
     assert duck_state(inst, w.ctrl) == "on"
     duck.feed(0.5, 256)                     # parla il microfono (attacco 0: riduzione subito piena)
-    run(0.4)
-    m1 = float(inst.voice.meter.max())
-    assert 0.07 < m1 / m0 < 0.14, (m0, m1)  # −20 dB
+    assert wait_until(lambda: 0.07 < vmeter() / m0 < 0.14, 10), (m0, vmeter())   # −20 dB
     assert duck_state(inst, w.ctrl) == "duck"
     duck.feed(0.0, 256)
-    run(0.4)
-    assert abs(float(inst.voice.meter.max()) / m0 - 1) < 0.1
+    assert wait_until(lambda: abs(vmeter() / m0 - 1) < 0.1, 10), (m0, vmeter())
     assert duck_state(inst, w.ctrl) == "on"
     w.ctrl.trigger(m, cascade=False)
     wait_until(lambda: m.id in w.ctrl.instances)
@@ -351,20 +354,19 @@ def t_ducking(w):
     w.ctrl.stop_cue(m.id, 0)
     # Master ducking col tasto Duck
     c.duck_db = 0.0
-    run(0.4)
 
     def out_level():
         return max((float(o.meter.max()) for o in w.audio.outputs.values() if len(o.meter)), default=0.0)
+    run(0.4)
+    wait_until(lambda: abs(vmeter() / m0 - 1) < 0.1, 10)
     o0 = out_level()
     w.set_ducking(dict(duck_settings(sh.settings), master_db=6.0))
     w.duck_btn.setChecked(True)
     assert duck.master_active and duck_settings(sh.settings)["master_on"]
     duck.feed(0.5, 256)
-    run(0.4)
     w._update_duck_btn()
     assert w._duck_look == "red"
-    o1 = out_level()
-    assert 0.42 < o1 / o0 < 0.6, (o0, o1)  # −6 dB
+    assert wait_until(lambda: 0.42 < out_level() / o0 < 0.6, 10), (o0, out_level())  # −6 dB
     duck.feed(0.0, 256)
     w.duck_btn.setChecked(False)
     # finestra: le modifiche valgono subito, «Annulla» le toglie
@@ -475,15 +477,17 @@ def t_preview_and_mixer_duck(w):
         w.set_ducking({"to_preview": True, "threshold_db": -30, "attack_ms": 0, "hold_ms": 0, "release_ms": 0})
         assert duck.listening
 
-        def pump(level, sec):
-            t_end = time.monotonic() + sec
+        def pump(level, cond, timeout=10.0):
+            """Simula il microfono (blocchi da 512 campioni) finché cond() è vera."""
+            t_end = time.monotonic() + timeout
             while time.monotonic() < t_end:
                 duck.process(np.full(512, level, np.float32))
                 run(0.01)
-        pump(0.5, 0.6)
-        assert out_level() > 0.3, out_level()
-        pump(0.01, 0.6)                      # −40 dB: sotto la soglia, il gate chiude
-        assert out_level() < 0.02, out_level()
+                if cond():
+                    return True
+            return cond()
+        assert pump(0.5, lambda: out_level() > 0.3), out_level()
+        assert pump(0.01, lambda: out_level() < 0.02), out_level()   # −40 dB: sotto la soglia, il gate chiude
         w.set_ducking({"to_preview": False})
         w.master_slider.setValue(0)
         assert not duck.listening
