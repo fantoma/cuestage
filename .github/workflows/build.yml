@@ -199,11 +199,11 @@ jobs:
         if: env.IS_TAG == 'true'
         uses: softprops/action-gh-release@v3
         with:
-          files: dist/*.dmg
+          files: dist/*-macos-*
       - name: Artifact (esecuzione manuale)
         if: env.IS_TAG != 'true'
         uses: actions/upload-artifact@v6
         with:
           name: CueStage-macos-${{ matrix.arch }}
-          path: dist/*.dmg
+          path: dist/*-macos-*
           retention-days: 3

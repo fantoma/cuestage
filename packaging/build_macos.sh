@@ -57,15 +57,34 @@ QT_QPA_PLATFORM=offscreen "$APP/Contents/MacOS/CueStage" --self-test "$BUILD/sel
 say "immagine disco"
 DMG="dist/CueStage-$VERSION-macos-$ARCH.dmg"
 rm -rf "$BUILD/dmg" "$DMG" && mkdir -p "$BUILD/dmg"
-cp -R "$APP" "$BUILD/dmg/"
+ditto "$APP" "$BUILD/dmg/CueStage.app"            # come cp -R, ma conserva firme e attributi
 ln -s /Applications "$BUILD/dmg/Applicazioni"
-hdiutil create -quiet -volname "CueStage $VERSION" -srcfolder "$BUILD/dmg" -ov -format UDZO "$DMG"
+# hdiutil a volte fallisce con «Resource busy» (l'antivirus di macOS sta ancora esaminando i file appena
+# creati, capita spesso sui Mac di GitHub): si riprova qualche volta prima di arrendersi
+DMG_OK=0
+for n in 1 2 3 4 5; do
+    if hdiutil create -volname "CueStage $VERSION" -srcfolder "$BUILD/dmg" -ov -fs HFS+ -format UDZO "$DMG"; then
+        DMG_OK=1
+        break
+    fi
+    echo "hdiutil non riuscito (tentativo $n di 5): riprovo tra $((n * 10)) s"
+    rm -f "$DMG"
+    sudo -n pkill -9 XProtect >/dev/null 2>&1 || true
+    sleep $((n * 10))
+done
+if [ "$DMG_OK" != 1 ]; then
+    # piano B: l'app in uno zip (si scompatta con un doppio clic e si trascina in Applicazioni)
+    ZIP="dist/CueStage-$VERSION-macos-$ARCH.zip"
+    echo "::warning::immagine disco non creata: pubblico l'app in $ZIP"
+    ditto -c -k --keepParent "$APP" "$ZIP"
+    DMG="$ZIP"
+fi
 
 if [ "$SIGN" != "-" ] && [ -n "${APPLE_ID:-}" ] && [ -n "${APPLE_APP_PASSWORD:-}" ] && [ -n "${APPLE_TEAM_ID:-}" ]; then
     say "notarizzazione Apple (qualche minuto)"
-    codesign -s "$SIGN" --timestamp "$DMG"
+    if [ "${DMG##*.}" = dmg ]; then codesign -s "$SIGN" --timestamp "$DMG"; fi
     xcrun notarytool submit "$DMG" --apple-id "$APPLE_ID" --team-id "$APPLE_TEAM_ID" \
         --password "$APPLE_APP_PASSWORD" --wait
-    xcrun stapler staple "$DMG"
+    if [ "${DMG##*.}" = dmg ]; then xcrun stapler staple "$DMG"; fi
 fi
 say "fatto: $DMG ($(du -h "$DMG" | cut -f1))"
