@@ -20,7 +20,8 @@ class ListsMixin:
             if any(c.id in self.ctrl.instances for c in lst.cues) or \
                     any(p[1] in lst.cues for p in self.ctrl.pending):
                 running.add(i)
-        self.list_tabs.set_lists([l.name for l in sh.lists], sh.view, go, running)
+        self.list_tabs.set_lists([("▦ " if l.is_grid else "") + l.name for l in sh.lists], sh.view, go, running,
+                                 kinds=[l.kind for l in sh.lists])
 
     def show_list(self, i):
         """Mostra (e rende modificabile) la lista i: 0 = MAIN, poi i PANEL."""
@@ -42,7 +43,20 @@ class ListsMixin:
         else:
             self.table.clearSelection()
         self._select_guard = False
+        self._apply_view_kind()
         self._update_standby()
+
+    def _apply_view_kind(self):
+        """Tabella per le liste, caselle per i PANEL GRID."""
+        if not hasattr(self, "view_stack"):
+            return
+        lst = self.show_data.current
+        want = self.grid if lst.is_grid else self.table
+        if self.view_stack.currentWidget() is not want or (lst.is_grid and self.grid.lst is not lst):
+            self.view_stack.setCurrentWidget(want)
+            if lst.is_grid:
+                self.grid.set_list(lst)
+                self._grid_sync(force=True)
 
     def reveal_cue(self, cue_id):
         """Mostra la lista che contiene la cue e la seleziona (senza spostare il playhead)."""
@@ -61,10 +75,15 @@ class ListsMixin:
         self._update_standby()
         self.status("GO agisce sempre sulla MAIN" if key == "main" else "GO segue la lista selezionata")
 
-    def add_panel(self):
-        lst = self.show_data.add_panel()
+    def add_panel(self, kind="list"):
+        if kind not in ("list", "grid"):        # dal segnale «clicked» del pulsante arriva un booleano
+            kind = "list"
+        lst = self.show_data.add_panel(kind=kind)
+        if kind == "grid":
+            lst.name = lst.name.replace("PANEL", "GRID")
         self.show_list(len(self.show_data.lists) - 1)
-        self.status(f"Creato «{lst.name}» (doppio clic sul tab per rinominarlo)")
+        self.status(f"Creato «{lst.name}» (doppio clic sul tab per rinominarlo)"
+                    + (" · ✎ Modifica per righe, colonne e pagine" if kind == "grid" else ""))
 
     def rename_panel(self, i):
         sh = self.show_data

@@ -101,10 +101,20 @@ class CueTableModel(QAbstractTableModel):
                     return f"→ {tg.label()}" if tg else (f"→ ? ({cue.target})" if cue.target else "— nessun target —")
                 if cue.type == "group":
                     m = cue.group_mode
+                    from .engine import fmt_div, tap_active
+                    if tap_active(cue):
+                        return (f"♩ {float(cue.group_bpm):g} BPM · una cue ogni {fmt_div(cue.group_tap_div)} "
+                                f"battit{'o' if float(cue.group_tap_div) <= 1 else 'i'}"
+                                + (" · casuale" if m == "rloop" else " · col GO a tempo" if m == "sequence" else ""))
                     if m in ("loop", "rloop"):
                         hold = f"{float(cue.group_hold):g} s" if float(cue.group_hold or 0) > 0 else "durata della cue"
                         adv = "avanza col GO · ESC esce" if (m == "rloop" and cue.group_advance == "go") else f"ogni {hold}"
                         return f"{adv} · crossfade {float(cue.group_xfade):g} s"
+                    if m in ("playlist", "rplaylist"):
+                        xf = float(cue.group_xfade or 0)
+                        how = "in ordine casuale, " if m == "rplaylist" else ""
+                        return (f"{how}una dopo l'altra" + (" · in loop" if cue.group_loop else "")
+                                + (f" · crossfade {xf:g} s" if xf > 0 else ""))
                     return {"sequence": "prima cue col GO, poi in sequenza", "random": "una cue a caso",
                             "all": "tutte insieme (con i loro pre-wait)"}.get(m, "")
                 if cue.type == "text":
@@ -118,6 +128,14 @@ class CueTableModel(QAbstractTableModel):
                 if cue.type == "midiout":
                     lines = [l.strip() for l in (cue.mo_msgs or "").splitlines() if l.strip() and not l.strip().startswith("#")]
                     return (f"♫ {cue.mo_port or 'predefinita'}: " + " · ".join(lines[:3]) + (" …" if len(lines) > 3 else "")) if lines else "— nessun messaggio —"
+                if cue.type == "stoppanel":
+                    from .engine import stop_panel_targets
+                    fade = float(cue.stop_fade or 0)
+                    tail = f" · fade {fade:g} s" if fade > 0 else ""
+                    if "*" in (cue.sp_panels or []):
+                        return "⊠ tutti i PANEL" + tail
+                    names = [f"«{lst.name}»" for lst in stop_panel_targets(self.show, cue)]
+                    return ("⊠ " + ", ".join(names) + tail) if names else "— nessun PANEL scelto —"
                 if cue.type == "groupexit":
                     tg = self.show.resolve_target(cue.target) if cue.target else self.show.by_id(cue.group)
                     return f"⇥ esce da «{tg.label()}»" if tg else "— nessun gruppo —"
@@ -215,6 +233,10 @@ class CueTableModel(QAbstractTableModel):
                 return QColor(70, 60, 25)
             if idx.row() == self.ctrl.playhead:
                 return QColor(32, 52, 78)   # cue in standby (prossimo GO)
+            if cue.color:                   # colore scelto dall'utente (anche casella del GRID)
+                c = QColor(cue.color)
+                c.setAlpha(110 if col == C_NUM else 60)
+                return c
         if role == Qt.TextAlignmentRole and col in (C_DELAY, C_DUR):
             return int(Qt.AlignRight | Qt.AlignVCenter)
         if role == Qt.ToolTipRole and col == C_TARGET and cue.file:

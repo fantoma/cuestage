@@ -60,6 +60,8 @@ class RemoteMixin:
                 return
             if cmd in ("start", "go"):
                 ctrl.trigger(c, cascade=True)
+            elif cmd == "tap":
+                ctrl.group_tap(c.id)
             elif cmd == "stop":
                 ctrl.stop_cue(c.id, float(args[0]) if args else 0.0)
             elif cmd == "pause":
@@ -76,6 +78,9 @@ class RemoteMixin:
             for c in self.show_data.all_cues():
                 if c.osc_trigger and c.osc_trigger.rstrip("/").lower() == a:
                     ctrl.trigger(c, cascade=True)
+                    hit = True
+                if c.type == "group" and c.group_tap_osc and c.group_tap_osc.rstrip("/").lower() == a:
+                    ctrl.group_tap(c.id)
                     hit = True
             if not hit:
                 self.status(f"OSC ignorato: {addr} {args}")
@@ -224,6 +229,10 @@ class RemoteMixin:
             if mm.get(key) and spec_matches(mm[key], spec, port):
                 fn()
                 self.status(f"MIDI ← {spec} ({port}): {key}" if port else f"MIDI ← {spec}: {key}")
+                return
+        for c in self.show_data.all_cues():
+            if c.type == "group" and c.group_tap_midi and spec_matches(c.group_tap_midi, spec, port):
+                self.ctrl.group_tap(c.id)
                 return
         for c in self.show_data.all_cues():
             if c.midi and spec_matches(c.midi, spec, port):

@@ -135,6 +135,39 @@ La scritta «In attesa» indica anche la lista (es. «Musiche › 4 Applauso»).
 show. Con OSC: `/list/<nome>` mostra una lista, `/list/<nome>/go` fa GO su quella lista, `/list/<nome>/stop` ferma solo quella lista; `/next` e
 `/previous` (e i corrispondenti MIDI) agiscono sulla lista di GO.
 
+## PANEL GRID (caselle)
+
+Un PANEL può mostrare le sue cue come **caselle** da cliccare, come un campionatore: **+ GRID** accanto a
++ PANEL, oppure tasto destro su un PANEL › «Mostra come griglia» (e «Mostra come lista» per tornare indietro:
+le cue restano le stesse).
+
+- **Dimensioni** in caselle (righe × colonne, fino a 16 × 16) e **più pagine**: premi **✎ Modifica** per
+  vedere «+ Pagina», righe, colonne e il comportamento del clic. Doppio clic su una pagina per rinominarla;
+  tasto destro per eliminarla (solo se è vuota). Se riduci la griglia, le cue che non ci stanno passano nelle
+  prime caselle libere (anche su una pagina nuova): nessuna va persa.
+- **Clic** su una casella: *avvia / ferma* (predefinito), *riavvia dall'inizio* oppure *avvia (se è già attiva
+  non fa nulla)*. La casella attiva ha il bordo verde, la barra di avanzamento e il tempo che manca; in
+  pre-wait il bordo è ambra.
+- **Modifica**: clic = seleziona (ispettore) · trascina = sposta (su una casella occupata le due cue si
+  scambiano) · doppio clic su una casella vuota = nuova cue · trascina file audio/video dal file manager su
+  una casella = nuove cue a partire da lì.
+- **Colore** di ogni casella: tasto destro › Colore (12 colori pronti o «Altro colore…»), oppure dalla scheda
+  «Base» dell'ispettore. Il colore tinge anche la riga della cue nelle liste.
+- **Scorciatoie da tastiera**: tasto destro › «Impara scorciatoia da tastiera…» (o «Impara…» nella scheda
+  Base) e premi il tasto o la combinazione (F5, 1, Q, Ctrl+1…). Funziona per qualsiasi cue, anche nella MAIN o
+  in un PANEL a lista, con la finestra di CueStage attiva ma non mentre scrivi in un campo di testo. I tasti già
+  usati da CueStage (Spazio, Esc, i comandi dei menu…) non si possono assegnare; se il tasto è già di un'altra
+  cue, passa alla nuova. Il tasto compare in alto a destra nella casella.
+- **GO locale**: anche il GRID ha GO / STOP del PANEL; il GO avanza casella dopo casella (pagina, riga,
+  colonna) e la prossima casella ha il bordo tratteggiato giallo.
+- I gruppi occupano una casella sola (clic = avvia il gruppo). Per modificarne i membri, «Mostra come lista».
+
+## Cue «Stop panel»
+
+Ferma le cue in esecuzione (e i pre-wait) dei PANEL scelti, con un **fade** facoltativo; la MAIN e gli altri
+PANEL continuano. Nella scheda dell'ispettore si scelgono uno o più PANEL, oppure **«Tutti i PANEL»**, che vale
+anche per i PANEL creati in seguito.
+
 ## Cue «Testo» (sottotitoli, sopratitoli, didascalie)
 
 Il testo viene disegnato sull'uscita video, sopra (o sotto, con il **layer**) le altre cue, e segue la
@@ -191,8 +224,50 @@ Il tipo si sceglie nella scheda **Gruppo** dell'ispettore:
   può richiamare da un altro PANEL (cue Comando › Avvia), con il suo trigger MIDI/OSC o con
   `/cue/<numero>/start`.
 - **All** — GO avvia tutte le cue insieme; il pre-wait di ognuna è rispettato. Il GO successivo esce.
+- **Playlist** — GO avvia la prima cue; le altre partono da sole, ognuna appena finisce la precedente,
+  nell'ordine della lista. Il pre-wait e «con/dopo la precedente» delle cue del gruppo non contano. Ogni cue
+  suona una volta e dopo l'ultima il gruppo finisce. Facoltativo un **crossfade** tra una cue e la successiva.
+  Il GO successivo esce dal gruppo; STOP lo ferma.
+- **Random playlist** — come Playlist, ma in ordine casuale: ogni cue suona una volta, in un ordine diverso a
+  ogni avvio (uguale su master e istanze in ridondanza).
 
-**All'uscita** da un Loop/Random loop: la cue corrente sfuma con il tempo di crossfade, oppure la si lascia
+Nelle playlist il **loop delle singole cue è ignorato** (ognuna suona una volta per giro; nell'ispettore la
+casella «Loop» della cue appare disattivata). Con **Loop** attivo sul gruppo, dopo l'ultima cue la playlist
+ricomincia; la Random playlist rimescola a ogni giro senza ripetere di fila la stessa cue. Il crossfade, se
+c'è, non supera mai metà della durata della cue.
+
+### Tap Tempo
+
+Per **Sequence**, **Loop** e **Random loop** (scheda Gruppo › «Tap Tempo») le cue si susseguono a tempo,
+come se a ogni battito si premesse GO: **una cue ogni 1/16, 1/8, 1/4, 1/2, 1, 2, 4, 8 o 16 battiti** al tempo
+in **BPM** (20–300). Il tempo si batte, anche mentre il gruppo non suona:
+- con il pulsante **TAP** dell'ispettore;
+- con un **tasto** («Impara…»: anche un pedale o una pulsantiera USB che si presentano come tastiera; tenerlo
+  premuto non batte il tempo);
+- con una **nota/CC MIDI** («Impara»: pedale, pad, controller);
+- via **OSC**: `/cue/<numero>/tap` (sempre) oppure un indirizzo scelto (es. `/tap`).
+
+I BPM sono la media degli ultimi 8 colpi (almeno 2; dopo 2,5 s di pausa si ricomincia a contare); ogni colpo
+rimette anche **in fase** il battito. Si può anche scrivere il valore a mano. Nella lista il gruppo mostra
+«♩ 128 BPM · una cue ogni 1/2 battito», nel GRID il tempo compare nella casella. In ridondanza ogni colpo
+arriva anche alle secondarie, che tengono lo stesso tempo.
+
+Come si comporta (e dove non ha senso):
+- **Sequence** — a ogni battito il gruppo avanza come con un GO; dopo l'ultima cue il battito si ferma (non
+  avanza oltre il gruppo). Le cue con pre-wait partono in ritardo rispetto al battito; quelle «con la
+  precedente» partono insieme alla loro; un GO dato a mano avanza in più e il battito continua da lì.
+- **Loop / Random loop** — il battito sostituisce l'«attesa» (e, nel Random loop *col GO*, il GO: il GO
+  torna a far uscire dal gruppo). Una cue più lunga dell'intervallo viene **tagliata** (con il crossfade, che
+  non supera mai metà intervallo); una più corta lascia **silenzio** fino al battito.
+- **Random, All, Playlist, Random playlist** — l'opzione è disattivata: Random avvia una sola cue e All tutte
+  insieme (non c'è una sequenza da scandire); le playlist seguono la durata naturale delle cue (a tempo
+  diventerebbero un Loop: usa Loop o Random loop).
+- Sotto i 100 ms tra una cue e l'altra (es. 1/16 a tempi alti) l'ispettore avvisa; il minimo assoluto è 50 ms.
+  Video e immagini a quelle velocità non stanno al passo.
+- Se un tasto TAP coincide con un comando di CueStage non è accettato; se è già usato da un'altra cue passa
+  alla nuova. Se la stessa nota MIDI è anche il GO generale, vince il GO.
+
+**All'uscita** da un Loop/Random loop/Playlist: la cue corrente sfuma con il tempo di crossfade, oppure la si lascia
 finire. Un gruppo in esecuzione compare tra le «Cue attive»: il suo ■ (o STOP TUTTO) lo ferma.
 
 ## Avvio di ogni cue

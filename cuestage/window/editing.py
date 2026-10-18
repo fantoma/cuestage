@@ -53,11 +53,13 @@ class EditingMixin:
             self._select_guard = False
 
     def _insert_cues(self, cues, row=None):
+        grid = self.show_data.current.is_grid
         if row is None:
             r = self._current_row()
-            row = r + 1 if r >= 0 else len(self.show_data.cues)
+            row = r + 1 if (r >= 0 and not grid) else len(self.show_data.cues)
         from ..groups import membership_for_insert
-        g = membership_for_insert(self.show_data.cues, row)
+        # nel GRID ogni nuova cue ha la sua casella (non entra nel gruppo vicino)
+        g = "" if grid else membership_for_insert(self.show_data.cues, row)
         self.model.beginResetModel()
         for i, c in enumerate(cues):
             if c.type != "group" and not c.group:

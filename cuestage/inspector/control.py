@@ -3,7 +3,7 @@
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import (
-    QComboBox, QDoubleSpinBox, QFormLayout, QLabel, QLineEdit, QPushButton,
+    QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout,
     QSpinBox,
     QWidget,
 )
@@ -94,7 +94,10 @@ class ControlTabsMixin:
         mc.setCurrentIndex(max(0, mc.findData(cue.group_mode)))
 
         def mode_changed(j):
-            cue.group_mode = mc.itemData(j)
+            new = mc.itemData(j)
+            if new in ("playlist", "rplaylist") and cue.group_mode not in ("playlist", "rplaylist"):
+                cue.group_xfade = 0.0          # playlist: di serie una dopo l'altra, senza crossfade
+            cue.group_mode = new
             self._emit()
             QTimer.singleShot(0, self.rebuild)
         mc.currentIndexChanged.connect(mode_changed)
@@ -112,18 +115,27 @@ class ControlTabsMixin:
                 QTimer.singleShot(0, self.rebuild)
             ac.currentIndexChanged.connect(adv_changed)
             f.addRow("Avanzamento", ac)
-        if m == "loop" or (m == "rloop" and cue.group_advance != "go"):
+        from ..engine import tap_active
+        if (m == "loop" or (m == "rloop" and cue.group_advance != "go")) and not tap_active(cue):
             hs = self._dspin("group_hold", 0, 36000, 0.5, 1)
             hs.setSpecialValueText("durata di ogni cue")
             f.addRow("Attesa su ogni cue", hs)
-        if m in ("loop", "rloop"):
-            f.addRow("Crossfade", self._dspin("group_xfade", 0, 600, 0.1, 1))
+        if m in ("loop", "rloop", "playlist", "rplaylist"):
+            xs = self._dspin("group_xfade", 0, 600, 0.1, 1)
+            if m in ("playlist", "rplaylist"):
+                xs.setSpecialValueText("nessuno: una dopo l'altra")
+                lp = self._check("group_loop", "Ricomincia dopo l'ultima cue (loop della playlist)")
+                lp.setToolTip("Il loop impostato sulle singole cue è ignorato: nella playlist ognuna suona una volta "
+                              "per giro." + (" A ogni giro l'ordine viene rimescolato." if m == "rplaylist" else ""))
+                f.addRow("Loop", lp)
+            f.addRow("Crossfade", xs)
             ec = QComboBox()
             ec.addItem("Sfuma la cue corrente (con il tempo di crossfade)", "fade")
             ec.addItem("Lascia finire la cue corrente", "finish")
             ec.setCurrentIndex(max(0, ec.findData(cue.group_exit)))
             ec.currentIndexChanged.connect(lambda j: (setattr(cue, "group_exit", ec.itemData(j)), self._emit()))
             f.addRow("All'uscita", ec)
+        f.addRow(self._tap_box(cue))
         sh = self.show_fn()
         lst, i = sh.list_of(cue.id)
         n = (block_end(lst.cues, i) - i - 1) if lst is not None else 0
@@ -140,11 +152,163 @@ class ControlTabsMixin:
                  "rloop": "Come il Loop ma in ordine casuale. «Col GO»: il GO resta al gruppo e passa a un'altra cue; "
                           "si esce con ESC o con la cue «Esci dal gruppo» (creata in coda: si può richiamare da "
                           "altri PANEL, via MIDI o OSC).",
-                 "all": "GO avvia tutte le cue insieme; il pre-wait di ognuna è rispettato. Il GO successivo esce."}
+                 "all": "GO avvia tutte le cue insieme; il pre-wait di ognuna è rispettato. Il GO successivo esce.",
+                 "playlist": "GO avvia la prima cue; le altre partono da sole, ognuna appena finisce la precedente "
+                             "(o in crossfade), nell'ordine della lista. Pre-wait e «con/dopo la precedente» delle "
+                             "cue del gruppo non contano. Ogni cue suona una volta (il suo loop è ignorato): dopo "
+                             "l'ultima il gruppo finisce, oppure ricomincia se è attivo il loop della playlist. "
+                             "Il GO successivo esce dal gruppo; STOP lo ferma.",
+                 "rplaylist": "Come Playlist, ma in ordine casuale: ogni cue suona una volta, in un ordine diverso a "
+                              "ogni avvio. Dopo l'ultima il gruppo finisce, oppure, con il loop, "
+                              "rimescola e ricomincia. Il GO successivo esce; STOP lo ferma."}
         h = QLabel(help_.get(m, ""))
         h.setWordWrap(True)
         f.addRow(h)
         return w
+
+    def _tap_box(self, cue):
+        """Tap Tempo del gruppo: BPM battuti a mano (tasto, MIDI, OSC o pulsante) e divisore."""
+        from PySide6.QtGui import QKeySequence
+        from PySide6.QtWidgets import QGroupBox
+        from ..engine import TAP_DIVS, TAP_MIN_INTERVAL, TAP_MODES, fmt_div, tap_interval
+        box = QGroupBox("Tap Tempo")
+        f = QFormLayout(box)
+        m = cue.group_mode
+        ok_mode = m in TAP_MODES
+        on = QCheckBox("Una cue a ogni battito, come se si premesse GO")
+        on.setChecked(bool(cue.group_tap) and ok_mode)
+        on.setEnabled(ok_mode)
+
+        def toggled(v):
+            cue.group_tap = bool(v)
+            self._emit()
+            QTimer.singleShot(0, self.rebuild)
+        on.toggled.connect(toggled)
+        f.addRow(on)
+        if not ok_mode:
+            why = {"random": "Random avvia una sola cue: non c'è nulla da scandire a tempo (usa Random loop).",
+                   "all": "All avvia tutte le cue insieme: non c'è una sequenza da scandire.",
+                   "playlist": "La Playlist segue la durata naturale di ogni cue: a tempo diventerebbe un Loop "
+                               "(usa Loop o Random loop).",
+                   "rplaylist": "La Random playlist segue la durata naturale di ogni cue: a tempo diventerebbe "
+                                "un Random loop."}.get(m, "")
+            lab = QLabel("Non disponibile con questo tipo di gruppo. " + why)
+            lab.setWordWrap(True)
+            lab.setStyleSheet("color:#999;")
+            f.addRow(lab)
+            return box
+        if not cue.group_tap:
+            return box
+        # BPM + TAP
+        row = QHBoxLayout()
+        bpm = QDoubleSpinBox()
+        bpm.setRange(20, 300)
+        bpm.setDecimals(1)
+        bpm.setSuffix(" BPM")
+        bpm.setKeyboardTracking(False)
+        bpm.setValue(float(cue.group_bpm or 120))
+        row.addWidget(bpm)
+        tap = QPushButton("TAP")
+        tap.setMinimumSize(110, 40)
+        tap.setStyleSheet("QPushButton{background:#6a3fb0;color:white;font-size:16px;font-weight:bold;"
+                          "border-radius:6px;}QPushButton:pressed{background:#9a6af0;}")
+        tap.setToolTip("Batti il tempo: almeno due colpi (si usa la media degli ultimi 8; dopo 2,5 s di "
+                       "pausa si ricomincia). Ogni colpo rimette anche in fase il battito.")
+        row.addWidget(tap)
+        row.addStretch(1)
+        f.addRow("Tempo", row)
+        dc = QComboBox()
+        for d in TAP_DIVS:
+            dc.addItem(f"{fmt_div(d)} battit{'o' if d <= 1 else 'i'}", d)
+        cur = min(range(len(TAP_DIVS)), key=lambda j: abs(TAP_DIVS[j] - float(cue.group_tap_div or 1)))
+        dc.setCurrentIndex(cur)
+        f.addRow("Una cue ogni", dc)
+        iv_lab = QLabel()
+        f.addRow("", iv_lab)
+
+        def refresh_iv():
+            iv = tap_interval(cue)
+            raw = 60.0 / max(20.0, float(cue.group_bpm or 120)) * float(cue.group_tap_div or 1)
+            if raw < 0.1:
+                iv_lab.setText(f"⚠ {raw * 1000:.0f} ms tra una cue e l'altra: troppo veloce (minimo "
+                               f"{TAP_MIN_INTERVAL * 1000:.0f} ms; video e immagini non stanno al passo)")
+                iv_lab.setStyleSheet("color:#e0a030;")
+            else:
+                iv_lab.setText(f"= una cue ogni {iv:.3g} s")
+                iv_lab.setStyleSheet("color:#999;")
+
+        def bpm_set(v):
+            cue.group_bpm = round(float(v), 1)
+            self._emit()
+            refresh_iv()
+        bpm.valueChanged.connect(bpm_set)
+
+        def div_set(j):
+            cue.group_tap_div = float(dc.itemData(j))
+            self._emit()
+            refresh_iv()
+        dc.currentIndexChanged.connect(div_set)
+
+        def do_tap():
+            self.ctrl.group_tap(cue.id)
+            sync()
+        tap.clicked.connect(do_tap)
+
+        def sync():
+            if not bpm.hasFocus() and abs(bpm.value() - float(cue.group_bpm or 120)) > 0.05:
+                bpm.blockSignals(True)
+                bpm.setValue(float(cue.group_bpm or 120))
+                bpm.blockSignals(False)
+            refresh_iv()
+        t = QTimer(box)                      # battute da tastiera, MIDI o OSC: il valore si aggiorna da solo
+        t.timeout.connect(sync)
+        t.start(250)
+        refresh_iv()
+        # ingressi del tap
+        kr = QHBoxLayout()
+        ktxt = QKeySequence.fromString(cue.group_tap_key, QKeySequence.PortableText).toString(
+            QKeySequence.NativeText) if cue.group_tap_key else "— nessuno —"
+        kr.addWidget(QLabel(ktxt))
+        kb = QPushButton("Impara…")
+        kb.setToolTip("Il tasto da premere a tempo (anche un pedale o una pulsantiera USB che si presenta "
+                      "come tastiera)")
+        kb.clicked.connect(lambda: self.hotkey_fn and self.hotkey_fn(cue, "group_tap_key"))
+        kr.addWidget(kb)
+        kx = QPushButton("✕")
+        kx.setFixedWidth(28)
+        kx.setEnabled(bool(cue.group_tap_key))
+        kx.clicked.connect(lambda: self.set_hotkey_fn and self.set_hotkey_fn(cue, "", "group_tap_key"))
+        kr.addWidget(kx)
+        kr.addStretch(1)
+        f.addRow("Tasto TAP", kr)
+        mr = QHBoxLayout()
+        ml = self._line("group_tap_midi", "es. note 1 36  /  cc 1 64  (pedale, pad, controller)")
+        mr.addWidget(ml)
+        mb = QPushButton("Impara")
+
+        def learned(spec):
+            cue.group_tap_midi = spec
+            ml.setText(spec)
+            self._emit()
+        mb.clicked.connect(lambda: self.learnMidi.emit(learned))
+        mr.addWidget(mb)
+        f.addRow("MIDI TAP", mr)
+        f.addRow("OSC TAP", self._line("group_tap_osc", f"es. /tap  (sempre valido: /cue/{cue.number or '<numero>'}/tap)"))
+        note = {
+            "sequence": "A ogni battito il gruppo avanza come con un GO; dopo l'ultima cue il tempo si ferma. "
+                        "Una cue con pre-wait parte in ritardo rispetto al battito; quelle «con la precedente» "
+                        "partono insieme alla loro; un GO dato a mano avanza in più.",
+            "loop": "Il battito sostituisce l'«attesa»: una cue più lunga dell'intervallo viene tagliata (con il "
+                    "crossfade, al massimo metà intervallo), una più corta lascia silenzio fino al battito.",
+            "rloop": "Il battito sostituisce l'attesa (o il GO, se l'avanzamento è «col GO»): una cue più lunga "
+                     "dell'intervallo viene tagliata, una più corta lascia silenzio fino al battito. Il GO "
+                     "esce dal gruppo.",
+        }.get(m, "")
+        nl = QLabel(note + " Il tempo si può battere anche mentre il gruppo non suona.")
+        nl.setWordWrap(True)
+        nl.setStyleSheet("color:#999;")
+        f.addRow(nl)
+        return box
 
     def _tab_groupexit(self):
         cue = self.cue
@@ -166,6 +330,52 @@ class ControlTabsMixin:
         lab = QLabel("Chiude il gruppo: niente più avanzamenti, la cue corrente sfuma (o finisce, secondo il "
                      "gruppo) e il playhead esce dal gruppo. Si può richiamare da un'altra lista (cue Comando › "
                      "Avvia), con il suo trigger MIDI/OSC (scheda «Base») o con /cue/<numero>/start.")
+        lab.setWordWrap(True)
+        lab.setStyleSheet("color:#999;")
+        f.addRow(lab)
+        return w
+
+    def _tab_stoppanel(self):
+        cue = self.cue
+        w = QWidget()
+        f = QFormLayout(w)
+        sh = self.show_fn()
+        box = QWidget()
+        v = QVBoxLayout(box)
+        v.setContentsMargins(0, 0, 0, 0)
+        every = QCheckBox("Tutti i PANEL (anche quelli creati in seguito)")
+        every.setChecked("*" in (cue.sp_panels or []))
+        v.addWidget(every)
+        checks = []
+        for lst in sh.panels:
+            cb = QCheckBox(f"{lst.name}" + ("   (GRID)" if getattr(lst, "kind", "") == "grid" else ""))
+            cb.setChecked(lst.id in (cue.sp_panels or []))
+            checks.append((cb, lst.id))
+            v.addWidget(cb)
+        if not sh.panels:
+            nl = QLabel("Non ci sono ancora PANEL: «Tutti» fermerà quelli che creerai.")
+            nl.setStyleSheet("color:#999;")
+            v.addWidget(nl)
+
+        def refresh():
+            for cb, _ in checks:
+                cb.setEnabled(not every.isChecked())
+
+        def save(*_a):
+            if every.isChecked():
+                cue.sp_panels = ["*"]
+            else:
+                cue.sp_panels = [pid for cb, pid in checks if cb.isChecked()]
+            refresh()
+            self._emit()
+        every.toggled.connect(save)
+        for cb, _ in checks:
+            cb.toggled.connect(save)
+        refresh()
+        f.addRow("PANEL da fermare", box)
+        f.addRow("Fade", self._dspin("stop_fade", 0, 600, 0.1, 2, special="nessuno (stop immediato)"))
+        lab = QLabel("Ferma le cue in esecuzione (e i pre-wait) dei PANEL scelti, sfumandole nel tempo indicato. "
+                     "La MAIN e gli altri PANEL continuano. Con «Tutti» vale anche per i PANEL aggiunti dopo.")
         lab.setWordWrap(True)
         lab.setStyleSheet("color:#999;")
         f.addRow(lab)

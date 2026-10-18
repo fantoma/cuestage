@@ -50,10 +50,16 @@ class Instance:
         self.user_stopped = False
         self.elapsed = 0.0
         self.started_at = ctrl.clock
+        # avviata da una Playlist: suona una volta sola, anche se la cue ha il loop
+        self.no_loop = getattr(ctrl, "_play_once", None) == cue.id
         pend = getattr(ctrl, "_xf_incoming", None)
         if pend is not None and pend == cue.id:      # cue che entra con un crossfade: parte da zero
             self.xf_gain = 0.0
             self.xf_op = 0.0
+
+    @property
+    def loop_on(self):
+        return bool(self.cue.loop) and not self.no_loop
 
     @property
     def trim_gain(self):
@@ -288,7 +294,7 @@ class RoutedVoice:
 
     def _start_voice(self, data, silent=False, paused=False):
         c = self.cue
-        v = Voice(data, c.start, c.end, c.loop, c.loop_start, c.loop_end,
+        v = Voice(data, c.start, c.end, self.loop_on, c.loop_start, c.loop_end,
                   int(c.loop_count or 0), db_to_lin(c.level_db),
                   curve_arrays(c.curve), 0.0 if silent else c.fade_in, c.fade_out, gains_fn=None)
         self.voice = v
@@ -499,7 +505,7 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
         return end, max(c.start, ls), min(le, end)
 
     def looping(self):
-        return self.cue.loop and self.loops_left != 0
+        return self.loop_on and self.loops_left != 0
 
     def _audio_master(self):
         return self.voice is not None and not self.audio_ended
@@ -623,12 +629,12 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
     def total(self):
         if self.voice is not None:
             return self._total
-        if self.cue.loop and self.loops_left < 0:
+        if self.loop_on and self.loops_left < 0:
             return None
         end, ls, le = self._bounds()
         if end >= 1e8:
             return None
-        n = max(0, int(self.cue.loop_count) - 1) if self.cue.loop else 0
+        n = max(0, int(self.cue.loop_count) - 1) if self.loop_on else 0
         return (end - self.cue.start) + n * (le - ls)
 
     def cue_time(self):
@@ -836,11 +842,33 @@ class ProjectorInstance(Instance):
         self.finish()
 
 
+TAP_MODES = ("sequence", "loop", "rloop")       # gruppi in cui il Tap Tempo ha senso
+TAP_DIVS = [1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16]
+TAP_MIN_INTERVAL = 0.05                          # sotto questo intervallo (s) il motore non sta dietro
+
+
+def tap_active(cue):
+    return bool(cue.group_tap) and cue.group_mode in TAP_MODES
+
+
+def tap_interval(cue):
+    """Secondi tra una cue e la successiva: (60 / BPM) × divisore."""
+    bpm = max(20.0, min(300.0, float(cue.group_bpm or 120.0)))
+    return max(TAP_MIN_INTERVAL, 60.0 / bpm * float(cue.group_tap_div or 1.0))
+
+
+def fmt_div(d):
+    d = float(d or 1)
+    return f"1/{int(round(1 / d))}" if d < 1 else f"{d:g}"
+
+
 class GroupInstance(Instance):
     """Esecuzione di un gruppo di cue.
     sequence: parte la prima cue (le altre con i GO) · random: una cue a caso · all: tutte insieme ·
     loop / rloop: le cue si susseguono da sole con attesa e crossfade (rloop in ordine casuale, oppure
-    avanzando col GO). Resta attiva finché suonano le sue cue; STOP o l'uscita la fermano."""
+    avanzando col GO) · playlist / rplaylist: le cue si susseguono da sole, una volta ciascuna (rplaylist in
+    ordine casuale), ognuna appena finisce la precedente, senza pre-wait né «con/dopo la precedente».
+    Resta attiva finché suonano le sue cue; STOP o l'uscita la fermano."""
 
     def start(self, silent=False):
         import random
@@ -864,9 +892,13 @@ class GroupInstance(Instance):
             self.finish()
             return
         depth = ctrl._depth + 1
+        self.tap = tap_active(c)
+        self.beat_next = ctrl.clock + tap_interval(c) if self.tap else None
         if self.mode == "sequence":
             self.cascade = False          # le «dopo la precedente» seguono l'ultima cue del gruppo
             ctrl.trigger(self.pool[0], cascade=True, depth=depth)
+            if self.tap:                  # Tap Tempo: i GO successivi li dà il battito (vedi Controller._tick)
+                ctrl.tempo_runs[c.id] = {"lst": self.lst, "next": self.beat_next}
             self.finish()
             return
         if self.mode == "all":
@@ -877,19 +909,27 @@ class GroupInstance(Instance):
         if self.mode == "random":
             self._play(self._pick())
             return
-        # loop / random loop
+        # loop / random loop / playlist / random playlist
         self.order = list(self.pool)
-        if self.mode == "rloop":
+        if self.mode in ("rloop", "rplaylist"):
             self.rng.shuffle(self.order)
+        if self.mode == "rloop":               # la prima cue conta come «ultima suonata»: niente ripetizione subito
+            ctrl._group_last[c.id] = self.order[0].id
         self._play(self.order[0])
 
     @property
     def captures_go(self):
-        return self.mode == "rloop" and self.cue.group_advance == "go" and not self.done
+        return self.mode == "rloop" and self.cue.group_advance == "go" and not self.done and \
+            not getattr(self, "tap", False)
 
     @property
     def timed(self):
-        return self.mode == "loop" or (self.mode == "rloop" and self.cue.group_advance != "go")
+        return self.mode in ("loop", "playlist", "rplaylist") or getattr(self, "tap", False) or \
+            (self.mode == "rloop" and self.cue.group_advance != "go")
+
+    @property
+    def playlist(self):
+        return self.mode in ("playlist", "rplaylist")
 
     def _pick(self):
         last = self.ctrl._group_last.get(self.cue.id)
@@ -909,12 +949,14 @@ class GroupInstance(Instance):
         if old is not None and old.cue.id == cue.id:  # stessa cue (gruppo di una sola cue): riparte
             old.stop(0)
             old = None
+        ctrl._play_once = cue.id if self.playlist else None
         if xfade > 0 and old is not None:
             ctrl._xf_incoming = cue.id
             try:
                 ctrl.start_cue(cue, cascade=False)
             finally:
                 ctrl._xf_incoming = None
+                ctrl._play_once = None
             new = ctrl.instances.get(cue.id)
             if new is not None:
                 self.xf = {"A": [old], "B": [new], "t0": ctrl.clock, "dur": float(xfade)}
@@ -922,7 +964,10 @@ class GroupInstance(Instance):
         else:
             if old is not None and self.timed:
                 old.stop(0.05)
-            ctrl.start_cue(cue, cascade=False)
+            try:
+                ctrl.start_cue(cue, cascade=False)
+            finally:
+                ctrl._play_once = None
         self.current = cue.id
         self.spawned.add(cue.id)
         self._schedule()
@@ -930,11 +975,25 @@ class GroupInstance(Instance):
 
     def _schedule(self):
         c = self.cue
+        if getattr(self, "tap", False) and self.mode in ("loop", "rloop"):
+            self.next_at = None           # con il Tap Tempo decide il battito (tick)
+            return
         if not self.timed:
             self.next_at = None
             return
         hold = float(c.group_hold or 0)
         xf = float(c.group_xfade or 0)
+        if self.playlist:
+            # la successiva parte alla fine della corrente (o prima, se c'è un crossfade); senza durata
+            # nota (es. una cue OSC) si aspetta che la cue finisca da sola
+            if xf > 0 and (self.k + 1 < len(self.order) or self.cue.group_loop):
+                inst = self.ctrl.instances.get(self.current)
+                tot = inst.total() if inst is not None else None
+                self.xf_eff = min(xf, tot * 0.5) if tot else 0.0     # mai più di metà della cue
+                self.next_at = self.ctrl.clock + (tot - self.xf_eff) if tot else None
+            else:
+                self.next_at = None
+            return
         if hold > 0:
             self.next_at = self.ctrl.clock + hold
             return
@@ -942,16 +1001,31 @@ class GroupInstance(Instance):
         tot = inst.total() if inst is not None else None
         self.next_at = self.ctrl.clock + (max(0.5, tot - xf) if tot else 10.0)
 
-    def advance(self):
+    def advance(self, xfade=None):
         """Cue successiva del loop (o del random loop), con crossfade."""
         if self.done:
+            return
+        if self.playlist:
+            if self.k + 1 >= len(self.order):
+                if not self.cue.group_loop:
+                    self.next_at = None    # era l'ultima: il gruppo finisce quando finisce lei
+                    return
+                last = self.order[-1]       # ricomincia; la random playlist rimescola (mai la stessa di fila)
+                if self.mode == "rplaylist" and len(self.order) > 1:
+                    self.rng.shuffle(self.order)
+                    if self.order[0].id == last.id:
+                        self.order.append(self.order.pop(0))
+                self.k = -1
+            self.k += 1
+            xf = getattr(self, "xf_eff", 0.0) if self.next_at is not None else 0.0
+            self._play(self.order[self.k], xf)
             return
         if self.mode == "loop":
             self.k = (self.k + 1) % len(self.order)
             nxt = self.order[self.k]
         else:
             nxt = self._pick()
-        self._play(nxt, float(self.cue.group_xfade or 0))
+        self._play(nxt, float(self.cue.group_xfade or 0) if xfade is None else xfade)
 
     def tick(self, now, dt):
         if self.done or self.paused:
@@ -964,6 +1038,27 @@ class GroupInstance(Instance):
             if t >= 1.0:
                 ctrl._xf_finish(self.xf)
                 self.xf = None
+        if self.tap and self.mode in ("loop", "rloop"):
+            # Tap Tempo: si cambia cue solo sul battito (una cue più corta lascia silenzio fino al battito,
+            # una più lunga viene tagliata con il crossfade, mai più lungo di metà intervallo)
+            if self.beat_next is not None and ctrl.clock >= self.beat_next:
+                iv = tap_interval(self.cue)
+                self.beat_next += iv
+                if self.beat_next < ctrl.clock:          # rimasti indietro (pausa, sistema lento): si riallinea
+                    self.beat_next = ctrl.clock + iv
+                self.advance(min(float(self.cue.group_xfade or 0), iv * 0.5))
+            return
+        if self.playlist:
+            cur = ctrl.instances.get(self.current)
+            ended = cur is None or cur.done
+            if self.next_at is not None and ctrl.clock >= self.next_at:
+                self.advance()
+            elif ended and self.xf is None:
+                if self.k + 1 < len(self.order) or self.cue.group_loop:
+                    self.advance()
+                else:
+                    self.finish()
+            return
         if self.mode in ("loop", "rloop"):
             cur = ctrl.instances.get(self.current)
             if self.timed and self.next_at is not None and ctrl.clock >= self.next_at:
@@ -1163,6 +1258,33 @@ class GroupExitInstance(Instance):
         self.finish()
 
 
+def stop_panel_targets(show, cue):
+    """PANEL fermati da una cue «Stop panel»: tutti (anche quelli creati dopo) oppure quelli scelti."""
+    ids = list(cue.sp_panels or [])
+    if "*" in ids:
+        return list(show.panels)
+    return [lst for lst in show.panels if lst.id in ids]
+
+
+class StopPanelInstance(Instance):
+    """Ferma le cue dei PANEL scelti (o di tutti), con un fade facoltativo. Le altre liste continuano."""
+
+    def start(self, silent=False):
+        c = self.cue
+        ctrl = self.ctrl
+        lists = stop_panel_targets(ctrl.show, c)
+        fade = float(c.stop_fade or 0)
+        ids = {x.id for lst in lists for x in lst.cues} - {c.id}
+        ctrl.pending = [p for p in ctrl.pending if p[1].id not in ids]
+        for inst in list(ctrl.instances.values()):
+            if inst.cue.id in ids and not inst.done:
+                inst.stop(fade)
+        names = ", ".join(f"«{lst.name}»" for lst in lists) or "nessun PANEL"
+        ctrl.message.emit(f"Stop panel: {names}" + (f" (fade {fade:g} s)" if fade > 0 else ""))
+        ctrl.changed.emit()
+        self.finish()
+
+
 class MixerInstance(Instance):
     """Comando a un mixer: mute/unmute di uno o più canali, oppure fader (con fade facoltativo).
     Con il fade la cue resta attiva per la sua durata (STOP la interrompe)."""
@@ -1259,7 +1381,7 @@ INSTANCE_CLASSES = {
     "audio": AudioInstance, "video": VideoInstance, "image": ImageInstance,
     "wait": WaitInstance, "fade": FadeInstance, "preset": PresetInstance, "control": ControlInstance,
     "osc": OscInstance, "projector": ProjectorInstance, "mixer": MixerInstance, "memo": MemoInstance,
-    "group": GroupInstance, "groupexit": GroupExitInstance, "text": TextInstance, "midiout": MidiOutInstance,
+    "group": GroupInstance, "groupexit": GroupExitInstance, "stoppanel": StopPanelInstance, "text": TextInstance, "midiout": MidiOutInstance,
 }
 
 
@@ -1282,6 +1404,8 @@ class Controller(QObject):
         self.playheads = {}    # id lista -> indice della cue in standby
         self.paused_all = False
         self._xf_incoming = None   # id delle cue che entrano con un crossfade (partono a zero)
+        self.taps = {}             # Tap Tempo: id gruppo -> istanti delle ultime battute
+        self.tempo_runs = {}       # gruppi Sequence col Tap Tempo in corso: id -> {"lst", "next"}
         import uuid as _uuid
         self.seed_base = _uuid.uuid4().hex[:8]   # semi dei gruppi casuali (uguali sulle istanze in ridondanza)
         self.seed_count = 0
@@ -1668,7 +1792,56 @@ class Controller(QObject):
             inst.stop(fade)
         self.changed.emit()
 
+    # ------------------------------------------------------------------ Tap Tempo
+    def group_tap(self, group_id):
+        """Una battuta del Tap Tempo di un gruppo: dalle ultime battute calcola i BPM e rimette in fase il
+        battito (la prossima cue arriva un intervallo dopo questa battuta)."""
+        c = self.show.by_id(group_id)
+        if c is None or c.type != "group":
+            return None
+        t = self.clock
+        taps = self.taps.setdefault(group_id, [])
+        if taps and t - taps[-1] > 2.5:          # pausa lunga: si ricomincia a contare
+            taps.clear()
+        taps.append(t)
+        del taps[:-8]
+        if len(taps) >= 2:
+            iv = (taps[-1] - taps[0]) / (len(taps) - 1)
+            if iv > 0:
+                c.group_bpm = round(max(20.0, min(300.0, 60.0 / iv)), 1)
+                self.show.dirty = True
+        if tap_active(c):
+            nxt = t + tap_interval(c)
+            inst = self.instances.get(group_id)
+            if isinstance(inst, GroupInstance) and not inst.done and inst.beat_next is not None:
+                inst.beat_next = nxt
+            if group_id in self.tempo_runs:
+                self.tempo_runs[group_id]["next"] = nxt
+        self.changed.emit()
+        return c.group_bpm
+
+    def _tempo_tick(self):
+        """Gruppi Sequence col Tap Tempo: a ogni battito un GO sulla loro lista, finché il playhead è dentro."""
+        if not self.tempo_runs:
+            return
+        from .groups import block_end
+        for gid, run in list(self.tempo_runs.items()):
+            c = self.show.by_id(gid)
+            lst = run["lst"]
+            i = lst.index_of(gid) if c is not None else -1
+            ph = self.playhead_of(lst)
+            if i < 0 or not tap_active(c) or not (i < ph < block_end(lst.cues, i)):
+                del self.tempo_runs[gid]            # gruppo finito, uscito o modificato
+                continue
+            if self.clock >= run["next"]:
+                iv = tap_interval(c)
+                run["next"] += iv
+                if run["next"] < self.clock:
+                    run["next"] = self.clock + iv
+                self.go(lst)
+
     def stop_all(self, fade=0.0, exclude=None):
+        self.tempo_runs.clear()
         self.pending = []
         self.xfade = None
         self.xf_manual = None
@@ -1689,6 +1862,8 @@ class Controller(QObject):
     def stop_list(self, lst, fade=0.0):
         """STOP di un solo PANEL: ferma le cue di quella lista (e i pre-wait), le altre continuano."""
         ids = {c.id for c in lst.cues}
+        for gid in [g for g in self.tempo_runs if g in ids]:
+            del self.tempo_runs[gid]
         self.pending = [p for p in self.pending if p[1].id not in ids]
         for inst in list(self.instances.values()):     # un crossfade in corso ignora le cue già ferme
             if inst.cue.id in ids:
@@ -1757,5 +1932,6 @@ class Controller(QObject):
             if inst.cue.is_visual():
                 visual = True
         self._xf_tick()
+        self._tempo_tick()
         if visual or self.comp.layers:
             self.comp.changed()

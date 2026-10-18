@@ -331,7 +331,13 @@ class MediaTabsMixin:
         top.addWidget(self._dspin("fade_out", 0, 3600, 0.1, 2))
         top.addStretch(1)
         row = QHBoxLayout()
-        row.addWidget(self._check("loop", "Loop"))
+        lc = self._check("loop", "Loop")
+        grp = self.show_fn().by_id(cue.group) if cue.group else None
+        if grp is not None and grp.type == "group" and grp.group_mode in ("playlist", "rplaylist"):
+            lc.setEnabled(False)          # nella playlist ogni cue suona una volta
+            lc.setToolTip("Questa cue è in una Playlist: suona una volta sola. Per ripetere usa il loop del gruppo.")
+            lc.setText("Loop (ignorato nella Playlist)")
+        row.addWidget(lc)
         row.addWidget(QLabel("da"))
         row.addWidget(self._dspin("loop_start", 0, 36000, 0.1, 3, special="IN"))
         row.addWidget(QLabel("a"))

@@ -41,6 +41,9 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         self.crop_panel = None
         self.size_fn = None       # cue -> (w, h) del sorgente
         self.out_size_fn = None   # -> (w, h) dell'uscita
+        self.hotkey_fn = None     # cue -> «impara» la scorciatoia (finestra principale)
+        self.set_hotkey_fn = None  # (cue, tasto) -> imposta/toglie la scorciatoia
+        self.color_fn = None      # (cue, "#rrggbb" o "") -> colore della cue
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         self.header = QLabel("Nessuna cue selezionata")
@@ -259,12 +262,69 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
             add(self._tab_group(), "Gruppo")
         if t == "groupexit":
             add(self._tab_groupexit(), "Esci dal gruppo")
+        if t == "stoppanel":
+            add(self._tab_stoppanel(), "Stop panel")
         if t == "wait":
             add(self._tab_wait(), "Attesa")
         if 0 <= cur_tab < self.tabs.count():
             self.tabs.setCurrentIndex(cur_tab)
         elif self.tabs.count() > 1:
             self.tabs.setCurrentIndex(1)
+
+    def _hotkey_row(self, cue):
+        from PySide6.QtGui import QKeySequence
+        w = QWidget()
+        h = QHBoxLayout(w)
+        h.setContentsMargins(0, 0, 0, 0)
+        txt = QKeySequence.fromString(cue.hotkey, QKeySequence.PortableText).toString(QKeySequence.NativeText) \
+            if cue.hotkey else "— nessuna —"
+        lab = QLabel(txt)
+        lab.setMinimumWidth(90)
+        h.addWidget(lab)
+        b = QPushButton("Impara…")
+        b.setToolTip("Premi un tasto (o una combinazione) che avvierà questa cue")
+        b.clicked.connect(lambda: self.hotkey_fn and self.hotkey_fn(cue))
+        h.addWidget(b)
+        x = QPushButton("✕")
+        x.setFixedWidth(28)
+        x.setToolTip("Togli la scorciatoia")
+        x.setEnabled(bool(cue.hotkey))
+        x.clicked.connect(lambda: self.set_hotkey_fn and self.set_hotkey_fn(cue, ""))
+        h.addWidget(x)
+        h.addStretch(1)
+        return w
+
+    def _color_row(self, cue):
+        from PySide6.QtWidgets import QColorDialog
+        from .grid import PALETTE
+        w = QWidget()
+        h = QHBoxLayout(w)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(3)
+        for col in PALETTE:
+            b = QPushButton()
+            b.setFixedSize(20, 20)
+            b.setToolTip(col)
+            border = "2px solid white" if cue.color == col else "1px solid #555"
+            b.setStyleSheet(f"background:{col};border:{border};border-radius:3px;")
+            b.clicked.connect(lambda _=False, col=col: self.color_fn and self.color_fn(cue, col))
+            h.addWidget(b)
+
+        def other():
+            from PySide6.QtGui import QColor
+            c = QColorDialog.getColor(QColor(cue.color or "#2f3440"), self, "Colore della cue")
+            if c.isValid() and self.color_fn:
+                self.color_fn(cue, c.name())
+        o = QPushButton("Altro…")
+        o.clicked.connect(other)
+        h.addWidget(o)
+        x = QPushButton("✕")
+        x.setFixedWidth(28)
+        x.setToolTip("Nessun colore")
+        x.clicked.connect(lambda: self.color_fn and self.color_fn(cue, ""))
+        h.addWidget(x)
+        h.addStretch(1)
+        return w
 
     @staticmethod
     def _scrolled(widget):
@@ -347,6 +407,8 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
             row.addWidget(clr)
             f.addRow(label, row)
         f.addRow("Trigger OSC", self._line("osc_trigger", "es. /scena/1  (oltre a /cue/<numero>/start)"))
+        f.addRow("Scorciatoia", self._hotkey_row(cue))
+        f.addRow("Colore", self._color_row(cue))
         notes = QPlainTextEdit(cue.notes)
         notes.setMaximumHeight(70)
         notes.textChanged.connect(lambda: (setattr(cue, "notes", notes.toPlainText()), self._emit()))

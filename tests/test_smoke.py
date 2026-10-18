@@ -131,6 +131,107 @@ def t_go_and_groups(w):
     assert not w.ctrl.instances
 
 
+def t_playlist(w):
+    """Playlist e Random playlist: da sole, senza pre-wait, una volta ciascuna, poi il gruppo finisce."""
+    for mode in ("playlist", "rplaylist"):
+        sh = Show()
+        sh.settings["output_fullscreen"] = False
+        g = Cue("group", number="5", name="PL", group_mode=mode)
+        ms = [Cue("audio", number=f"5.{i}", name=f"P{i}", file=tone(f"p{i}.wav", sec=0.6, freq=500 + 50 * i),
+                  group=g.id, delay=5.0) for i in (1, 2, 3)]
+        sh.cues = [g, *ms]
+        w._set_show(sh)
+        run(0.4)
+        w.go()
+        seen = []
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < 3.5:
+            run(0.02)
+            for k, inst in w.ctrl.instances.items():
+                n = w.show_data.by_id(k).name
+                if n in ("P1", "P2", "P3") and not inst.done and n not in seen:
+                    seen.append(n)
+        assert sorted(seen) == ["P1", "P2", "P3"], (mode, seen)
+        if mode == "playlist":
+            assert seen == ["P1", "P2", "P3"], seen
+        assert g.id not in w.ctrl.instances or w.ctrl.instances[g.id].done, "il gruppo non è finito"
+        w.ctrl.stop_all(0)
+        run(0.2)
+
+
+def t_grid_and_stop_panel(w):
+    """PANEL GRID (caselle, ordine del GO, clic, scorciatoia, salvataggio) e cue «Stop panel»."""
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    sh.cues = [Cue("audio", number="1", name="Main", file=tone("gm.wav", sec=6)),
+               Cue("stoppanel", number="2", name="Stop", sp_panels=["*"], stop_fade=0.2)]
+    w._set_show(sh)
+    run(0.2)
+    w.add_panel("grid")
+    run(0.2)
+    lst = w.show_data.current
+    assert lst.is_grid and w.view_stack.currentWidget() is w.grid
+    w.grid_add_files([tone(f"gg{i}.wav", sec=4, freq=300 + 40 * i) for i in range(3)], [0, 1, 1])
+    run(0.2)
+    assert [tuple(c.grid_pos) for c in lst.cues] == [(0, 1, 1), (0, 1, 2), (0, 1, 3)]
+    c0 = lst.cues[0]
+    w.set_hotkey(c0, "F4")
+    w.grid_set_color(c0, "#7a2730")
+    can = w.grid.canvas
+    r = can.cell_rect(1, 2).center()
+    QTest.mouseClick(can, Qt.LeftButton, Qt.NoModifier, QPoint(int(r.x()), int(r.y())))
+    run(0.2)
+    assert lst.cues[1].id in w.ctrl.instances, "il clic sulla casella non avvia"
+    QTest.keyClick(w, Qt.Key_F4)
+    run(0.2)
+    assert c0.id in w.ctrl.instances, "la scorciatoia non avvia"
+    w.ctrl.trigger(sh.main.cues[0], cascade=False)
+    run(0.2)
+    w.ctrl.start_cue(sh.main.cues[1], cascade=False)       # Stop panel «Tutti»
+    run(0.6)
+    alive = sorted(w.show_data.by_id(k).name for k, i in w.ctrl.instances.items() if not i.done)
+    assert alive == ["Main"], alive
+    p = os.path.join(TMP, "grid.cueshow")
+    w.show_data.save(p)
+    l2 = Show.load(p).lists[1]
+    assert l2.is_grid and l2.cues[0].hotkey == "F4" and l2.cues[0].color == "#7a2730"
+    w.ctrl.stop_all(0)
+    run(0.2)
+
+
+def t_tap_tempo(w):
+    """Tap Tempo: BPM dalle battute; Loop e Sequence avanzano sul battito; i modi non adatti lo ignorano."""
+    from cuestage.engine import tap_active
+    for mode in ("loop", "sequence"):
+        sh = Show()
+        sh.settings["output_fullscreen"] = False
+        g = Cue("group", number="7", name="T", group_mode=mode, group_tap=True, group_xfade=0.0)
+        ms = [Cue("audio", number=f"7.{i}", name=f"t{i}", group=g.id, file=tone(f"tt{i}.wav", sec=2.0))
+              for i in range(3)]
+        sh.cues = [g, *ms]
+        w._set_show(sh)
+        run(0.3)
+        for k in range(4):                       # 4 battute a 0,25 s = 240 BPM
+            w.ctrl.clock = 50.0 + k * 0.25
+            w.ctrl.group_tap(g.id)
+        assert g.group_bpm == 240.0, g.group_bpm
+        w.go()
+        seen, t0 = [], time.monotonic()
+        while time.monotonic() - t0 < 0.95:
+            run(0.01)
+            for k2, inst in w.ctrl.instances.items():
+                n = w.show_data.by_id(k2).name
+                if n.startswith("t") and not inst.done and n not in seen:
+                    seen.append(n)
+        assert seen == ["t0", "t1", "t2"], (mode, seen)
+        w.ctrl.stop_all(0)
+        run(0.2)
+    for mode in ("random", "all", "playlist", "rplaylist"):
+        assert not tap_active(Cue("group", group_mode=mode, group_tap=True))
+
+
 def t_text_sequence(w):
     sh = Show()
     sh.settings["output_fullscreen"] = False
@@ -232,6 +333,9 @@ if __name__ == "__main__":
     check("show portabile tra Linux, Windows e macOS", t_portable_paths)
     check("GO, gruppo «tutte insieme», stop", lambda: t_go_and_groups(w))
     check("cue di testo in sequenza", lambda: t_text_sequence(w))
+    check("gruppi Playlist e Random playlist", lambda: t_playlist(w))
+    check("PANEL GRID, scorciatoie e cue Stop panel", lambda: t_grid_and_stop_panel(w))
+    check("Tap Tempo dei gruppi", lambda: t_tap_tempo(w))
     check("cue mixer su X32 simulato (mute a scena e fader)", lambda: t_mixer_x32(w))
     check("profilo OSC ChamSys MagicQ", t_osc_profile)
     check("lettura dei controlli ALSA", t_alsa_parser)

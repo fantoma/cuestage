@@ -31,6 +31,8 @@ class ListTabs(QWidget):
     renameRequested = Signal(int)
     deleteRequested = Signal(int)
     moveRequested = Signal(int, int)        # indice, direzione
+    addGridRequested = Signal()
+    kindRequested = Signal(int, str)        # indice, «list» / «grid»
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -54,11 +56,19 @@ class ListTabs(QWidget):
         self.add_btn.setFocusPolicy(Qt.NoFocus)
         self.add_btn.clicked.connect(self.addRequested.emit)
         h.addWidget(self.add_btn)
+        self.add_grid_btn = QToolButton()
+        self.add_grid_btn.setText("+ GRID")
+        self.add_grid_btn.setToolTip("Nuovo PANEL a caselle (GRID): cue da cliccare o da tastiera, su più pagine")
+        self.add_grid_btn.setFocusPolicy(Qt.NoFocus)
+        self.add_grid_btn.clicked.connect(self.addGridRequested.emit)
+        h.addWidget(self.add_grid_btn)
         h.addStretch(1)
+        self.kinds = []
         self._guard = False
 
-    def set_lists(self, names, current, go_index, running):
+    def set_lists(self, names, current, go_index, running, kinds=None):
         """names: nomi delle liste ([0] = MAIN) · go_index: lista di GO · running: set di indici in play."""
+        self.kinds = list(kinds or [])
         self._guard = True
         while self.bar.count() > len(names):
             self.bar.removeTab(self.bar.count() - 1)
@@ -90,9 +100,14 @@ class ListTabs(QWidget):
         i = self.bar.tabAt(pos)
         m = QMenu(self)
         m.addAction("Nuovo PANEL", self.addRequested.emit)
+        m.addAction("Nuovo PANEL GRID (caselle)", self.addGridRequested.emit)
         if i > 0:
             m.addSeparator()
             m.addAction("Rinomina…", lambda: self.renameRequested.emit(i))
+            if i < len(self.kinds) and self.kinds[i] == "grid":
+                m.addAction("Mostra come lista", lambda: self.kindRequested.emit(i, "list"))
+            else:
+                m.addAction("Mostra come griglia (GRID)", lambda: self.kindRequested.emit(i, "grid"))
             a = m.addAction("Sposta a sinistra", lambda: self.moveRequested.emit(i, -1))
             a.setEnabled(i > 1)
             a = m.addAction("Sposta a destra", lambda: self.moveRequested.emit(i, 1))

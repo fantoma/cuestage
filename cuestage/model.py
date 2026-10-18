@@ -6,17 +6,18 @@ import uuid
 
 from .system import local_path, portable_rel
 
-CUE_TYPES = ["audio", "video", "image", "text", "group", "groupexit", "fade", "preset", "control", "osc",
-             "midiout", "projector", "mixer", "wait", "memo"]
+CUE_TYPES = ["audio", "video", "image", "text", "group", "groupexit", "fade", "preset", "control", "stoppanel",
+             "osc", "midiout", "projector", "mixer", "wait", "memo"]
 TYPE_LABELS = {
     "audio": "Audio", "video": "Video", "image": "Immagine", "fade": "Fade",
     "preset": "Cambia preset", "control": "Comando", "osc": "OSC", "projector": "Proiettore", "mixer": "Mixer",
     "group": "Gruppo", "groupexit": "Esci dal gruppo", "text": "Testo", "midiout": "MIDI out",
-    "wait": "Attesa", "memo": "Memo",
+    "wait": "Attesa", "memo": "Memo", "stoppanel": "Stop panel",
 }
 TYPE_ICONS = {
     "audio": "♪", "video": "▶", "image": "▣", "fade": "◢", "preset": "⇢", "control": "⌘", "projector": "⌖",
     "osc": "⇄", "wait": "⧗", "memo": "✎", "mixer": "≣", "group": "◫", "groupexit": "⇥", "text": "T", "midiout": "♫",
+    "stoppanel": "⊠",
 }
 
 # campi salvati nei preset (per tipo di preset)
@@ -106,6 +107,8 @@ class Cue:
         "preset_audio": "", "preset_visual": "",
         # comando
         "action": "start", "stop_fade": 0.0,
+        # stop panel: id dei PANEL da fermare ("*" = tutti, anche quelli creati dopo); fade = stop_fade
+        "sp_panels": [],
         # proiettore (via rete, driver/plugin)
         "proj_target": "", "proj_action": "power_on", "proj_value": "", "proj_dir": 1,
         "proj_steps": 1, "proj_speed": "normal",
@@ -116,12 +119,21 @@ class Cue:
         "mix_states": {},
         # azione «control» (schede audio): chiave del controllo e valore grezzo
         "mix_ctl": "", "mix_ctl_value": 0,
+        # aspetto e comandi rapidi: colore (casella della griglia e riga della lista, "#rrggbb" o vuoto),
+        # scorciatoia da tastiera (QKeySequence in formato portabile, es. "F5", "Ctrl+1"),
+        # posizione nella griglia del PANEL GRID: [pagina, riga, colonna] (vuota = da assegnare)
+        "color": "", "hotkey": "", "grid_pos": [],
         # gruppi: «group» = id della cue Gruppo a cui appartiene la cue (vuoto = nessuno)
         "group": "",
-        "group_mode": "sequence",   # sequence · random · loop · rloop · all
+        "group_mode": "sequence",   # sequence · random · loop · rloop · all · playlist · rplaylist
         "group_hold": 10.0,         # loop: secondi di permanenza di ogni cue (0 = la sua durata)
         "group_xfade": 2.0,         # loop: crossfade tra una cue e la successiva (s)
         "group_advance": "time",    # rloop: «time» avanzamento a tempo · «go» avanza col GO
+        "group_loop": False,        # playlist / random playlist: ricomincia dopo l'ultima cue
+        # Tap Tempo (sequence, loop, random loop): una cue ogni «div» battiti al tempo «bpm», come un GO;
+        # il tempo si batte con un tasto, una nota/CC MIDI o un messaggio OSC
+        "group_tap": False, "group_tap_div": 1.0, "group_bpm": 120.0,
+        "group_tap_key": "", "group_tap_midi": "", "group_tap_osc": "",
         "group_exit": "fade",       # uscita da un loop: «fade» sfuma la cue corrente · «finish» la lascia finire
         "collapsed": False,
         # cue Testo (sottotitoli / sopratitoli): «sequence» = una frase per GO (frasi separate da una riga
@@ -256,10 +268,32 @@ MAIN_ID = "main"
 class CueList:
     """Una lista di cue: la MAIN oppure un PANEL."""
 
-    def __init__(self, name, cues=None, list_id=None):
+    GRID_DEFAULTS = {"kind": "list", "grid_rows": 4, "grid_cols": 6, "grid_pages": ["Pagina 1"],
+                     "grid_click": "toggle"}
+
+    def __init__(self, name, cues=None, list_id=None, kind="list"):
         self.id = list_id or uuid.uuid4().hex[:8]
         self.name = name
         self.cues = cues if cues is not None else []
+        for k, v in self.GRID_DEFAULTS.items():
+            setattr(self, k, copy.deepcopy(v))
+        self.kind = kind            # «list» = lista classica · «grid» = caselle (con pagine)
+
+    @property
+    def is_grid(self):
+        return self.kind == "grid"
+
+    def grid_data(self):
+        return {k: copy.deepcopy(getattr(self, k)) for k in self.GRID_DEFAULTS}
+
+    def set_grid_data(self, d):
+        for k, v in self.GRID_DEFAULTS.items():
+            val = d.get(k, v)
+            setattr(self, k, copy.deepcopy(val))
+        self.grid_rows = max(1, min(16, int(self.grid_rows or 4)))
+        self.grid_cols = max(1, min(16, int(self.grid_cols or 6)))
+        if not isinstance(self.grid_pages, list) or not self.grid_pages:
+            self.grid_pages = ["Pagina 1"]
 
     @property
     def is_main(self):
@@ -324,14 +358,14 @@ class Show:
         for lst in self.lists:
             yield from lst.cues
 
-    def add_panel(self, name=None):
+    def add_panel(self, name=None, kind="list"):
         n = len(self.lists)
         names = {l.name for l in self.lists}
         name = name or f"PANEL {n}"
         while name in names:
             n += 1
             name = f"PANEL {n}"
-        lst = CueList(name)
+        lst = CueList(name, kind=kind)
         self.lists.append(lst)
         self.dirty = True
         return lst
@@ -405,8 +439,8 @@ class Show:
             "settings": self.settings,
             "original_path": self.path,
             "cues": [c.to_dict(base_dir) for c in self.main.cues],
-            "panels": [{"id": l.id, "name": l.name, "cues": [c.to_dict(base_dir) for c in l.cues]}
-                       for l in self.panels],
+            "panels": [dict({"id": l.id, "name": l.name, "cues": [c.to_dict(base_dir) for c in l.cues]},
+                            **l.grid_data()) for l in self.panels],
         }
 
     def save(self, path, copy_only=False):
@@ -449,6 +483,7 @@ class Show:
             if isinstance(p, dict):
                 lst = CueList(str(p.get("name") or "PANEL"), [Cue.from_dict(d, base) for d in p.get("cues", [])],
                               p.get("id") if p.get("id") != MAIN_ID else None)
+                lst.set_grid_data(p)
                 s.lists.append(lst)
         s._migrate_global_presets(data.get("presets") or {})
         s.original_path = data.get("original_path")

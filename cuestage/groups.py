@@ -8,8 +8,11 @@ GROUP_MODES = {
     "loop": "Loop — in sequenza da sole (attesa + crossfade); il GO successivo esce",
     "rloop": "Random loop — in ordine casuale; avanzamento a tempo o col GO",
     "all": "All — partono tutte insieme (pre-wait rispettati); il GO successivo esce",
+    "playlist": "Playlist — una dopo l'altra da sole, senza GO né pre-wait; finisce dopo l'ultima",
+    "rplaylist": "Random playlist — come Playlist, in ordine casuale (ognuna una volta)",
 }
-GROUP_SHORT = {"sequence": "Sequence", "random": "Random", "loop": "Loop", "rloop": "Random loop", "all": "All"}
+GROUP_SHORT = {"sequence": "Sequence", "random": "Random", "loop": "Loop", "rloop": "Random loop", "all": "All",
+               "playlist": "Playlist", "rplaylist": "Random playlist"}
 
 
 def normalize(cues):

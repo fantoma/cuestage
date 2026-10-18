@@ -1,0 +1,2367 @@
+diff --git a/README.md b/README.md
+index 9e3ca84..7b0cdbc 100644
+--- a/README.md
++++ b/README.md
+@@ -135,6 +135,39 @@ La scritta «In attesa» indica anche la lista (es. «Musiche › 4 Applauso»).
+ show. Con OSC: `/list/<nome>` mostra una lista, `/list/<nome>/go` fa GO su quella lista, `/list/<nome>/stop` ferma solo quella lista; `/next` e
+ `/previous` (e i corrispondenti MIDI) agiscono sulla lista di GO.
+ 
++## PANEL GRID (caselle)
++
++Un PANEL può mostrare le sue cue come **caselle** da cliccare, come un campionatore: **+ GRID** accanto a
+++ PANEL, oppure tasto destro su un PANEL › «Mostra come griglia» (e «Mostra come lista» per tornare indietro:
++le cue restano le stesse).
++
++- **Dimensioni** in caselle (righe × colonne, fino a 16 × 16) e **più pagine**: premi **✎ Modifica** per
++  vedere «+ Pagina», righe, colonne e il comportamento del clic. Doppio clic su una pagina per rinominarla;
++  tasto destro per eliminarla (solo se è vuota). Se riduci la griglia, le cue che non ci stanno passano nelle
++  prime caselle libere (anche su una pagina nuova): nessuna va persa.
++- **Clic** su una casella: *avvia / ferma* (predefinito), *riavvia dall'inizio* oppure *avvia (se è già attiva
++  non fa nulla)*. La casella attiva ha il bordo verde, la barra di avanzamento e il tempo che manca; in
++  pre-wait il bordo è ambra.
++- **Modifica**: clic = seleziona (ispettore) · trascina = sposta (su una casella occupata le due cue si
++  scambiano) · doppio clic su una casella vuota = nuova cue · trascina file audio/video dal file manager su
++  una casella = nuove cue a partire da lì.
++- **Colore** di ogni casella: tasto destro › Colore (12 colori pronti o «Altro colore…»), oppure dalla scheda
++  «Base» dell'ispettore. Il colore tinge anche la riga della cue nelle liste.
++- **Scorciatoie da tastiera**: tasto destro › «Impara scorciatoia da tastiera…» (o «Impara…» nella scheda
++  Base) e premi il tasto o la combinazione (F5, 1, Q, Ctrl+1…). Funziona per qualsiasi cue, anche nella MAIN o
++  in un PANEL a lista, con la finestra di CueStage attiva ma non mentre scrivi in un campo di testo. I tasti già
++  usati da CueStage (Spazio, Esc, i comandi dei menu…) non si possono assegnare; se il tasto è già di un'altra
++  cue, passa alla nuova. Il tasto compare in alto a destra nella casella.
++- **GO locale**: anche il GRID ha GO / STOP del PANEL; il GO avanza casella dopo casella (pagina, riga,
++  colonna) e la prossima casella ha il bordo tratteggiato giallo.
++- I gruppi occupano una casella sola (clic = avvia il gruppo). Per modificarne i membri, «Mostra come lista».
++
++## Cue «Stop panel»
++
++Ferma le cue in esecuzione (e i pre-wait) dei PANEL scelti, con un **fade** facoltativo; la MAIN e gli altri
++PANEL continuano. Nella scheda dell'ispettore si scelgono uno o più PANEL, oppure **«Tutti i PANEL»**, che vale
++anche per i PANEL creati in seguito.
++
+ ## Cue «Testo» (sottotitoli, sopratitoli, didascalie)
+ 
+ Il testo viene disegnato sull'uscita video, sopra (o sotto, con il **layer**) le altre cue, e segue la
+@@ -191,8 +224,50 @@ Il tipo si sceglie nella scheda **Gruppo** dell'ispettore:
+   può richiamare da un altro PANEL (cue Comando › Avvia), con il suo trigger MIDI/OSC o con
+   `/cue/<numero>/start`.
+ - **All** — GO avvia tutte le cue insieme; il pre-wait di ognuna è rispettato. Il GO successivo esce.
+-
+-**All'uscita** da un Loop/Random loop: la cue corrente sfuma con il tempo di crossfade, oppure la si lascia
++- **Playlist** — GO avvia la prima cue; le altre partono da sole, ognuna appena finisce la precedente,
++  nell'ordine della lista. Il pre-wait e «con/dopo la precedente» delle cue del gruppo non contano. Ogni cue
++  suona una volta e dopo l'ultima il gruppo finisce. Facoltativo un **crossfade** tra una cue e la successiva.
++  Il GO successivo esce dal gruppo; STOP lo ferma.
++- **Random playlist** — come Playlist, ma in ordine casuale: ogni cue suona una volta, in un ordine diverso a
++  ogni avvio (uguale su master e istanze in ridondanza).
++
++Nelle playlist il **loop delle singole cue è ignorato** (ognuna suona una volta per giro; nell'ispettore la
++casella «Loop» della cue appare disattivata). Con **Loop** attivo sul gruppo, dopo l'ultima cue la playlist
++ricomincia; la Random playlist rimescola a ogni giro senza ripetere di fila la stessa cue. Il crossfade, se
++c'è, non supera mai metà della durata della cue.
++
++### Tap Tempo
++
++Per **Sequence**, **Loop** e **Random loop** (scheda Gruppo › «Tap Tempo») le cue si susseguono a tempo,
++come se a ogni battito si premesse GO: **una cue ogni 1/16, 1/8, 1/4, 1/2, 1, 2, 4, 8 o 16 battiti** al tempo
++in **BPM** (20–300). Il tempo si batte, anche mentre il gruppo non suona:
++- con il pulsante **TAP** dell'ispettore;
++- con un **tasto** («Impara…»: anche un pedale o una pulsantiera USB che si presentano come tastiera; tenerlo
++  premuto non batte il tempo);
++- con una **nota/CC MIDI** («Impara»: pedale, pad, controller);
++- via **OSC**: `/cue/<numero>/tap` (sempre) oppure un indirizzo scelto (es. `/tap`).
++
++I BPM sono la media degli ultimi 8 colpi (almeno 2; dopo 2,5 s di pausa si ricomincia a contare); ogni colpo
++rimette anche **in fase** il battito. Si può anche scrivere il valore a mano. Nella lista il gruppo mostra
++«♩ 128 BPM · una cue ogni 1/2 battito», nel GRID il tempo compare nella casella. In ridondanza ogni colpo
++arriva anche alle secondarie, che tengono lo stesso tempo.
++
++Come si comporta (e dove non ha senso):
++- **Sequence** — a ogni battito il gruppo avanza come con un GO; dopo l'ultima cue il battito si ferma (non
++  avanza oltre il gruppo). Le cue con pre-wait partono in ritardo rispetto al battito; quelle «con la
++  precedente» partono insieme alla loro; un GO dato a mano avanza in più e il battito continua da lì.
++- **Loop / Random loop** — il battito sostituisce l'«attesa» (e, nel Random loop *col GO*, il GO: il GO
++  torna a far uscire dal gruppo). Una cue più lunga dell'intervallo viene **tagliata** (con il crossfade, che
++  non supera mai metà intervallo); una più corta lascia **silenzio** fino al battito.
++- **Random, All, Playlist, Random playlist** — l'opzione è disattivata: Random avvia una sola cue e All tutte
++  insieme (non c'è una sequenza da scandire); le playlist seguono la durata naturale delle cue (a tempo
++  diventerebbero un Loop: usa Loop o Random loop).
++- Sotto i 100 ms tra una cue e l'altra (es. 1/16 a tempi alti) l'ispettore avvisa; il minimo assoluto è 50 ms.
++  Video e immagini a quelle velocità non stanno al passo.
++- Se un tasto TAP coincide con un comando di CueStage non è accettato; se è già usato da un'altra cue passa
++  alla nuova. Se la stessa nota MIDI è anche il GO generale, vince il GO.
++
++**All'uscita** da un Loop/Random loop/Playlist: la cue corrente sfuma con il tempo di crossfade, oppure la si lascia
+ finire. Un gruppo in esecuzione compare tra le «Cue attive»: il suo ■ (o STOP TUTTO) lo ferma.
+ 
+ ## Avvio di ogni cue
+diff --git a/cuestage/cluster.py b/cuestage/cluster.py
+index 3f0a785..a8d050f 100644
+--- a/cuestage/cluster.py
++++ b/cuestage/cluster.py
+@@ -31,7 +31,8 @@ DISCOVER_MSG = b"CUESTAGE-MASTER?"
+ # metodi del controller che sulle istanze in ridondanza si ripetono identici
+ REPLICATED = ("go", "start_cue", "trigger", "stop_cue", "stop_all", "stop_list", "pause_cue", "pause_all",
+               "resume_all", "set_playhead", "step_playhead", "playhead_to", "crossfade", "set_crossfader",
+-              "set_live_level", "set_live_opacity", "exit_captured_groups", "text_step", "text_goto")
++              "set_live_level", "set_live_opacity", "exit_captured_groups", "text_step", "text_goto",
++              "group_tap")
+ GUARDED = ("_tick",)             # chiamate interne: quello che fanno non va ritrasmesso
+ 
+ 
+diff --git a/cuestage/engine.py b/cuestage/engine.py
+index 9bae739..f84a77f 100644
+--- a/cuestage/engine.py
++++ b/cuestage/engine.py
+@@ -50,11 +50,17 @@ class Instance:
+         self.user_stopped = False
+         self.elapsed = 0.0
+         self.started_at = ctrl.clock
++        # avviata da una Playlist: suona una volta sola, anche se la cue ha il loop
++        self.no_loop = getattr(ctrl, "_play_once", None) == cue.id
+         pend = getattr(ctrl, "_xf_incoming", None)
+         if pend is not None and pend == cue.id:      # cue che entra con un crossfade: parte da zero
+             self.xf_gain = 0.0
+             self.xf_op = 0.0
+ 
++    @property
++    def loop_on(self):
++        return bool(self.cue.loop) and not self.no_loop
++
+     @property
+     def trim_gain(self):
+         return self.live_gain * self.xf_gain
+@@ -288,7 +294,7 @@ class RoutedVoice:
+ 
+     def _start_voice(self, data, silent=False, paused=False):
+         c = self.cue
+-        v = Voice(data, c.start, c.end, c.loop, c.loop_start, c.loop_end,
++        v = Voice(data, c.start, c.end, self.loop_on, c.loop_start, c.loop_end,
+                   int(c.loop_count or 0), db_to_lin(c.level_db),
+                   curve_arrays(c.curve), 0.0 if silent else c.fade_in, c.fade_out, gains_fn=None)
+         self.voice = v
+@@ -499,7 +505,7 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
+         return end, max(c.start, ls), min(le, end)
+ 
+     def looping(self):
+-        return self.cue.loop and self.loops_left != 0
++        return self.loop_on and self.loops_left != 0
+ 
+     def _audio_master(self):
+         return self.voice is not None and not self.audio_ended
+@@ -623,12 +629,12 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
+     def total(self):
+         if self.voice is not None:
+             return self._total
+-        if self.cue.loop and self.loops_left < 0:
++        if self.loop_on and self.loops_left < 0:
+             return None
+         end, ls, le = self._bounds()
+         if end >= 1e8:
+             return None
+-        n = max(0, int(self.cue.loop_count) - 1) if self.cue.loop else 0
++        n = max(0, int(self.cue.loop_count) - 1) if self.loop_on else 0
+         return (end - self.cue.start) + n * (le - ls)
+ 
+     def cue_time(self):
+@@ -836,11 +842,33 @@ class ProjectorInstance(Instance):
+         self.finish()
+ 
+ 
++TAP_MODES = ("sequence", "loop", "rloop")       # gruppi in cui il Tap Tempo ha senso
++TAP_DIVS = [1 / 16, 1 / 8, 1 / 4, 1 / 2, 1, 2, 4, 8, 16]
++TAP_MIN_INTERVAL = 0.05                          # sotto questo intervallo (s) il motore non sta dietro
++
++
++def tap_active(cue):
++    return bool(cue.group_tap) and cue.group_mode in TAP_MODES
++
++
++def tap_interval(cue):
++    """Secondi tra una cue e la successiva: (60 / BPM) × divisore."""
++    bpm = max(20.0, min(300.0, float(cue.group_bpm or 120.0)))
++    return max(TAP_MIN_INTERVAL, 60.0 / bpm * float(cue.group_tap_div or 1.0))
++
++
++def fmt_div(d):
++    d = float(d or 1)
++    return f"1/{int(round(1 / d))}" if d < 1 else f"{d:g}"
++
++
+ class GroupInstance(Instance):
+     """Esecuzione di un gruppo di cue.
+     sequence: parte la prima cue (le altre con i GO) · random: una cue a caso · all: tutte insieme ·
+     loop / rloop: le cue si susseguono da sole con attesa e crossfade (rloop in ordine casuale, oppure
+-    avanzando col GO). Resta attiva finché suonano le sue cue; STOP o l'uscita la fermano."""
++    avanzando col GO) · playlist / rplaylist: le cue si susseguono da sole, una volta ciascuna (rplaylist in
++    ordine casuale), ognuna appena finisce la precedente, senza pre-wait né «con/dopo la precedente».
++    Resta attiva finché suonano le sue cue; STOP o l'uscita la fermano."""
+ 
+     def start(self, silent=False):
+         import random
+@@ -864,9 +892,13 @@ class GroupInstance(Instance):
+             self.finish()
+             return
+         depth = ctrl._depth + 1
++        self.tap = tap_active(c)
++        self.beat_next = ctrl.clock + tap_interval(c) if self.tap else None
+         if self.mode == "sequence":
+             self.cascade = False          # le «dopo la precedente» seguono l'ultima cue del gruppo
+             ctrl.trigger(self.pool[0], cascade=True, depth=depth)
++            if self.tap:                  # Tap Tempo: i GO successivi li dà il battito (vedi Controller._tick)
++                ctrl.tempo_runs[c.id] = {"lst": self.lst, "next": self.beat_next}
+             self.finish()
+             return
+         if self.mode == "all":
+@@ -877,19 +909,27 @@ class GroupInstance(Instance):
+         if self.mode == "random":
+             self._play(self._pick())
+             return
+-        # loop / random loop
++        # loop / random loop / playlist / random playlist
+         self.order = list(self.pool)
+-        if self.mode == "rloop":
++        if self.mode in ("rloop", "rplaylist"):
+             self.rng.shuffle(self.order)
++        if self.mode == "rloop":               # la prima cue conta come «ultima suonata»: niente ripetizione subito
++            ctrl._group_last[c.id] = self.order[0].id
+         self._play(self.order[0])
+ 
+     @property
+     def captures_go(self):
+-        return self.mode == "rloop" and self.cue.group_advance == "go" and not self.done
++        return self.mode == "rloop" and self.cue.group_advance == "go" and not self.done and \
++            not getattr(self, "tap", False)
+ 
+     @property
+     def timed(self):
+-        return self.mode == "loop" or (self.mode == "rloop" and self.cue.group_advance != "go")
++        return self.mode in ("loop", "playlist", "rplaylist") or getattr(self, "tap", False) or \
++            (self.mode == "rloop" and self.cue.group_advance != "go")
++
++    @property
++    def playlist(self):
++        return self.mode in ("playlist", "rplaylist")
+ 
+     def _pick(self):
+         last = self.ctrl._group_last.get(self.cue.id)
+@@ -909,12 +949,14 @@ class GroupInstance(Instance):
+         if old is not None and old.cue.id == cue.id:  # stessa cue (gruppo di una sola cue): riparte
+             old.stop(0)
+             old = None
++        ctrl._play_once = cue.id if self.playlist else None
+         if xfade > 0 and old is not None:
+             ctrl._xf_incoming = cue.id
+             try:
+                 ctrl.start_cue(cue, cascade=False)
+             finally:
+                 ctrl._xf_incoming = None
++                ctrl._play_once = None
+             new = ctrl.instances.get(cue.id)
+             if new is not None:
+                 self.xf = {"A": [old], "B": [new], "t0": ctrl.clock, "dur": float(xfade)}
+@@ -922,7 +964,10 @@ class GroupInstance(Instance):
+         else:
+             if old is not None and self.timed:
+                 old.stop(0.05)
+-            ctrl.start_cue(cue, cascade=False)
++            try:
++                ctrl.start_cue(cue, cascade=False)
++            finally:
++                ctrl._play_once = None
+         self.current = cue.id
+         self.spawned.add(cue.id)
+         self._schedule()
+@@ -930,11 +975,25 @@ class GroupInstance(Instance):
+ 
+     def _schedule(self):
+         c = self.cue
++        if getattr(self, "tap", False) and self.mode in ("loop", "rloop"):
++            self.next_at = None           # con il Tap Tempo decide il battito (tick)
++            return
+         if not self.timed:
+             self.next_at = None
+             return
+         hold = float(c.group_hold or 0)
+         xf = float(c.group_xfade or 0)
++        if self.playlist:
++            # la successiva parte alla fine della corrente (o prima, se c'è un crossfade); senza durata
++            # nota (es. una cue OSC) si aspetta che la cue finisca da sola
++            if xf > 0 and (self.k + 1 < len(self.order) or self.cue.group_loop):
++                inst = self.ctrl.instances.get(self.current)
++                tot = inst.total() if inst is not None else None
++                self.xf_eff = min(xf, tot * 0.5) if tot else 0.0     # mai più di metà della cue
++                self.next_at = self.ctrl.clock + (tot - self.xf_eff) if tot else None
++            else:
++                self.next_at = None
++            return
+         if hold > 0:
+             self.next_at = self.ctrl.clock + hold
+             return
+@@ -942,16 +1001,31 @@ class GroupInstance(Instance):
+         tot = inst.total() if inst is not None else None
+         self.next_at = self.ctrl.clock + (max(0.5, tot - xf) if tot else 10.0)
+ 
+-    def advance(self):
++    def advance(self, xfade=None):
+         """Cue successiva del loop (o del random loop), con crossfade."""
+         if self.done:
+             return
++        if self.playlist:
++            if self.k + 1 >= len(self.order):
++                if not self.cue.group_loop:
++                    self.next_at = None    # era l'ultima: il gruppo finisce quando finisce lei
++                    return
++                last = self.order[-1]       # ricomincia; la random playlist rimescola (mai la stessa di fila)
++                if self.mode == "rplaylist" and len(self.order) > 1:
++                    self.rng.shuffle(self.order)
++                    if self.order[0].id == last.id:
++                        self.order.append(self.order.pop(0))
++                self.k = -1
++            self.k += 1
++            xf = getattr(self, "xf_eff", 0.0) if self.next_at is not None else 0.0
++            self._play(self.order[self.k], xf)
++            return
+         if self.mode == "loop":
+             self.k = (self.k + 1) % len(self.order)
+             nxt = self.order[self.k]
+         else:
+             nxt = self._pick()
+-        self._play(nxt, float(self.cue.group_xfade or 0))
++        self._play(nxt, float(self.cue.group_xfade or 0) if xfade is None else xfade)
+ 
+     def tick(self, now, dt):
+         if self.done or self.paused:
+@@ -964,6 +1038,27 @@ class GroupInstance(Instance):
+             if t >= 1.0:
+                 ctrl._xf_finish(self.xf)
+                 self.xf = None
++        if self.tap and self.mode in ("loop", "rloop"):
++            # Tap Tempo: si cambia cue solo sul battito (una cue più corta lascia silenzio fino al battito,
++            # una più lunga viene tagliata con il crossfade, mai più lungo di metà intervallo)
++            if self.beat_next is not None and ctrl.clock >= self.beat_next:
++                iv = tap_interval(self.cue)
++                self.beat_next += iv
++                if self.beat_next < ctrl.clock:          # rimasti indietro (pausa, sistema lento): si riallinea
++                    self.beat_next = ctrl.clock + iv
++                self.advance(min(float(self.cue.group_xfade or 0), iv * 0.5))
++            return
++        if self.playlist:
++            cur = ctrl.instances.get(self.current)
++            ended = cur is None or cur.done
++            if self.next_at is not None and ctrl.clock >= self.next_at:
++                self.advance()
++            elif ended and self.xf is None:
++                if self.k + 1 < len(self.order) or self.cue.group_loop:
++                    self.advance()
++                else:
++                    self.finish()
++            return
+         if self.mode in ("loop", "rloop"):
+             cur = ctrl.instances.get(self.current)
+             if self.timed and self.next_at is not None and ctrl.clock >= self.next_at:
+@@ -1163,6 +1258,33 @@ class GroupExitInstance(Instance):
+         self.finish()
+ 
+ 
++def stop_panel_targets(show, cue):
++    """PANEL fermati da una cue «Stop panel»: tutti (anche quelli creati dopo) oppure quelli scelti."""
++    ids = list(cue.sp_panels or [])
++    if "*" in ids:
++        return list(show.panels)
++    return [lst for lst in show.panels if lst.id in ids]
++
++
++class StopPanelInstance(Instance):
++    """Ferma le cue dei PANEL scelti (o di tutti), con un fade facoltativo. Le altre liste continuano."""
++
++    def start(self, silent=False):
++        c = self.cue
++        ctrl = self.ctrl
++        lists = stop_panel_targets(ctrl.show, c)
++        fade = float(c.stop_fade or 0)
++        ids = {x.id for lst in lists for x in lst.cues} - {c.id}
++        ctrl.pending = [p for p in ctrl.pending if p[1].id not in ids]
++        for inst in list(ctrl.instances.values()):
++            if inst.cue.id in ids and not inst.done:
++                inst.stop(fade)
++        names = ", ".join(f"«{lst.name}»" for lst in lists) or "nessun PANEL"
++        ctrl.message.emit(f"Stop panel: {names}" + (f" (fade {fade:g} s)" if fade > 0 else ""))
++        ctrl.changed.emit()
++        self.finish()
++
++
+ class MixerInstance(Instance):
+     """Comando a un mixer: mute/unmute di uno o più canali, oppure fader (con fade facoltativo).
+     Con il fade la cue resta attiva per la sua durata (STOP la interrompe)."""
+@@ -1259,7 +1381,7 @@ INSTANCE_CLASSES = {
+     "audio": AudioInstance, "video": VideoInstance, "image": ImageInstance,
+     "wait": WaitInstance, "fade": FadeInstance, "preset": PresetInstance, "control": ControlInstance,
+     "osc": OscInstance, "projector": ProjectorInstance, "mixer": MixerInstance, "memo": MemoInstance,
+-    "group": GroupInstance, "groupexit": GroupExitInstance, "text": TextInstance, "midiout": MidiOutInstance,
++    "group": GroupInstance, "groupexit": GroupExitInstance, "stoppanel": StopPanelInstance, "text": TextInstance, "midiout": MidiOutInstance,
+ }
+ 
+ 
+@@ -1282,6 +1404,8 @@ class Controller(QObject):
+         self.playheads = {}    # id lista -> indice della cue in standby
+         self.paused_all = False
+         self._xf_incoming = None   # id delle cue che entrano con un crossfade (partono a zero)
++        self.taps = {}             # Tap Tempo: id gruppo -> istanti delle ultime battute
++        self.tempo_runs = {}       # gruppi Sequence col Tap Tempo in corso: id -> {"lst", "next"}
+         import uuid as _uuid
+         self.seed_base = _uuid.uuid4().hex[:8]   # semi dei gruppi casuali (uguali sulle istanze in ridondanza)
+         self.seed_count = 0
+@@ -1668,7 +1792,56 @@ class Controller(QObject):
+             inst.stop(fade)
+         self.changed.emit()
+ 
++    # ------------------------------------------------------------------ Tap Tempo
++    def group_tap(self, group_id):
++        """Una battuta del Tap Tempo di un gruppo: dalle ultime battute calcola i BPM e rimette in fase il
++        battito (la prossima cue arriva un intervallo dopo questa battuta)."""
++        c = self.show.by_id(group_id)
++        if c is None or c.type != "group":
++            return None
++        t = self.clock
++        taps = self.taps.setdefault(group_id, [])
++        if taps and t - taps[-1] > 2.5:          # pausa lunga: si ricomincia a contare
++            taps.clear()
++        taps.append(t)
++        del taps[:-8]
++        if len(taps) >= 2:
++            iv = (taps[-1] - taps[0]) / (len(taps) - 1)
++            if iv > 0:
++                c.group_bpm = round(max(20.0, min(300.0, 60.0 / iv)), 1)
++                self.show.dirty = True
++        if tap_active(c):
++            nxt = t + tap_interval(c)
++            inst = self.instances.get(group_id)
++            if isinstance(inst, GroupInstance) and not inst.done and inst.beat_next is not None:
++                inst.beat_next = nxt
++            if group_id in self.tempo_runs:
++                self.tempo_runs[group_id]["next"] = nxt
++        self.changed.emit()
++        return c.group_bpm
++
++    def _tempo_tick(self):
++        """Gruppi Sequence col Tap Tempo: a ogni battito un GO sulla loro lista, finché il playhead è dentro."""
++        if not self.tempo_runs:
++            return
++        from .groups import block_end
++        for gid, run in list(self.tempo_runs.items()):
++            c = self.show.by_id(gid)
++            lst = run["lst"]
++            i = lst.index_of(gid) if c is not None else -1
++            ph = self.playhead_of(lst)
++            if i < 0 or not tap_active(c) or not (i < ph < block_end(lst.cues, i)):
++                del self.tempo_runs[gid]            # gruppo finito, uscito o modificato
++                continue
++            if self.clock >= run["next"]:
++                iv = tap_interval(c)
++                run["next"] += iv
++                if run["next"] < self.clock:
++                    run["next"] = self.clock + iv
++                self.go(lst)
++
+     def stop_all(self, fade=0.0, exclude=None):
++        self.tempo_runs.clear()
+         self.pending = []
+         self.xfade = None
+         self.xf_manual = None
+@@ -1689,6 +1862,8 @@ class Controller(QObject):
+     def stop_list(self, lst, fade=0.0):
+         """STOP di un solo PANEL: ferma le cue di quella lista (e i pre-wait), le altre continuano."""
+         ids = {c.id for c in lst.cues}
++        for gid in [g for g in self.tempo_runs if g in ids]:
++            del self.tempo_runs[gid]
+         self.pending = [p for p in self.pending if p[1].id not in ids]
+         for inst in list(self.instances.values()):     # un crossfade in corso ignora le cue già ferme
+             if inst.cue.id in ids:
+@@ -1757,5 +1932,6 @@ class Controller(QObject):
+             if inst.cue.is_visual():
+                 visual = True
+         self._xf_tick()
++        self._tempo_tick()
+         if visual or self.comp.layers:
+             self.comp.changed()
+diff --git a/cuestage/grid.py b/cuestage/grid.py
+new file mode 100644
+index 0000000..223a80c
+--- /dev/null
++++ b/cuestage/grid.py
+@@ -0,0 +1,162 @@
++"""PANEL GRID: le cue di un PANEL disposte in caselle (righe × colonne), su più pagine.
++
++Ogni cue «di primo livello» (non membro di un gruppo) occupa una casella: cue.grid_pos = [pagina, riga, colonna].
++I membri di un gruppo stanno dentro la casella del loro gruppo. L'ordine della lista segue le caselle
++(pagina, riga, colonna), così il GO locale del PANEL avanza casella dopo casella.
++"""
++
++
++def top_level(lst):
++    """Cue che occupano una casella: tutte tranne i membri dei gruppi."""
++    return [c for c in lst.cues if not c.group]
++
++
++def _valid(lst, pos):
++    return (isinstance(pos, (list, tuple)) and len(pos) == 3
++            and 0 <= int(pos[0]) < len(lst.grid_pages)
++            and 0 <= int(pos[1]) < lst.grid_rows and 0 <= int(pos[2]) < lst.grid_cols)
++
++
++def occupied(lst):
++    """{(pagina, riga, colonna): cue}."""
++    out = {}
++    for c in top_level(lst):
++        if _valid(lst, c.grid_pos):
++            out[tuple(int(x) for x in c.grid_pos)] = c
++    return out
++
++
++def cell_cue(lst, page, row, col):
++    return occupied(lst).get((page, row, col))
++
++
++def free_cell(lst, page=0, taken=None, start=None):
++    """Prima casella libera a partire da «start» = [pagina, riga, colonna] (o dall'inizio di «page»),
++    in ordine di lettura, poi sulle pagine successive (aggiungendone una se servono)."""
++    taken = occupied(lst) if taken is None else taken
++    pages = len(lst.grid_pages)
++    R, C = lst.grid_rows, lst.grid_cols
++    if start is not None and _valid(lst, start):
++        p0, i0 = int(start[0]), int(start[1]) * C + int(start[2])
++    else:
++        p0, i0 = max(0, min(page, pages - 1)), 0
++    for k in range(pages):
++        p = (p0 + k) % pages
++        for i in range(i0 if k == 0 else 0, R * C):
++            if (p, i // C, i % C) not in taken:
++                return [p, i // C, i % C]
++    if i0 > 0:                                   # le caselle prima del punto di partenza
++        for i in range(0, i0):
++            if (p0, i // C, i % C) not in taken:
++                return [p0, i // C, i % C]
++    lst.grid_pages.append(f"Pagina {pages + 1}")
++    return [pages, 0, 0]
++
++
++def ensure_positions(lst, preferred=None, page=0):
++    """Dà una casella a ogni cue che non ne ha una valida (o che la condivide con un'altra).
++    «preferred» = casella da cui partire per le cue nuove (es. dove sono stati trascinati dei file):
++    la prima va lì (o nella prima libera dopo), le altre nelle caselle seguenti.
++    Restituisce True se qualcosa è cambiato."""
++    changed = False
++    taken = {}
++    pending = []
++    for c in top_level(lst):
++        if c.grid_pos and _valid(lst, c.grid_pos):
++            key = tuple(int(x) for x in c.grid_pos)
++            if key not in taken:
++                taken[key] = c
++                if list(key) != list(c.grid_pos):
++                    c.grid_pos = list(key)
++                continue
++        pending.append(c)
++    for c in lst.cues:                        # i membri dei gruppi non hanno caselle proprie
++        if c.group and c.grid_pos:
++            c.grid_pos = []
++            changed = True
++    cursor = list(preferred) if preferred is not None and _valid(lst, preferred) else None
++    for c in pending:
++        pos = free_cell(lst, page, taken, start=cursor)
++        c.grid_pos = pos
++        taken[tuple(pos)] = c
++        if cursor is not None:
++            cursor = pos
++        changed = True
++    return changed
++
++
++def sort_cues(lst):
++    """Ordina la lista per casella (pagina, riga, colonna), tenendo ogni gruppo unito alle sue cue.
++    Restituisce True se l'ordine è cambiato."""
++    blocks = []
++    cur = None
++    for c in lst.cues:
++        if c.group and cur is not None and cur[0].id == c.group:
++            cur.append(c)
++            continue
++        cur = [c]
++        blocks.append(cur)
++    big = (1 << 30,) * 3
++
++    def key(b):
++        p = b[0].grid_pos
++        return tuple(int(x) for x in p) if p and len(p) == 3 else big
++    new = [c for b in sorted(blocks, key=key) for c in b]
++    if [c.id for c in new] != [c.id for c in lst.cues]:
++        lst.cues[:] = new
++        return True
++    return False
++
++
++def move_cell(lst, cue, page, row, col):
++    """Sposta la cue in una casella; se è occupata, le due cue si scambiano di posto."""
++    other = cell_cue(lst, page, row, col)
++    if other is cue:
++        return False
++    if other is not None:
++        other.grid_pos = list(cue.grid_pos) if cue.grid_pos else []
++    cue.grid_pos = [page, row, col]
++    return True
++
++
++def resize(lst, rows, cols):
++    """Nuove dimensioni: le cue che non ci stanno più vanno nella prima casella libera (anche su nuove pagine)."""
++    lst.grid_rows = max(1, min(16, int(rows)))
++    lst.grid_cols = max(1, min(16, int(cols)))
++    ensure_positions(lst)
++    sort_cues(lst)
++
++
++def page_cues(lst, page):
++    return [c for c in top_level(lst) if c.grid_pos and int(c.grid_pos[0]) == page]
++
++
++def delete_page(lst, page):
++    """Toglie una pagina vuota (le pagine successive scalano). False se la pagina contiene cue."""
++    if page_cues(lst, page) or len(lst.grid_pages) <= 1:
++        return False
++    del lst.grid_pages[page]
++    for c in top_level(lst):
++        if c.grid_pos and int(c.grid_pos[0]) > page:
++            c.grid_pos = [int(c.grid_pos[0]) - 1, c.grid_pos[1], c.grid_pos[2]]
++    sort_cues(lst)
++    return True
++
++
++def signature(lst):
++    """Impronta di ciò che la griglia mostra (per accorgersi di modifiche fatte altrove)."""
++    return (lst.kind, lst.grid_rows, lst.grid_cols, tuple(lst.grid_pages),
++            tuple((c.id, c.group, tuple(c.grid_pos or ())) for c in lst.cues))
++
++
++def text_color(hex_color):
++    """Bianco o nero, a seconda del colore di fondo."""
++    h = (hex_color or "").lstrip("#")
++    if len(h) != 6:
++        return "#f0f0f4"
++    r, g, b = (int(h[i:i + 2], 16) for i in (0, 2, 4))
++    return "#111114" if (0.299 * r + 0.587 * g + 0.114 * b) > 150 else "#f4f4f8"
++
++
++PALETTE = ["#2f3440", "#7a2730", "#a14a1c", "#9a7b14", "#3f7a2a", "#1d7262", "#1f5d8f", "#43439a",
++           "#76398d", "#9a2f68", "#5b5f6a", "#d9d9de"]
+diff --git a/cuestage/groups.py b/cuestage/groups.py
+index 8d302d8..5c89e60 100644
+--- a/cuestage/groups.py
++++ b/cuestage/groups.py
+@@ -8,8 +8,11 @@ GROUP_MODES = {
+     "loop": "Loop — in sequenza da sole (attesa + crossfade); il GO successivo esce",
+     "rloop": "Random loop — in ordine casuale; avanzamento a tempo o col GO",
+     "all": "All — partono tutte insieme (pre-wait rispettati); il GO successivo esce",
++    "playlist": "Playlist — una dopo l'altra da sole, senza GO né pre-wait; finisce dopo l'ultima",
++    "rplaylist": "Random playlist — come Playlist, in ordine casuale (ognuna una volta)",
+ }
+-GROUP_SHORT = {"sequence": "Sequence", "random": "Random", "loop": "Loop", "rloop": "Random loop", "all": "All"}
++GROUP_SHORT = {"sequence": "Sequence", "random": "Random", "loop": "Loop", "rloop": "Random loop", "all": "All",
++               "playlist": "Playlist", "rplaylist": "Random playlist"}
+ 
+ 
+ def normalize(cues):
+diff --git a/cuestage/inspector/control.py b/cuestage/inspector/control.py
+index 73a0ae0..ac0a95c 100644
+--- a/cuestage/inspector/control.py
++++ b/cuestage/inspector/control.py
+@@ -3,7 +3,7 @@
+ from PySide6.QtCore import Qt, QTimer
+ from PySide6.QtGui import QFontDatabase
+ from PySide6.QtWidgets import (
+-    QComboBox, QDoubleSpinBox, QFormLayout, QLabel, QLineEdit, QPushButton,
++    QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout,
+     QSpinBox,
+     QWidget,
+ )
+@@ -94,7 +94,10 @@ class ControlTabsMixin:
+         mc.setCurrentIndex(max(0, mc.findData(cue.group_mode)))
+ 
+         def mode_changed(j):
+-            cue.group_mode = mc.itemData(j)
++            new = mc.itemData(j)
++            if new in ("playlist", "rplaylist") and cue.group_mode not in ("playlist", "rplaylist"):
++                cue.group_xfade = 0.0          # playlist: di serie una dopo l'altra, senza crossfade
++            cue.group_mode = new
+             self._emit()
+             QTimer.singleShot(0, self.rebuild)
+         mc.currentIndexChanged.connect(mode_changed)
+@@ -112,18 +115,27 @@ class ControlTabsMixin:
+                 QTimer.singleShot(0, self.rebuild)
+             ac.currentIndexChanged.connect(adv_changed)
+             f.addRow("Avanzamento", ac)
+-        if m == "loop" or (m == "rloop" and cue.group_advance != "go"):
++        from ..engine import tap_active
++        if (m == "loop" or (m == "rloop" and cue.group_advance != "go")) and not tap_active(cue):
+             hs = self._dspin("group_hold", 0, 36000, 0.5, 1)
+             hs.setSpecialValueText("durata di ogni cue")
+             f.addRow("Attesa su ogni cue", hs)
+-        if m in ("loop", "rloop"):
+-            f.addRow("Crossfade", self._dspin("group_xfade", 0, 600, 0.1, 1))
++        if m in ("loop", "rloop", "playlist", "rplaylist"):
++            xs = self._dspin("group_xfade", 0, 600, 0.1, 1)
++            if m in ("playlist", "rplaylist"):
++                xs.setSpecialValueText("nessuno: una dopo l'altra")
++                lp = self._check("group_loop", "Ricomincia dopo l'ultima cue (loop della playlist)")
++                lp.setToolTip("Il loop impostato sulle singole cue è ignorato: nella playlist ognuna suona una volta "
++                              "per giro." + (" A ogni giro l'ordine viene rimescolato." if m == "rplaylist" else ""))
++                f.addRow("Loop", lp)
++            f.addRow("Crossfade", xs)
+             ec = QComboBox()
+             ec.addItem("Sfuma la cue corrente (con il tempo di crossfade)", "fade")
+             ec.addItem("Lascia finire la cue corrente", "finish")
+             ec.setCurrentIndex(max(0, ec.findData(cue.group_exit)))
+             ec.currentIndexChanged.connect(lambda j: (setattr(cue, "group_exit", ec.itemData(j)), self._emit()))
+             f.addRow("All'uscita", ec)
++        f.addRow(self._tap_box(cue))
+         sh = self.show_fn()
+         lst, i = sh.list_of(cue.id)
+         n = (block_end(lst.cues, i) - i - 1) if lst is not None else 0
+@@ -140,12 +152,164 @@ class ControlTabsMixin:
+                  "rloop": "Come il Loop ma in ordine casuale. «Col GO»: il GO resta al gruppo e passa a un'altra cue; "
+                           "si esce con ESC o con la cue «Esci dal gruppo» (creata in coda: si può richiamare da "
+                           "altri PANEL, via MIDI o OSC).",
+-                 "all": "GO avvia tutte le cue insieme; il pre-wait di ognuna è rispettato. Il GO successivo esce."}
++                 "all": "GO avvia tutte le cue insieme; il pre-wait di ognuna è rispettato. Il GO successivo esce.",
++                 "playlist": "GO avvia la prima cue; le altre partono da sole, ognuna appena finisce la precedente "
++                             "(o in crossfade), nell'ordine della lista. Pre-wait e «con/dopo la precedente» delle "
++                             "cue del gruppo non contano. Ogni cue suona una volta (il suo loop è ignorato): dopo "
++                             "l'ultima il gruppo finisce, oppure ricomincia se è attivo il loop della playlist. "
++                             "Il GO successivo esce dal gruppo; STOP lo ferma.",
++                 "rplaylist": "Come Playlist, ma in ordine casuale: ogni cue suona una volta, in un ordine diverso a "
++                              "ogni avvio. Dopo l'ultima il gruppo finisce, oppure, con il loop, "
++                              "rimescola e ricomincia. Il GO successivo esce; STOP lo ferma."}
+         h = QLabel(help_.get(m, ""))
+         h.setWordWrap(True)
+         f.addRow(h)
+         return w
+ 
++    def _tap_box(self, cue):
++        """Tap Tempo del gruppo: BPM battuti a mano (tasto, MIDI, OSC o pulsante) e divisore."""
++        from PySide6.QtGui import QKeySequence
++        from PySide6.QtWidgets import QGroupBox
++        from ..engine import TAP_DIVS, TAP_MIN_INTERVAL, TAP_MODES, fmt_div, tap_interval
++        box = QGroupBox("Tap Tempo")
++        f = QFormLayout(box)
++        m = cue.group_mode
++        ok_mode = m in TAP_MODES
++        on = QCheckBox("Una cue a ogni battito, come se si premesse GO")
++        on.setChecked(bool(cue.group_tap) and ok_mode)
++        on.setEnabled(ok_mode)
++
++        def toggled(v):
++            cue.group_tap = bool(v)
++            self._emit()
++            QTimer.singleShot(0, self.rebuild)
++        on.toggled.connect(toggled)
++        f.addRow(on)
++        if not ok_mode:
++            why = {"random": "Random avvia una sola cue: non c'è nulla da scandire a tempo (usa Random loop).",
++                   "all": "All avvia tutte le cue insieme: non c'è una sequenza da scandire.",
++                   "playlist": "La Playlist segue la durata naturale di ogni cue: a tempo diventerebbe un Loop "
++                               "(usa Loop o Random loop).",
++                   "rplaylist": "La Random playlist segue la durata naturale di ogni cue: a tempo diventerebbe "
++                                "un Random loop."}.get(m, "")
++            lab = QLabel("Non disponibile con questo tipo di gruppo. " + why)
++            lab.setWordWrap(True)
++            lab.setStyleSheet("color:#999;")
++            f.addRow(lab)
++            return box
++        if not cue.group_tap:
++            return box
++        # BPM + TAP
++        row = QHBoxLayout()
++        bpm = QDoubleSpinBox()
++        bpm.setRange(20, 300)
++        bpm.setDecimals(1)
++        bpm.setSuffix(" BPM")
++        bpm.setKeyboardTracking(False)
++        bpm.setValue(float(cue.group_bpm or 120))
++        row.addWidget(bpm)
++        tap = QPushButton("TAP")
++        tap.setMinimumSize(110, 40)
++        tap.setStyleSheet("QPushButton{background:#6a3fb0;color:white;font-size:16px;font-weight:bold;"
++                          "border-radius:6px;}QPushButton:pressed{background:#9a6af0;}")
++        tap.setToolTip("Batti il tempo: almeno due colpi (si usa la media degli ultimi 8; dopo 2,5 s di "
++                       "pausa si ricomincia). Ogni colpo rimette anche in fase il battito.")
++        row.addWidget(tap)
++        row.addStretch(1)
++        f.addRow("Tempo", row)
++        dc = QComboBox()
++        for d in TAP_DIVS:
++            dc.addItem(f"{fmt_div(d)} battit{'o' if d <= 1 else 'i'}", d)
++        cur = min(range(len(TAP_DIVS)), key=lambda j: abs(TAP_DIVS[j] - float(cue.group_tap_div or 1)))
++        dc.setCurrentIndex(cur)
++        f.addRow("Una cue ogni", dc)
++        iv_lab = QLabel()
++        f.addRow("", iv_lab)
++
++        def refresh_iv():
++            iv = tap_interval(cue)
++            raw = 60.0 / max(20.0, float(cue.group_bpm or 120)) * float(cue.group_tap_div or 1)
++            if raw < 0.1:
++                iv_lab.setText(f"⚠ {raw * 1000:.0f} ms tra una cue e l'altra: troppo veloce (minimo "
++                               f"{TAP_MIN_INTERVAL * 1000:.0f} ms; video e immagini non stanno al passo)")
++                iv_lab.setStyleSheet("color:#e0a030;")
++            else:
++                iv_lab.setText(f"= una cue ogni {iv:.3g} s")
++                iv_lab.setStyleSheet("color:#999;")
++
++        def bpm_set(v):
++            cue.group_bpm = round(float(v), 1)
++            self._emit()
++            refresh_iv()
++        bpm.valueChanged.connect(bpm_set)
++
++        def div_set(j):
++            cue.group_tap_div = float(dc.itemData(j))
++            self._emit()
++            refresh_iv()
++        dc.currentIndexChanged.connect(div_set)
++
++        def do_tap():
++            self.ctrl.group_tap(cue.id)
++            sync()
++        tap.clicked.connect(do_tap)
++
++        def sync():
++            if not bpm.hasFocus() and abs(bpm.value() - float(cue.group_bpm or 120)) > 0.05:
++                bpm.blockSignals(True)
++                bpm.setValue(float(cue.group_bpm or 120))
++                bpm.blockSignals(False)
++            refresh_iv()
++        t = QTimer(box)                      # battute da tastiera, MIDI o OSC: il valore si aggiorna da solo
++        t.timeout.connect(sync)
++        t.start(250)
++        refresh_iv()
++        # ingressi del tap
++        kr = QHBoxLayout()
++        ktxt = QKeySequence.fromString(cue.group_tap_key, QKeySequence.PortableText).toString(
++            QKeySequence.NativeText) if cue.group_tap_key else "— nessuno —"
++        kr.addWidget(QLabel(ktxt))
++        kb = QPushButton("Impara…")
++        kb.setToolTip("Il tasto da premere a tempo (anche un pedale o una pulsantiera USB che si presenta "
++                      "come tastiera)")
++        kb.clicked.connect(lambda: self.hotkey_fn and self.hotkey_fn(cue, "group_tap_key"))
++        kr.addWidget(kb)
++        kx = QPushButton("✕")
++        kx.setFixedWidth(28)
++        kx.setEnabled(bool(cue.group_tap_key))
++        kx.clicked.connect(lambda: self.set_hotkey_fn and self.set_hotkey_fn(cue, "", "group_tap_key"))
++        kr.addWidget(kx)
++        kr.addStretch(1)
++        f.addRow("Tasto TAP", kr)
++        mr = QHBoxLayout()
++        ml = self._line("group_tap_midi", "es. note 1 36  /  cc 1 64  (pedale, pad, controller)")
++        mr.addWidget(ml)
++        mb = QPushButton("Impara")
++
++        def learned(spec):
++            cue.group_tap_midi = spec
++            ml.setText(spec)
++            self._emit()
++        mb.clicked.connect(lambda: self.learnMidi.emit(learned))
++        mr.addWidget(mb)
++        f.addRow("MIDI TAP", mr)
++        f.addRow("OSC TAP", self._line("group_tap_osc", f"es. /tap  (sempre valido: /cue/{cue.number or '<numero>'}/tap)"))
++        note = {
++            "sequence": "A ogni battito il gruppo avanza come con un GO; dopo l'ultima cue il tempo si ferma. "
++                        "Una cue con pre-wait parte in ritardo rispetto al battito; quelle «con la precedente» "
++                        "partono insieme alla loro; un GO dato a mano avanza in più.",
++            "loop": "Il battito sostituisce l'«attesa»: una cue più lunga dell'intervallo viene tagliata (con il "
++                    "crossfade, al massimo metà intervallo), una più corta lascia silenzio fino al battito.",
++            "rloop": "Il battito sostituisce l'attesa (o il GO, se l'avanzamento è «col GO»): una cue più lunga "
++                     "dell'intervallo viene tagliata, una più corta lascia silenzio fino al battito. Il GO "
++                     "esce dal gruppo.",
++        }.get(m, "")
++        nl = QLabel(note + " Il tempo si può battere anche mentre il gruppo non suona.")
++        nl.setWordWrap(True)
++        nl.setStyleSheet("color:#999;")
++        f.addRow(nl)
++        return box
++
+     def _tab_groupexit(self):
+         cue = self.cue
+         w = QWidget()
+@@ -171,6 +335,52 @@ class ControlTabsMixin:
+         f.addRow(lab)
+         return w
+ 
++    def _tab_stoppanel(self):
++        cue = self.cue
++        w = QWidget()
++        f = QFormLayout(w)
++        sh = self.show_fn()
++        box = QWidget()
++        v = QVBoxLayout(box)
++        v.setContentsMargins(0, 0, 0, 0)
++        every = QCheckBox("Tutti i PANEL (anche quelli creati in seguito)")
++        every.setChecked("*" in (cue.sp_panels or []))
++        v.addWidget(every)
++        checks = []
++        for lst in sh.panels:
++            cb = QCheckBox(f"{lst.name}" + ("   (GRID)" if getattr(lst, "kind", "") == "grid" else ""))
++            cb.setChecked(lst.id in (cue.sp_panels or []))
++            checks.append((cb, lst.id))
++            v.addWidget(cb)
++        if not sh.panels:
++            nl = QLabel("Non ci sono ancora PANEL: «Tutti» fermerà quelli che creerai.")
++            nl.setStyleSheet("color:#999;")
++            v.addWidget(nl)
++
++        def refresh():
++            for cb, _ in checks:
++                cb.setEnabled(not every.isChecked())
++
++        def save(*_a):
++            if every.isChecked():
++                cue.sp_panels = ["*"]
++            else:
++                cue.sp_panels = [pid for cb, pid in checks if cb.isChecked()]
++            refresh()
++            self._emit()
++        every.toggled.connect(save)
++        for cb, _ in checks:
++            cb.toggled.connect(save)
++        refresh()
++        f.addRow("PANEL da fermare", box)
++        f.addRow("Fade", self._dspin("stop_fade", 0, 600, 0.1, 2, special="nessuno (stop immediato)"))
++        lab = QLabel("Ferma le cue in esecuzione (e i pre-wait) dei PANEL scelti, sfumandole nel tempo indicato. "
++                     "La MAIN e gli altri PANEL continuano. Con «Tutti» vale anche per i PANEL aggiunti dopo.")
++        lab.setWordWrap(True)
++        lab.setStyleSheet("color:#999;")
++        f.addRow(lab)
++        return w
++
+     def _tab_osc(self):
+         from ..osc_profiles import command, param_values, profiles, render
+         cue = self.cue
+diff --git a/cuestage/inspector/media.py b/cuestage/inspector/media.py
+index 4f4b7eb..f66a27b 100644
+--- a/cuestage/inspector/media.py
++++ b/cuestage/inspector/media.py
+@@ -331,7 +331,13 @@ class MediaTabsMixin:
+         top.addWidget(self._dspin("fade_out", 0, 3600, 0.1, 2))
+         top.addStretch(1)
+         row = QHBoxLayout()
+-        row.addWidget(self._check("loop", "Loop"))
++        lc = self._check("loop", "Loop")
++        grp = self.show_fn().by_id(cue.group) if cue.group else None
++        if grp is not None and grp.type == "group" and grp.group_mode in ("playlist", "rplaylist"):
++            lc.setEnabled(False)          # nella playlist ogni cue suona una volta
++            lc.setToolTip("Questa cue è in una Playlist: suona una volta sola. Per ripetere usa il loop del gruppo.")
++            lc.setText("Loop (ignorato nella Playlist)")
++        row.addWidget(lc)
+         row.addWidget(QLabel("da"))
+         row.addWidget(self._dspin("loop_start", 0, 36000, 0.1, 3, special="IN"))
+         row.addWidget(QLabel("a"))
+diff --git a/cuestage/main_window.py b/cuestage/main_window.py
+index 2e65a99..81690ac 100644
+--- a/cuestage/main_window.py
++++ b/cuestage/main_window.py
+@@ -6,7 +6,7 @@ from PySide6.QtCore import QSettings, Qt, QTimer
+ from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QKeySequence, QPainter, QShortcut
+ from PySide6.QtWidgets import (
+     QAbstractItemView, QHBoxLayout, QHeaderView, QLabel,
+-    QMainWindow, QMessageBox, QPushButton, QScrollArea, QSlider, QSplitter, QTableView,
++    QMainWindow, QMessageBox, QPushButton, QScrollArea, QSlider, QSplitter, QStackedWidget, QTableView,
+     QVBoxLayout, QWidget,
+ )
+ 
+@@ -24,6 +24,7 @@ from .video_output import Compositor, OutputPreview
+ from .window.cluster import ClusterMixin
+ from .window.editing import EditingMixin
+ from .window.files import FilesMixin
++from .window.grid import GridMixin
+ from .window.groups import GroupsMixin
+ from .window.hardware import HardwareMixin
+ from .window.lists import ListsMixin
+@@ -83,7 +84,8 @@ class MasterSlider(QSlider):
+         self.setValue(0)
+ 
+ 
+-class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, GroupsMixin, ListsMixin, RemoteMixin, WebMixin, VideoMixin, FilesMixin, QMainWindow):
++class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, GroupsMixin, GridMixin, ListsMixin,
++                 RemoteMixin, WebMixin, VideoMixin, FilesMixin, QMainWindow):
+     def __init__(self, path=None):
+         super().__init__()
+         self.show_data = Show()
+@@ -342,6 +344,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
+         self.list_tabs.renameRequested.connect(self.rename_panel)
+         self.list_tabs.deleteRequested.connect(self.delete_panel)
+         self.list_tabs.moveRequested.connect(self.move_panel)
++        self.list_tabs.addGridRequested.connect(lambda: self.add_panel("grid"))
++        self.list_tabs.kindRequested.connect(self.set_panel_kind)
+         lv.addWidget(self.list_tabs)
+         # GO locale del PANEL visualizzato (solo con «GO su: MAIN»)
+         self.local_go = QWidget()
+@@ -372,7 +376,13 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
+         lg.addWidget(self.local_standby, 1)
+         self.local_go.setVisible(False)
+         lv.addWidget(self.local_go)
+-        lv.addWidget(self.table, 1)
++        # la lista (tabella) oppure, per un PANEL GRID, le caselle; la tabella resta la «selezione» comune
++        from .ui_grid import GridPanel
++        self.grid = GridPanel(self)
++        self.view_stack = QStackedWidget()
++        self.view_stack.addWidget(self.table)
++        self.view_stack.addWidget(self.grid)
++        lv.addWidget(self.view_stack, 1)
+         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+         self.table.customContextMenuRequested.connect(self._table_menu)
+         top = QSplitter(Qt.Horizontal)
+@@ -390,6 +400,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
+         self.inspector.stopRequested.connect(lambda cid: self.ctrl.stop_cue(cid, 0.1))
+         self.inspector.learnMidi.connect(self.learn_midi)
+         self.inspector.learnMidiControl.connect(lambda cb: self.learn_midi(cb, None, "control"))
++        self.inspector.hotkey_fn = self.learn_hotkey
++        self.inspector.set_hotkey_fn = self.set_hotkey
++        self.inspector.color_fn = self.grid_set_color
+         self.inspector.oscSend.connect(self._send_osc_now)
+ 
+         vsplit = QSplitter(Qt.Vertical)
+@@ -644,6 +657,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
+ 
+     def _ui_tick(self):
+         self._update_edit_overlay()
++        self._apply_view_kind()
++        self._grid_tick()
+         px = self._output_pixels()
+         if px != self.comp.out_size:
+             self.comp.out_size = px
+diff --git a/cuestage/model.py b/cuestage/model.py
+index 50c579d..2dac6d3 100644
+--- a/cuestage/model.py
++++ b/cuestage/model.py
+@@ -6,17 +6,18 @@ import uuid
+ 
+ from .system import local_path, portable_rel
+ 
+-CUE_TYPES = ["audio", "video", "image", "text", "group", "groupexit", "fade", "preset", "control", "osc",
+-             "midiout", "projector", "mixer", "wait", "memo"]
++CUE_TYPES = ["audio", "video", "image", "text", "group", "groupexit", "fade", "preset", "control", "stoppanel",
++             "osc", "midiout", "projector", "mixer", "wait", "memo"]
+ TYPE_LABELS = {
+     "audio": "Audio", "video": "Video", "image": "Immagine", "fade": "Fade",
+     "preset": "Cambia preset", "control": "Comando", "osc": "OSC", "projector": "Proiettore", "mixer": "Mixer",
+     "group": "Gruppo", "groupexit": "Esci dal gruppo", "text": "Testo", "midiout": "MIDI out",
+-    "wait": "Attesa", "memo": "Memo",
++    "wait": "Attesa", "memo": "Memo", "stoppanel": "Stop panel",
+ }
+ TYPE_ICONS = {
+     "audio": "♪", "video": "▶", "image": "▣", "fade": "◢", "preset": "⇢", "control": "⌘", "projector": "⌖",
+     "osc": "⇄", "wait": "⧗", "memo": "✎", "mixer": "≣", "group": "◫", "groupexit": "⇥", "text": "T", "midiout": "♫",
++    "stoppanel": "⊠",
+ }
+ 
+ # campi salvati nei preset (per tipo di preset)
+@@ -106,6 +107,8 @@ class Cue:
+         "preset_audio": "", "preset_visual": "",
+         # comando
+         "action": "start", "stop_fade": 0.0,
++        # stop panel: id dei PANEL da fermare ("*" = tutti, anche quelli creati dopo); fade = stop_fade
++        "sp_panels": [],
+         # proiettore (via rete, driver/plugin)
+         "proj_target": "", "proj_action": "power_on", "proj_value": "", "proj_dir": 1,
+         "proj_steps": 1, "proj_speed": "normal",
+@@ -116,12 +119,21 @@ class Cue:
+         "mix_states": {},
+         # azione «control» (schede audio): chiave del controllo e valore grezzo
+         "mix_ctl": "", "mix_ctl_value": 0,
++        # aspetto e comandi rapidi: colore (casella della griglia e riga della lista, "#rrggbb" o vuoto),
++        # scorciatoia da tastiera (QKeySequence in formato portabile, es. "F5", "Ctrl+1"),
++        # posizione nella griglia del PANEL GRID: [pagina, riga, colonna] (vuota = da assegnare)
++        "color": "", "hotkey": "", "grid_pos": [],
+         # gruppi: «group» = id della cue Gruppo a cui appartiene la cue (vuoto = nessuno)
+         "group": "",
+-        "group_mode": "sequence",   # sequence · random · loop · rloop · all
++        "group_mode": "sequence",   # sequence · random · loop · rloop · all · playlist · rplaylist
+         "group_hold": 10.0,         # loop: secondi di permanenza di ogni cue (0 = la sua durata)
+         "group_xfade": 2.0,         # loop: crossfade tra una cue e la successiva (s)
+         "group_advance": "time",    # rloop: «time» avanzamento a tempo · «go» avanza col GO
++        "group_loop": False,        # playlist / random playlist: ricomincia dopo l'ultima cue
++        # Tap Tempo (sequence, loop, random loop): una cue ogni «div» battiti al tempo «bpm», come un GO;
++        # il tempo si batte con un tasto, una nota/CC MIDI o un messaggio OSC
++        "group_tap": False, "group_tap_div": 1.0, "group_bpm": 120.0,
++        "group_tap_key": "", "group_tap_midi": "", "group_tap_osc": "",
+         "group_exit": "fade",       # uscita da un loop: «fade» sfuma la cue corrente · «finish» la lascia finire
+         "collapsed": False,
+         # cue Testo (sottotitoli / sopratitoli): «sequence» = una frase per GO (frasi separate da una riga
+@@ -256,10 +268,32 @@ MAIN_ID = "main"
+ class CueList:
+     """Una lista di cue: la MAIN oppure un PANEL."""
+ 
+-    def __init__(self, name, cues=None, list_id=None):
++    GRID_DEFAULTS = {"kind": "list", "grid_rows": 4, "grid_cols": 6, "grid_pages": ["Pagina 1"],
++                     "grid_click": "toggle"}
++
++    def __init__(self, name, cues=None, list_id=None, kind="list"):
+         self.id = list_id or uuid.uuid4().hex[:8]
+         self.name = name
+         self.cues = cues if cues is not None else []
++        for k, v in self.GRID_DEFAULTS.items():
++            setattr(self, k, copy.deepcopy(v))
++        self.kind = kind            # «list» = lista classica · «grid» = caselle (con pagine)
++
++    @property
++    def is_grid(self):
++        return self.kind == "grid"
++
++    def grid_data(self):
++        return {k: copy.deepcopy(getattr(self, k)) for k in self.GRID_DEFAULTS}
++
++    def set_grid_data(self, d):
++        for k, v in self.GRID_DEFAULTS.items():
++            val = d.get(k, v)
++            setattr(self, k, copy.deepcopy(val))
++        self.grid_rows = max(1, min(16, int(self.grid_rows or 4)))
++        self.grid_cols = max(1, min(16, int(self.grid_cols or 6)))
++        if not isinstance(self.grid_pages, list) or not self.grid_pages:
++            self.grid_pages = ["Pagina 1"]
+ 
+     @property
+     def is_main(self):
+@@ -324,14 +358,14 @@ class Show:
+         for lst in self.lists:
+             yield from lst.cues
+ 
+-    def add_panel(self, name=None):
++    def add_panel(self, name=None, kind="list"):
+         n = len(self.lists)
+         names = {l.name for l in self.lists}
+         name = name or f"PANEL {n}"
+         while name in names:
+             n += 1
+             name = f"PANEL {n}"
+-        lst = CueList(name)
++        lst = CueList(name, kind=kind)
+         self.lists.append(lst)
+         self.dirty = True
+         return lst
+@@ -405,8 +439,8 @@ class Show:
+             "settings": self.settings,
+             "original_path": self.path,
+             "cues": [c.to_dict(base_dir) for c in self.main.cues],
+-            "panels": [{"id": l.id, "name": l.name, "cues": [c.to_dict(base_dir) for c in l.cues]}
+-                       for l in self.panels],
++            "panels": [dict({"id": l.id, "name": l.name, "cues": [c.to_dict(base_dir) for c in l.cues]},
++                            **l.grid_data()) for l in self.panels],
+         }
+ 
+     def save(self, path, copy_only=False):
+@@ -449,6 +483,7 @@ class Show:
+             if isinstance(p, dict):
+                 lst = CueList(str(p.get("name") or "PANEL"), [Cue.from_dict(d, base) for d in p.get("cues", [])],
+                               p.get("id") if p.get("id") != MAIN_ID else None)
++                lst.set_grid_data(p)
+                 s.lists.append(lst)
+         s._migrate_global_presets(data.get("presets") or {})
+         s.original_path = data.get("original_path")
+diff --git a/cuestage/ui_cuelist.py b/cuestage/ui_cuelist.py
+index 8887b8e..165eb19 100644
+--- a/cuestage/ui_cuelist.py
++++ b/cuestage/ui_cuelist.py
+@@ -101,10 +101,20 @@ class CueTableModel(QAbstractTableModel):
+                     return f"→ {tg.label()}" if tg else (f"→ ? ({cue.target})" if cue.target else "— nessun target —")
+                 if cue.type == "group":
+                     m = cue.group_mode
++                    from .engine import fmt_div, tap_active
++                    if tap_active(cue):
++                        return (f"♩ {float(cue.group_bpm):g} BPM · una cue ogni {fmt_div(cue.group_tap_div)} "
++                                f"battit{'o' if float(cue.group_tap_div) <= 1 else 'i'}"
++                                + (" · casuale" if m == "rloop" else " · col GO a tempo" if m == "sequence" else ""))
+                     if m in ("loop", "rloop"):
+                         hold = f"{float(cue.group_hold):g} s" if float(cue.group_hold or 0) > 0 else "durata della cue"
+                         adv = "avanza col GO · ESC esce" if (m == "rloop" and cue.group_advance == "go") else f"ogni {hold}"
+                         return f"{adv} · crossfade {float(cue.group_xfade):g} s"
++                    if m in ("playlist", "rplaylist"):
++                        xf = float(cue.group_xfade or 0)
++                        how = "in ordine casuale, " if m == "rplaylist" else ""
++                        return (f"{how}una dopo l'altra" + (" · in loop" if cue.group_loop else "")
++                                + (f" · crossfade {xf:g} s" if xf > 0 else ""))
+                     return {"sequence": "prima cue col GO, poi in sequenza", "random": "una cue a caso",
+                             "all": "tutte insieme (con i loro pre-wait)"}.get(m, "")
+                 if cue.type == "text":
+@@ -118,6 +128,14 @@ class CueTableModel(QAbstractTableModel):
+                 if cue.type == "midiout":
+                     lines = [l.strip() for l in (cue.mo_msgs or "").splitlines() if l.strip() and not l.strip().startswith("#")]
+                     return (f"♫ {cue.mo_port or 'predefinita'}: " + " · ".join(lines[:3]) + (" …" if len(lines) > 3 else "")) if lines else "— nessun messaggio —"
++                if cue.type == "stoppanel":
++                    from .engine import stop_panel_targets
++                    fade = float(cue.stop_fade or 0)
++                    tail = f" · fade {fade:g} s" if fade > 0 else ""
++                    if "*" in (cue.sp_panels or []):
++                        return "⊠ tutti i PANEL" + tail
++                    names = [f"«{lst.name}»" for lst in stop_panel_targets(self.show, cue)]
++                    return ("⊠ " + ", ".join(names) + tail) if names else "— nessun PANEL scelto —"
+                 if cue.type == "groupexit":
+                     tg = self.show.resolve_target(cue.target) if cue.target else self.show.by_id(cue.group)
+                     return f"⇥ esce da «{tg.label()}»" if tg else "— nessun gruppo —"
+@@ -215,6 +233,10 @@ class CueTableModel(QAbstractTableModel):
+                 return QColor(70, 60, 25)
+             if idx.row() == self.ctrl.playhead:
+                 return QColor(32, 52, 78)   # cue in standby (prossimo GO)
++            if cue.color:                   # colore scelto dall'utente (anche casella del GRID)
++                c = QColor(cue.color)
++                c.setAlpha(110 if col == C_NUM else 60)
++                return c
+         if role == Qt.TextAlignmentRole and col in (C_DELAY, C_DUR):
+             return int(Qt.AlignRight | Qt.AlignVCenter)
+         if role == Qt.ToolTipRole and col == C_TARGET and cue.file:
+diff --git a/cuestage/ui_grid.py b/cuestage/ui_grid.py
+new file mode 100644
+index 0000000..4975e91
+--- /dev/null
++++ b/cuestage/ui_grid.py
+@@ -0,0 +1,523 @@
++"""Vista GRID di un PANEL: caselle colorate su più pagine, da cliccare (o da tastiera) per avviare le cue."""
++from PySide6.QtCore import QPoint, QRect, QRectF, Qt, Signal
++from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen
++from PySide6.QtWidgets import (
++    QColorDialog, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QInputDialog, QKeySequenceEdit, QLabel,
++    QMenu, QMessageBox, QPushButton, QSpinBox, QTabBar, QVBoxLayout, QWidget,
++)
++
++from . import grid as G
++from .model import CUE_TYPES, TYPE_ICONS, TYPE_LABELS
++
++CLICK_MODES = [("toggle", "Clic: avvia / ferma"), ("restart", "Clic: riavvia dall'inizio"),
++               ("start", "Clic: avvia (se è già attiva non fa nulla)")]
++EMPTY_BG = QColor("#1b1c21")
++DEFAULT_BG = "#2f3440"
++
++
++def fmt_t(s):
++    s = max(0, int(round(s)))
++    return f"{s // 60}:{s % 60:02d}"
++
++
++class GridCanvas(QWidget):
++    """Le caselle della pagina corrente."""
++
++    def __init__(self, panel):
++        super().__init__(panel)
++        self.panel = panel
++        self.setMouseTracking(True)
++        self.setAcceptDrops(True)
++        self.setMinimumHeight(160)
++        self.hover = None
++        self.drag_from = None          # (cue, punto) durante il trascinamento in modifica
++        self.drag_over = None
++
++    # ---- geometria
++    def cell_rect(self, r, c):
++        lst = self.panel.lst
++        W, H = self.width(), self.height()
++        cw, ch = W / lst.grid_cols, H / lst.grid_rows
++        return QRectF(c * cw + 3, r * ch + 3, cw - 6, ch - 6)
++
++    def cell_at(self, pos):
++        lst = self.panel.lst
++        if lst is None or self.width() <= 0 or self.height() <= 0:
++            return None
++        c = int(pos.x() / (self.width() / lst.grid_cols))
++        r = int(pos.y() / (self.height() / lst.grid_rows))
++        if 0 <= r < lst.grid_rows and 0 <= c < lst.grid_cols:
++            return (self.panel.page, r, c)
++        return None
++
++    # ---- disegno
++    def paintEvent(self, _e):
++        lst = self.panel.lst
++        if lst is None:
++            return
++        p = QPainter(self)
++        p.setRenderHint(QPainter.Antialiasing)
++        p.fillRect(self.rect(), QColor("#141519"))
++        mw = self.panel.mw
++        ctrl = mw.ctrl
++        occ = G.occupied(lst)
++        sel = mw._current_cue()
++        ph = ctrl.playhead_of(lst)
++        nxt = lst.cues[ph] if 0 <= ph < len(lst.cues) else None
++        if nxt is not None and nxt.group:
++            nxt = mw.show_data.by_id(nxt.group) or nxt
++        pending = {x[1].id for x in ctrl.pending}
++        local_go = mw.show_data.settings.get("go_target", "main") == "main"
++        f_small = QFont(self.font())
++        f_small.setPointSizeF(max(7.0, self.font().pointSizeF() - 1))
++        f_name = QFont(self.font())
++        f_name.setBold(True)
++        cell_h = self.height() / lst.grid_rows
++        f_name.setPointSizeF(max(8.0, min(15.0, cell_h / 6.5)))
++        for r in range(lst.grid_rows):
++            for c in range(lst.grid_cols):
++                rect = self.cell_rect(r, c)
++                cue = occ.get((self.panel.page, r, c))
++                if cue is None:
++                    p.setPen(QPen(QColor("#2a2c33"), 1))
++                    p.setBrush(EMPTY_BG)
++                    p.drawRoundedRect(rect, 6, 6)
++                    if self.drag_over == (self.panel.page, r, c) or (
++                            self.panel.editing and self.hover == (self.panel.page, r, c)):
++                        p.setPen(QColor("#6a6f7c"))
++                        p.drawText(rect, Qt.AlignCenter, "+" if self.drag_from is None else "↓")
++                    continue
++                self._paint_cue(p, rect, cue, ctrl, sel, nxt, pending, local_go, f_small, f_name,
++                                (self.panel.page, r, c))
++        p.end()
++
++    def _paint_cue(self, p, rect, cue, ctrl, sel, nxt, pending, local_go, f_small, f_name, cell):
++        bg = QColor(cue.color or DEFAULT_BG)
++        fg = QColor(G.text_color(cue.color or DEFAULT_BG))
++        inst = ctrl.instances.get(cue.id)
++        active = inst is not None and not inst.done
++        waiting = cue.id in pending
++        p.setPen(Qt.NoPen)
++        p.setBrush(bg if not active else bg.lighter(125))
++        p.drawRoundedRect(rect, 6, 6)
++        remain = None
++        if active:
++            tot = None
++            try:
++                tot = inst.total()
++            except Exception:
++                pass
++            t = inst.cue_time() if hasattr(inst, "cue_time") else inst.elapsed
++            if tot:
++                frac = max(0.0, min(1.0, t / tot))
++                remain = tot - t
++                band = QRectF(rect.x(), rect.bottom() - 7, rect.width() * frac, 7)
++                p.setBrush(QColor(61, 220, 132, 220))
++                p.drawRoundedRect(band, 3, 3)
++            else:
++                remain = None
++        # bordo: attiva (verde), in pre-wait (ambra), selezionata (bianco), prossima del GO locale (giallo)
++        if active or waiting:
++            p.setPen(QPen(QColor("#3ddc84") if active else QColor("#e0a030"), 3))
++            p.setBrush(Qt.NoBrush)
++            p.drawRoundedRect(rect.adjusted(1.5, 1.5, -1.5, -1.5), 6, 6)
++        if sel is not None and sel.id == cue.id:
++            p.setPen(QPen(QColor("#ffffff"), 2))
++            p.setBrush(Qt.NoBrush)
++            p.drawRoundedRect(rect.adjusted(4, 4, -4, -4), 4, 4)
++        if local_go and nxt is not None and nxt.id == cue.id:
++            pen = QPen(QColor("#ffd23f"), 2, Qt.DashLine)
++            p.setPen(pen)
++            p.setBrush(Qt.NoBrush)
++            p.drawRoundedRect(rect.adjusted(3, 3, -3, -3), 5, 5)
++        if self.drag_over == cell and self.drag_from is not None:
++            p.setPen(QPen(QColor("#8ab4ff"), 3))
++            p.drawRoundedRect(rect, 6, 6)
++        inner = rect.adjusted(7, 5, -7, -9).toRect()
++        p.setPen(fg)
++        p.setFont(f_small)
++        p.drawText(inner, Qt.AlignLeft | Qt.AlignTop, f"{TYPE_ICONS.get(cue.type, '')} {cue.number}".strip())
++        if cue.hotkey:
++            hk = QKeySequence.fromString(cue.hotkey, QKeySequence.PortableText).toString(QKeySequence.NativeText)
++            fm = p.fontMetrics()
++            w = fm.horizontalAdvance(hk) + 10
++            badge = QRect(inner.right() - w, inner.top(), w, fm.height() + 2)
++            p.setPen(Qt.NoPen)
++            p.setBrush(QColor(0, 0, 0, 90))
++            p.drawRoundedRect(badge, 4, 4)
++            p.setPen(fg)
++            p.drawText(badge, Qt.AlignCenter, hk)
++        p.setFont(f_name)
++        name = cue.name or TYPE_LABELS.get(cue.type, cue.type)
++        if cue.type == "group":
++            from .engine import fmt_div, tap_active
++            n = sum(1 for x in self.panel.lst.cues if x.group == cue.id)
++            name = f"{name}\n({n} cue)"
++            if tap_active(cue):
++                name += f"\n♩ {float(cue.group_bpm):g} · {fmt_div(cue.group_tap_div)}"
++        mid = inner.adjusted(0, p.fontMetrics().height() // 2, 0, -p.fontMetrics().height() // 2)
++        p.drawText(mid, Qt.AlignCenter | Qt.TextWordWrap, name)
++        p.setFont(f_small)
++        if remain is not None:
++            p.drawText(inner, Qt.AlignRight | Qt.AlignBottom, f"-{fmt_t(remain)}")
++        elif waiting:
++            p.drawText(inner, Qt.AlignRight | Qt.AlignBottom, "pre-wait…")
++        elif self.panel.mw.show_data.settings.get("go_target", "main") == "main" and \
++                nxt is not None and nxt.id == cue.id:
++            p.drawText(inner, Qt.AlignRight | Qt.AlignBottom, "▶ GO")
++
++    # ---- mouse
++    def mousePressEvent(self, e):
++        cell = self.cell_at(e.position().toPoint())
++        if cell is None:
++            return
++        cue = G.cell_cue(self.panel.lst, *cell)
++        if e.button() == Qt.RightButton:
++            self.panel.cell_menu(cell, cue, e.globalPosition().toPoint())
++            return
++        if e.button() != Qt.LeftButton:
++            return
++        if self.panel.editing:
++            if cue is not None:
++                self.panel.mw.grid_select(cue, move_playhead=True)
++                self.drag_from = (cue, e.position().toPoint())
++            self.update()
++            return
++        if cue is not None:
++            self.panel.mw.grid_activate(cue)
++            self.panel.mw.grid_select(cue, move_playhead=False)
++            self.update()
++
++    def mouseMoveEvent(self, e):
++        cell = self.cell_at(e.position().toPoint())
++        if cell != self.hover:
++            self.hover = cell
++            self.update()
++        if self.drag_from is not None and (e.position().toPoint() - self.drag_from[1]).manhattanLength() > 8:
++            self.drag_over = cell
++            self.setCursor(Qt.ClosedHandCursor)
++            self.update()
++
++    def mouseReleaseEvent(self, e):
++        if self.drag_from is not None:
++            cue = self.drag_from[0]
++            target = self.drag_over
++            self.drag_from = None
++            self.drag_over = None
++            self.unsetCursor()
++            if target is not None and list(target) != list(cue.grid_pos or []):
++                self.panel.mw.grid_move(cue, target)
++            self.update()
++
++    def mouseDoubleClickEvent(self, e):
++        cell = self.cell_at(e.position().toPoint())
++        if cell is None:
++            return
++        cue = G.cell_cue(self.panel.lst, *cell)
++        if cue is None:
++            self.panel.new_cue_menu(cell, e.globalPosition().toPoint())
++        elif self.panel.editing:
++            self.panel.mw.grid_select(cue, move_playhead=True)
++            self.panel.mw.inspector.setFocus()
++
++    def leaveEvent(self, _e):
++        self.hover = None
++        self.update()
++
++    # ---- file trascinati dal file manager
++    def dragEnterEvent(self, e):
++        if e.mimeData().hasUrls():
++            e.acceptProposedAction()
++
++    def dragMoveEvent(self, e):
++        cell = self.cell_at(e.position().toPoint())
++        if cell != self.drag_over:
++            self.drag_over = cell
++            self.update()
++        e.acceptProposedAction()
++
++    def dragLeaveEvent(self, _e):
++        self.drag_over = None
++        self.update()
++
++    def dropEvent(self, e):
++        cell = self.cell_at(e.position().toPoint())
++        self.drag_over = None
++        paths = [u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()]
++        if paths and cell is not None:
++            self.panel.mw.grid_add_files(paths, list(cell))
++        e.acceptProposedAction()
++        self.update()
++
++
++class GridPanel(QWidget):
++    """Barra (pagine, modifica, dimensioni) + caselle."""
++    changed = Signal()
++
++    def __init__(self, mw):
++        super().__init__()
++        self.mw = mw
++        self.lst = None
++        self.page = 0
++        self.editing = False
++        self._pages = {}          # pagina mostrata per ogni PANEL
++        v = QVBoxLayout(self)
++        v.setContentsMargins(0, 0, 0, 0)
++        v.setSpacing(4)
++        bar = QHBoxLayout()
++        self.tabs = QTabBar()
++        self.tabs.setExpanding(False)
++        self.tabs.setDrawBase(False)
++        self.tabs.setContextMenuPolicy(Qt.CustomContextMenu)
++        self.tabs.customContextMenuRequested.connect(self._page_menu)
++        self.tabs.currentChanged.connect(self._page_changed)
++        self.tabs.tabBarDoubleClicked.connect(self.rename_page)
++        bar.addWidget(self.tabs, 1)
++        self.add_page_btn = QPushButton("+ Pagina")
++        self.add_page_btn.setToolTip("Aggiungi una pagina alla griglia")
++        self.add_page_btn.clicked.connect(self.add_page)
++        bar.addWidget(self.add_page_btn)
++        self.size_box = QWidget()
++        sb = QHBoxLayout(self.size_box)
++        sb.setContentsMargins(0, 0, 0, 0)
++        sb.addWidget(QLabel("Righe"))
++        self.rows = QSpinBox()
++        self.rows.setRange(1, 16)
++        sb.addWidget(self.rows)
++        sb.addWidget(QLabel("Colonne"))
++        self.cols = QSpinBox()
++        self.cols.setRange(1, 16)
++        sb.addWidget(self.cols)
++        self.click = QComboBox()
++        for k, t in CLICK_MODES:
++            self.click.addItem(t, k)
++        sb.addWidget(self.click)
++        self.rows.valueChanged.connect(self._size_changed)
++        self.cols.valueChanged.connect(self._size_changed)
++        self.click.currentIndexChanged.connect(self._click_changed)
++        bar.addWidget(self.size_box)
++        self.edit_btn = QPushButton("✎ Modifica")
++        self.edit_btn.setCheckable(True)
++        self.edit_btn.setToolTip("Modifica: clic seleziona (ispettore), trascina per spostare, doppio clic su una "
++                                 "casella vuota per una nuova cue. Senza modifica: clic avvia la cue.")
++        self.edit_btn.toggled.connect(self.set_editing)
++        bar.addWidget(self.edit_btn)
++        v.addLayout(bar)
++        self.canvas = GridCanvas(self)
++        v.addWidget(self.canvas, 1)
++        self.hint = QLabel()
++        self.hint.setStyleSheet("color:#888;font-size:11px;")
++        v.addWidget(self.hint)
++        self.set_editing(False)
++
++    # ---- dati
++    def set_list(self, lst):
++        if self.lst is not None:
++            self._pages[self.lst.id] = self.page
++        self.lst = lst
++        self.page = min(self._pages.get(lst.id, 0), len(lst.grid_pages) - 1)
++        self.sync()
++
++    def sync(self):
++        lst = self.lst
++        if lst is None:
++            return
++        self.page = max(0, min(self.page, len(lst.grid_pages) - 1))
++        self.tabs.blockSignals(True)
++        while self.tabs.count():
++            self.tabs.removeTab(0)
++        for name in lst.grid_pages:
++            self.tabs.addTab(name)
++        self.tabs.setCurrentIndex(self.page)
++        self.tabs.blockSignals(False)
++        for w, val in ((self.rows, lst.grid_rows), (self.cols, lst.grid_cols)):
++            w.blockSignals(True)
++            w.setValue(val)
++            w.blockSignals(False)
++        self.click.blockSignals(True)
++        self.click.setCurrentIndex(max(0, self.click.findData(lst.grid_click)))
++        self.click.blockSignals(False)
++        self._update_hint()
++        self.canvas.update()
++
++    def _update_hint(self):
++        if self.editing:
++            self.hint.setText("Modifica: clic = seleziona · trascina = sposta (o scambia) · doppio clic su una casella "
++                              "vuota = nuova cue · tasto destro = colore, scorciatoia, elimina · trascina qui dei file "
++                              "audio/video per creare le cue.")
++        else:
++            mode = dict(CLICK_MODES).get(self.lst.grid_click if self.lst else "toggle", "")
++            self.hint.setText(f"{mode} · tasto destro: colore, scorciatoia da tastiera, nuova cue · "
++                              "il GO del PANEL avanza casella dopo casella.")
++
++    def set_editing(self, on):
++        self.editing = bool(on)
++        self.size_box.setVisible(self.editing)
++        self.add_page_btn.setVisible(self.editing)
++        if self.lst is not None:
++            self._update_hint()
++        self.canvas.update()
++
++    def _page_changed(self, i):
++        if i >= 0:
++            self.page = i
++            self.canvas.update()
++
++    def _size_changed(self, *_a):
++        if self.lst is None:
++            return
++        self.mw.grid_resize(self.lst, self.rows.value(), self.cols.value())
++
++    def _click_changed(self, j):
++        if self.lst is not None:
++            self.lst.grid_click = self.click.itemData(j)
++            self.mw.show_data.dirty = True
++            self._update_hint()
++
++    # ---- pagine
++    def add_page(self):
++        lst = self.lst
++        lst.grid_pages.append(f"Pagina {len(lst.grid_pages) + 1}")
++        self.page = len(lst.grid_pages) - 1
++        self.mw.show_data.dirty = True
++        self.sync()
++
++    def rename_page(self, i):
++        if i < 0:
++            return
++        name, ok = QInputDialog.getText(self, "Rinomina pagina", "Nome della pagina:", text=self.lst.grid_pages[i])
++        if ok and name.strip():
++            self.lst.grid_pages[i] = name.strip()
++            self.mw.show_data.dirty = True
++            self.sync()
++
++    def delete_page(self, i):
++        if G.page_cues(self.lst, i):
++            QMessageBox.information(self, "Elimina pagina", "La pagina contiene delle cue: spostale su un'altra "
++                                    "pagina (trascinandole in modifica) o eliminale prima.")
++            return
++        if G.delete_page(self.lst, i):
++            self.mw.show_data.dirty = True
++            self.sync()
++
++    def _page_menu(self, pos):
++        i = self.tabs.tabAt(pos)
++        m = QMenu(self)
++        m.addAction("Nuova pagina", self.add_page)
++        if i >= 0:
++            m.addAction("Rinomina…", lambda: self.rename_page(i))
++            a = m.addAction("Elimina pagina", lambda: self.delete_page(i))
++            a.setEnabled(len(self.lst.grid_pages) > 1)
++        m.exec(self.tabs.mapToGlobal(pos))
++
++    # ---- menu delle caselle
++    def new_cue_menu(self, cell, gpos):
++        m = QMenu(self)
++        self._fill_new(m, cell)
++        m.exec(gpos)
++
++    def _fill_new(self, m, cell):
++        for t in CUE_TYPES:
++            if t == "groupexit":
++                continue
++            m.addAction(f"{TYPE_ICONS.get(t, '')}  {TYPE_LABELS[t]}",
++                        lambda _=False, t=t: self.mw.grid_add_cue(t, list(cell)))
++
++    def cell_menu(self, cell, cue, gpos):
++        mw = self.mw
++        m = QMenu(self)
++        if cue is None:
++            self._fill_new(m.addMenu("Nuova cue qui"), cell)
++            m.exec(gpos)
++            return
++        m.addAction(f"{TYPE_ICONS.get(cue.type, '')}  {cue.label()}").setEnabled(False)
++        m.addSeparator()
++        m.addAction("▶ Avvia", lambda: mw.ctrl.trigger(cue, cascade=False))
++        m.addAction("■ Ferma", lambda: mw.ctrl.stop_cue(cue.id, float(mw.show_data.settings.get("stop_fade", 0.3))))
++        m.addAction("Imposta come prossima del GO", lambda: mw.grid_select(cue, move_playhead=True))
++        m.addSeparator()
++        cm = m.addMenu("Colore")
++        for col in G.PALETTE:
++            a = cm.addAction("■  " + col)
++            a.triggered.connect(lambda _=False, col=col: mw.grid_set_color(cue, col))
++        cm.addSeparator()
++        cm.addAction("Altro colore…", lambda: self.pick_color(cue))
++        cm.addAction("Nessun colore", lambda: mw.grid_set_color(cue, ""))
++        m.addAction("Impara scorciatoia da tastiera…", lambda: mw.learn_hotkey(cue))
++        a = m.addAction("Togli scorciatoia", lambda: mw.set_hotkey(cue, ""))
++        a.setEnabled(bool(cue.hotkey))
++        m.addSeparator()
++        m.addAction("Modifica nell'ispettore", lambda: mw.grid_select(cue, move_playhead=False))
++        m.addAction("Elimina cue…", lambda: mw.grid_delete(cue))
++        m.exec(gpos)
++
++    def pick_color(self, cue):
++        col = QColorDialog.getColor(QColor(cue.color or DEFAULT_BG), self, "Colore della casella")
++        if col.isValid():
++            self.mw.grid_set_color(cue, col.name())
++
++
++class HotkeyDialog(QDialog):
++    """«Impara» una scorciatoia: si preme la combinazione di tasti e la si conferma."""
++
++    def __init__(self, cue, reserved, others, parent=None, current=None, purpose=""):
++        super().__init__(parent)
++        self.setWindowTitle("Scorciatoia da tastiera")
++        current = cue.hotkey if current is None else current
++        self.reserved = reserved       # {testo: descrizione} già usate dal programma
++        self.others = others           # {testo: cue} già usate da altre cue
++        self.result_key = None
++        v = QVBoxLayout(self)
++        v.addWidget(QLabel(f"Premi la combinazione di tasti per {purpose}«{cue.label()}»\n"
++                           "(es. F5, 1, Q, Ctrl+1). La scorciatoia funziona con la finestra di CueStage attiva,\n"
++                           "ma non mentre stai scrivendo in un campo di testo."))
++        self.edit = QKeySequenceEdit()
++        if hasattr(self.edit, "setMaximumSequenceLength"):
++            self.edit.setMaximumSequenceLength(1)
++        if current:
++            self.edit.setKeySequence(QKeySequence.fromString(current, QKeySequence.PortableText))
++        self.edit.keySequenceChanged.connect(self._check)
++        v.addWidget(self.edit)
++        self.msg = QLabel()
++        self.msg.setWordWrap(True)
++        v.addWidget(self.msg)
++        self.bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
++        self.bb.accepted.connect(self.accept)
++        self.bb.rejected.connect(self.reject)
++        v.addWidget(self.bb)
++        self.edit.setFocus()
++        self._check()
++
++    def key(self):
++        ks = self.edit.keySequence()
++        if ks.isEmpty():
++            return ""
++        return QKeySequence(ks[0]).toString(QKeySequence.PortableText)
++
++    def _check(self, *_a):
++        k = self.key()
++        ok = self.bb.button(QDialogButtonBox.Ok)
++        self.steal = None
++        if not k:
++            self.msg.setText("")
++            ok.setEnabled(False)
++            return
++        if k in self.reserved:
++            self.msg.setText(f"«{k}» è già usata da CueStage ({self.reserved[k]}): scegline un'altra.")
++            self.msg.setStyleSheet("color:#e66;")
++            ok.setEnabled(False)
++            return
++        if k in self.others:
++            self.steal = self.others[k]
++            sc, sf = self.steal
++            what = "il Tap Tempo di " if sf == "group_tap_key" else ""
++            self.msg.setText(f"«{k}» è già assegnata a {what}«{sc.label()}»: confermando passa qui.")
++            self.msg.setStyleSheet("color:#e0b040;")
++        else:
++            self.msg.setText(f"«{k}» è libera.")
++            self.msg.setStyleSheet("color:#6c6;")
++        ok.setEnabled(True)
++
++
++def point(x, y):
++    return QPoint(int(x), int(y))
+diff --git a/cuestage/ui_inspector.py b/cuestage/ui_inspector.py
+index 091f08d..1fcf3b5 100644
+--- a/cuestage/ui_inspector.py
++++ b/cuestage/ui_inspector.py
+@@ -41,6 +41,9 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
+         self.crop_panel = None
+         self.size_fn = None       # cue -> (w, h) del sorgente
+         self.out_size_fn = None   # -> (w, h) dell'uscita
++        self.hotkey_fn = None     # cue -> «impara» la scorciatoia (finestra principale)
++        self.set_hotkey_fn = None  # (cue, tasto) -> imposta/toglie la scorciatoia
++        self.color_fn = None      # (cue, "#rrggbb" o "") -> colore della cue
+         lay = QVBoxLayout(self)
+         lay.setContentsMargins(0, 0, 0, 0)
+         self.header = QLabel("Nessuna cue selezionata")
+@@ -259,6 +262,8 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
+             add(self._tab_group(), "Gruppo")
+         if t == "groupexit":
+             add(self._tab_groupexit(), "Esci dal gruppo")
++        if t == "stoppanel":
++            add(self._tab_stoppanel(), "Stop panel")
+         if t == "wait":
+             add(self._tab_wait(), "Attesa")
+         if 0 <= cur_tab < self.tabs.count():
+@@ -266,6 +271,61 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
+         elif self.tabs.count() > 1:
+             self.tabs.setCurrentIndex(1)
+ 
++    def _hotkey_row(self, cue):
++        from PySide6.QtGui import QKeySequence
++        w = QWidget()
++        h = QHBoxLayout(w)
++        h.setContentsMargins(0, 0, 0, 0)
++        txt = QKeySequence.fromString(cue.hotkey, QKeySequence.PortableText).toString(QKeySequence.NativeText) \
++            if cue.hotkey else "— nessuna —"
++        lab = QLabel(txt)
++        lab.setMinimumWidth(90)
++        h.addWidget(lab)
++        b = QPushButton("Impara…")
++        b.setToolTip("Premi un tasto (o una combinazione) che avvierà questa cue")
++        b.clicked.connect(lambda: self.hotkey_fn and self.hotkey_fn(cue))
++        h.addWidget(b)
++        x = QPushButton("✕")
++        x.setFixedWidth(28)
++        x.setToolTip("Togli la scorciatoia")
++        x.setEnabled(bool(cue.hotkey))
++        x.clicked.connect(lambda: self.set_hotkey_fn and self.set_hotkey_fn(cue, ""))
++        h.addWidget(x)
++        h.addStretch(1)
++        return w
++
++    def _color_row(self, cue):
++        from PySide6.QtWidgets import QColorDialog
++        from .grid import PALETTE
++        w = QWidget()
++        h = QHBoxLayout(w)
++        h.setContentsMargins(0, 0, 0, 0)
++        h.setSpacing(3)
++        for col in PALETTE:
++            b = QPushButton()
++            b.setFixedSize(20, 20)
++            b.setToolTip(col)
++            border = "2px solid white" if cue.color == col else "1px solid #555"
++            b.setStyleSheet(f"background:{col};border:{border};border-radius:3px;")
++            b.clicked.connect(lambda _=False, col=col: self.color_fn and self.color_fn(cue, col))
++            h.addWidget(b)
++
++        def other():
++            from PySide6.QtGui import QColor
++            c = QColorDialog.getColor(QColor(cue.color or "#2f3440"), self, "Colore della cue")
++            if c.isValid() and self.color_fn:
++                self.color_fn(cue, c.name())
++        o = QPushButton("Altro…")
++        o.clicked.connect(other)
++        h.addWidget(o)
++        x = QPushButton("✕")
++        x.setFixedWidth(28)
++        x.setToolTip("Nessun colore")
++        x.clicked.connect(lambda: self.color_fn and self.color_fn(cue, ""))
++        h.addWidget(x)
++        h.addStretch(1)
++        return w
++
+     @staticmethod
+     def _scrolled(widget):
+         sa = QScrollArea()
+@@ -347,6 +407,8 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
+             row.addWidget(clr)
+             f.addRow(label, row)
+         f.addRow("Trigger OSC", self._line("osc_trigger", "es. /scena/1  (oltre a /cue/<numero>/start)"))
++        f.addRow("Scorciatoia", self._hotkey_row(cue))
++        f.addRow("Colore", self._color_row(cue))
+         notes = QPlainTextEdit(cue.notes)
+         notes.setMaximumHeight(70)
+         notes.textChanged.connect(lambda: (setattr(cue, "notes", notes.toPlainText()), self._emit()))
+diff --git a/cuestage/ui_lists.py b/cuestage/ui_lists.py
+index 6fc6770..ca54e69 100644
+--- a/cuestage/ui_lists.py
++++ b/cuestage/ui_lists.py
+@@ -31,6 +31,8 @@ class ListTabs(QWidget):
+     renameRequested = Signal(int)
+     deleteRequested = Signal(int)
+     moveRequested = Signal(int, int)        # indice, direzione
++    addGridRequested = Signal()
++    kindRequested = Signal(int, str)        # indice, «list» / «grid»
+ 
+     def __init__(self, parent=None):
+         super().__init__(parent)
+@@ -54,11 +56,19 @@ class ListTabs(QWidget):
+         self.add_btn.setFocusPolicy(Qt.NoFocus)
+         self.add_btn.clicked.connect(self.addRequested.emit)
+         h.addWidget(self.add_btn)
++        self.add_grid_btn = QToolButton()
++        self.add_grid_btn.setText("+ GRID")
++        self.add_grid_btn.setToolTip("Nuovo PANEL a caselle (GRID): cue da cliccare o da tastiera, su più pagine")
++        self.add_grid_btn.setFocusPolicy(Qt.NoFocus)
++        self.add_grid_btn.clicked.connect(self.addGridRequested.emit)
++        h.addWidget(self.add_grid_btn)
+         h.addStretch(1)
++        self.kinds = []
+         self._guard = False
+ 
+-    def set_lists(self, names, current, go_index, running):
++    def set_lists(self, names, current, go_index, running, kinds=None):
+         """names: nomi delle liste ([0] = MAIN) · go_index: lista di GO · running: set di indici in play."""
++        self.kinds = list(kinds or [])
+         self._guard = True
+         while self.bar.count() > len(names):
+             self.bar.removeTab(self.bar.count() - 1)
+@@ -90,9 +100,14 @@ class ListTabs(QWidget):
+         i = self.bar.tabAt(pos)
+         m = QMenu(self)
+         m.addAction("Nuovo PANEL", self.addRequested.emit)
++        m.addAction("Nuovo PANEL GRID (caselle)", self.addGridRequested.emit)
+         if i > 0:
+             m.addSeparator()
+             m.addAction("Rinomina…", lambda: self.renameRequested.emit(i))
++            if i < len(self.kinds) and self.kinds[i] == "grid":
++                m.addAction("Mostra come lista", lambda: self.kindRequested.emit(i, "list"))
++            else:
++                m.addAction("Mostra come griglia (GRID)", lambda: self.kindRequested.emit(i, "grid"))
+             a = m.addAction("Sposta a sinistra", lambda: self.moveRequested.emit(i, -1))
+             a.setEnabled(i > 1)
+             a = m.addAction("Sposta a destra", lambda: self.moveRequested.emit(i, 1))
+diff --git a/cuestage/window/cluster.py b/cuestage/window/cluster.py
+index 8fd7918..0765552 100644
+--- a/cuestage/window/cluster.py
++++ b/cuestage/window/cluster.py
+@@ -145,7 +145,7 @@ class ClusterMixin:
+     def _lists_hash(show):
+         import hashlib
+         import json as _json
+-        data = [[l.id, l.name, [c.to_dict(None) for c in l.cues]] for l in show.lists]
++        data = [[l.id, l.name, l.grid_data(), [c.to_dict(None) for c in l.cues]] for l in show.lists]
+         return hashlib.sha1(_json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
+ 
+     def _show_hash(self):
+diff --git a/cuestage/window/editing.py b/cuestage/window/editing.py
+index 08b89a2..20f34cd 100644
+--- a/cuestage/window/editing.py
++++ b/cuestage/window/editing.py
+@@ -53,11 +53,13 @@ class EditingMixin:
+             self._select_guard = False
+ 
+     def _insert_cues(self, cues, row=None):
++        grid = self.show_data.current.is_grid
+         if row is None:
+             r = self._current_row()
+-            row = r + 1 if r >= 0 else len(self.show_data.cues)
++            row = r + 1 if (r >= 0 and not grid) else len(self.show_data.cues)
+         from ..groups import membership_for_insert
+-        g = membership_for_insert(self.show_data.cues, row)
++        # nel GRID ogni nuova cue ha la sua casella (non entra nel gruppo vicino)
++        g = "" if grid else membership_for_insert(self.show_data.cues, row)
+         self.model.beginResetModel()
+         for i, c in enumerate(cues):
+             if c.type != "group" and not c.group:
+diff --git a/cuestage/window/grid.py b/cuestage/window/grid.py
+new file mode 100644
+index 0000000..b3a3da3
+--- /dev/null
++++ b/cuestage/window/grid.py
+@@ -0,0 +1,226 @@
++"""PANEL GRID e scorciatoie da tastiera delle cue (parte di MainWindow)."""
++from PySide6.QtCore import Qt
++from PySide6.QtGui import QAction, QKeySequence, QShortcut
++from PySide6.QtWidgets import QDialog, QMessageBox
++
++from .. import grid as G
++
++
++class GridMixin:
++    # ---- stato
++    def _grid_list(self):
++        lst = self.show_data.current
++        return lst if lst.is_grid else None
++
++    def _grid_sync(self, force=False):
++        """Dà una casella alle cue nuove e riordina la lista per caselle (il GO locale segue la griglia)."""
++        lst = self._grid_list()
++        if lst is None:
++            return
++        sig = G.signature(lst)
++        if not force and sig == getattr(self, "_grid_sig", None):
++            return
++        ph_cue = None
++        ph = self.ctrl.playhead_of(lst)
++        if 0 <= ph < len(lst.cues):
++            ph_cue = lst.cues[ph]
++        sel = [self.show_data.cues[r].id for r in self._selected_rows() if r < len(self.show_data.cues)]
++        pref = getattr(self, "_grid_pending_cell", None)
++        changed = G.ensure_positions(lst, preferred=pref, page=self.grid.page)
++        self._grid_pending_cell = None
++        if G.sort_cues(lst) or changed:
++            self.model.beginResetModel()
++            self.model.endResetModel()
++            if ph_cue is not None:
++                self.ctrl.set_playhead(lst.index_of(ph_cue.id), lst)
++            self._select_guard = True
++            self._select_rows([lst.index_of(i) for i in sel if lst.index_of(i) >= 0])
++            self._select_guard = False
++            self.show_data.dirty = True
++        if pref is not None:                    # la pagina della cue appena aggiunta
++            self.grid.page = int(pref[0])
++        self._grid_sig = G.signature(lst)
++        self.grid.sync()
++
++    # ---- azioni sulle caselle
++    def grid_select(self, cue, move_playhead=True):
++        lst, i = self.show_data.list_of(cue.id)
++        if lst is None or lst is not self.show_data.current:
++            return
++        self._select_guard = not move_playhead
++        self._select_rows([i])
++        self._select_guard = False
++        self.inspector.set_cue(cue)
++        if move_playhead:
++            self.ctrl.set_playhead(i, lst)
++            self._update_standby()
++        self.grid.canvas.update()
++
++    def grid_activate(self, cue, mode=None):
++        """Clic su una casella (o scorciatoia): avvia / ferma / riavvia secondo l'impostazione del PANEL."""
++        lst, _i = self.show_data.list_of(cue.id)
++        if mode is None:
++            mode = lst.grid_click if (lst is not None and lst.is_grid) else "start"
++        ctrl = self.ctrl
++        inst = ctrl.instances.get(cue.id)
++        active = (inst is not None and not inst.done) or any(p[1].id == cue.id for p in ctrl.pending)
++        if mode == "toggle" and active:
++            ctrl.stop_cue(cue.id, float(self.show_data.settings.get("stop_fade", 0.3)))
++            self.status(f"■ {cue.label()}")
++            return
++        if mode == "start" and active:
++            return
++        ctrl.trigger(cue, cascade=False)
++        self.status(f"▶ {cue.label()}")
++
++    def grid_move(self, cue, cell):
++        lst = self._grid_list()
++        if lst is None:
++            return
++        G.move_cell(lst, cue, *cell)
++        self.show_data.dirty = True
++        self._grid_sync(force=True)
++
++    def grid_resize(self, lst, rows, cols):
++        G.resize(lst, rows, cols)
++        self.show_data.dirty = True
++        self._grid_sync(force=True)
++
++    def grid_add_cue(self, ctype, cell):
++        self._grid_pending_cell = list(cell)
++        self.table.clearSelection()
++        self.add_cue(ctype)
++        self._grid_sync(force=True)
++
++    def grid_add_files(self, paths, cell):
++        self._grid_pending_cell = list(cell)
++        self._files_dropped(paths, len(self.show_data.cues))
++        self._grid_sync(force=True)
++
++    def grid_set_color(self, cue, color):
++        cue.color = color or ""
++        self.show_data.dirty = True
++        self.model.layoutChanged.emit()
++        self.grid.canvas.update()
++        if self.inspector.cue is cue:
++            self.inspector.set_cue(cue)
++
++    def grid_delete(self, cue):
++        self.grid_select(cue, move_playhead=False)
++        self.delete_cues()
++        self._grid_sync(force=True)
++
++    def set_panel_kind(self, i, kind):
++        lst = self.show_data.lists[i]
++        if lst.is_main or lst.kind == kind:
++            return
++        lst.kind = kind
++        if kind == "grid":
++            G.ensure_positions(lst)
++            G.sort_cues(lst)
++        self.show_data.dirty = True
++        self.show_list(i)
++        self._update_tabs()
++
++    # ---- scorciatoie da tastiera
++    def _reserved_keys(self):
++        """Scorciatoie già usate dal programma (menu e comandi fissi): non si possono dare alle cue."""
++        own = set(getattr(self, "_hotkey_objs", {}).values())
++        out = {}
++        for a in self.findChildren(QAction):
++            for ks in a.shortcuts():
++                if not ks.isEmpty():
++                    out[ks.toString(QKeySequence.PortableText)] = a.text().replace("&", "")
++        for s in self.findChildren(QShortcut):
++            if s in own:
++                continue
++            k = s.key()
++            if not k.isEmpty():
++                out[k.toString(QKeySequence.PortableText)] = "comando di CueStage"
++        for k, why in (("Space", "GO"), ("Esc", "STOP / esci"), ("Return", "modifica"), ("Enter", "modifica"),
++                       ("Del", "elimina"), ("Backspace", "elimina"), ("Tab", "navigazione")):
++            out.setdefault(k, why)
++        return out
++
++    def _used_keys(self, exclude=None):
++        """{tasto: (cue, campo)} delle scorciatoie già date alle cue (avvio e Tap Tempo)."""
++        out = {}
++        for c in self.show_data.all_cues():
++            for field in ("hotkey", "group_tap_key"):
++                k = getattr(c, field, "")
++                if k and (c, field) != exclude:
++                    out[k] = (c, field)
++        return out
++
++    def learn_hotkey(self, cue, field="hotkey"):
++        from ..ui_grid import HotkeyDialog
++        others = self._used_keys(exclude=(cue, field))
++        title = "Tap Tempo di " if field == "group_tap_key" else ""
++        dlg = HotkeyDialog(cue, self._reserved_keys(), others, self, current=getattr(cue, field, ""),
++                           purpose=title)
++        if dlg.exec() != QDialog.Accepted:
++            return
++        k = dlg.key()
++        if dlg.steal is not None:
++            sc, sf = dlg.steal
++            setattr(sc, sf, "")
++        self.set_hotkey(cue, k, field)
++
++    def set_hotkey(self, cue, key, field="hotkey"):
++        setattr(cue, field, key or "")
++        self.show_data.dirty = True
++        self._rebuild_hotkeys(force=True)
++        self.grid.canvas.update()
++        if self.inspector.cue is cue:
++            self.inspector.set_cue(cue)
++        self.status(f"Scorciatoia {key} → {cue.label()}" if key else f"Scorciatoia tolta da {cue.label()}")
++
++    def _rebuild_hotkeys(self, force=False):
++        sig = tuple((c.id, field, getattr(c, field)) for c in self.show_data.all_cues()
++                    for field in ("hotkey", "group_tap_key") if getattr(c, field, ""))
++        if not force and sig == getattr(self, "_hotkey_sig", None):
++            return
++        self._hotkey_sig = sig
++        for s in getattr(self, "_hotkey_objs", {}).values():
++            s.setEnabled(False)
++            s.setParent(None)
++            s.deleteLater()
++        self._hotkey_objs = {}
++        reserved = None
++        for cid, field, key in sig:
++            ks = QKeySequence.fromString(key, QKeySequence.PortableText)
++            if ks.isEmpty():
++                continue
++            if reserved is None:
++                reserved = self._reserved_keys()
++            if key in reserved:
++                continue                       # scorciatoia (da uno show vecchio) che ora è del programma
++            s = QShortcut(ks, self)
++            s.setContext(Qt.WindowShortcut)
++            if field == "group_tap_key":
++                s.setAutoRepeat(False)          # tenere premuto non deve battere il tempo
++                s.activated.connect(lambda cid=cid: self.ctrl.group_tap(cid))
++            else:
++                s.activated.connect(lambda cid=cid: self._hotkey_fired(cid))
++            self._hotkey_objs[(cid, field)] = s
++
++    def _hotkey_fired(self, cue_id):
++        cue = self.show_data.by_id(cue_id)
++        if cue is None:
++            return
++        self.grid_activate(cue)
++        if self._grid_list() is not None:
++            self.grid.canvas.update()
++
++    def _grid_tick(self):
++        if self._grid_list() is not None:
++            self._grid_sync()
++            self.grid.canvas.update()
++        self._rebuild_hotkeys()
++
++    def _confirm_hotkey_conflicts(self):
++        """Avvisa (una volta) se lo show usa scorciatoie che CueStage riserva."""
++        bad = [c for c in self.show_data.all_cues() if c.hotkey and c.hotkey in self._reserved_keys()]
++        if bad:
++            QMessageBox.information(self, "Scorciatoie", "Queste scorciatoie sono usate da CueStage e sono state "
++                                    "ignorate:\n" + "\n".join(f"{c.hotkey} → {c.label()}" for c in bad[:10]))
+diff --git a/cuestage/window/lists.py b/cuestage/window/lists.py
+index 93b7440..ff284a2 100644
+--- a/cuestage/window/lists.py
++++ b/cuestage/window/lists.py
+@@ -20,7 +20,8 @@ class ListsMixin:
+             if any(c.id in self.ctrl.instances for c in lst.cues) or \
+                     any(p[1] in lst.cues for p in self.ctrl.pending):
+                 running.add(i)
+-        self.list_tabs.set_lists([l.name for l in sh.lists], sh.view, go, running)
++        self.list_tabs.set_lists([("▦ " if l.is_grid else "") + l.name for l in sh.lists], sh.view, go, running,
++                                 kinds=[l.kind for l in sh.lists])
+ 
+     def show_list(self, i):
+         """Mostra (e rende modificabile) la lista i: 0 = MAIN, poi i PANEL."""
+@@ -42,8 +43,21 @@ class ListsMixin:
+         else:
+             self.table.clearSelection()
+         self._select_guard = False
++        self._apply_view_kind()
+         self._update_standby()
+ 
++    def _apply_view_kind(self):
++        """Tabella per le liste, caselle per i PANEL GRID."""
++        if not hasattr(self, "view_stack"):
++            return
++        lst = self.show_data.current
++        want = self.grid if lst.is_grid else self.table
++        if self.view_stack.currentWidget() is not want or (lst.is_grid and self.grid.lst is not lst):
++            self.view_stack.setCurrentWidget(want)
++            if lst.is_grid:
++                self.grid.set_list(lst)
++                self._grid_sync(force=True)
++
+     def reveal_cue(self, cue_id):
+         """Mostra la lista che contiene la cue e la seleziona (senza spostare il playhead)."""
+         lst, i = self.show_data.list_of(cue_id)
+@@ -61,10 +75,15 @@ class ListsMixin:
+         self._update_standby()
+         self.status("GO agisce sempre sulla MAIN" if key == "main" else "GO segue la lista selezionata")
+ 
+-    def add_panel(self):
+-        lst = self.show_data.add_panel()
++    def add_panel(self, kind="list"):
++        if kind not in ("list", "grid"):        # dal segnale «clicked» del pulsante arriva un booleano
++            kind = "list"
++        lst = self.show_data.add_panel(kind=kind)
++        if kind == "grid":
++            lst.name = lst.name.replace("PANEL", "GRID")
+         self.show_list(len(self.show_data.lists) - 1)
+-        self.status(f"Creato «{lst.name}» (doppio clic sul tab per rinominarlo)")
++        self.status(f"Creato «{lst.name}» (doppio clic sul tab per rinominarlo)"
++                    + (" · ✎ Modifica per righe, colonne e pagine" if kind == "grid" else ""))
+ 
+     def rename_panel(self, i):
+         sh = self.show_data
+diff --git a/cuestage/window/remote.py b/cuestage/window/remote.py
+index bcb055d..440fedc 100644
+--- a/cuestage/window/remote.py
++++ b/cuestage/window/remote.py
+@@ -60,6 +60,8 @@ class RemoteMixin:
+                 return
+             if cmd in ("start", "go"):
+                 ctrl.trigger(c, cascade=True)
++            elif cmd == "tap":
++                ctrl.group_tap(c.id)
+             elif cmd == "stop":
+                 ctrl.stop_cue(c.id, float(args[0]) if args else 0.0)
+             elif cmd == "pause":
+@@ -77,6 +79,9 @@ class RemoteMixin:
+                 if c.osc_trigger and c.osc_trigger.rstrip("/").lower() == a:
+                     ctrl.trigger(c, cascade=True)
+                     hit = True
++                if c.type == "group" and c.group_tap_osc and c.group_tap_osc.rstrip("/").lower() == a:
++                    ctrl.group_tap(c.id)
++                    hit = True
+             if not hit:
+                 self.status(f"OSC ignorato: {addr} {args}")
+                 return
+@@ -225,6 +230,10 @@ class RemoteMixin:
+                 fn()
+                 self.status(f"MIDI ← {spec} ({port}): {key}" if port else f"MIDI ← {spec}: {key}")
+                 return
++        for c in self.show_data.all_cues():
++            if c.type == "group" and c.group_tap_midi and spec_matches(c.group_tap_midi, spec, port):
++                self.ctrl.group_tap(c.id)
++                return
+         for c in self.show_data.all_cues():
+             if c.midi and spec_matches(c.midi, spec, port):
+                 self.ctrl.trigger(c, cascade=True)
+diff --git a/tests/test_smoke.py b/tests/test_smoke.py
+index 348545d..eeb651c 100644
+--- a/tests/test_smoke.py
++++ b/tests/test_smoke.py
+@@ -131,6 +131,107 @@ def t_go_and_groups(w):
+     assert not w.ctrl.instances
+ 
+ 
++def t_playlist(w):
++    """Playlist e Random playlist: da sole, senza pre-wait, una volta ciascuna, poi il gruppo finisce."""
++    for mode in ("playlist", "rplaylist"):
++        sh = Show()
++        sh.settings["output_fullscreen"] = False
++        g = Cue("group", number="5", name="PL", group_mode=mode)
++        ms = [Cue("audio", number=f"5.{i}", name=f"P{i}", file=tone(f"p{i}.wav", sec=0.6, freq=500 + 50 * i),
++                  group=g.id, delay=5.0) for i in (1, 2, 3)]
++        sh.cues = [g, *ms]
++        w._set_show(sh)
++        run(0.4)
++        w.go()
++        seen = []
++        t0 = time.monotonic()
++        while time.monotonic() - t0 < 3.5:
++            run(0.02)
++            for k, inst in w.ctrl.instances.items():
++                n = w.show_data.by_id(k).name
++                if n in ("P1", "P2", "P3") and not inst.done and n not in seen:
++                    seen.append(n)
++        assert sorted(seen) == ["P1", "P2", "P3"], (mode, seen)
++        if mode == "playlist":
++            assert seen == ["P1", "P2", "P3"], seen
++        assert g.id not in w.ctrl.instances or w.ctrl.instances[g.id].done, "il gruppo non è finito"
++        w.ctrl.stop_all(0)
++        run(0.2)
++
++
++def t_grid_and_stop_panel(w):
++    """PANEL GRID (caselle, ordine del GO, clic, scorciatoia, salvataggio) e cue «Stop panel»."""
++    from PySide6.QtCore import QPoint, Qt
++    from PySide6.QtTest import QTest
++    sh = Show()
++    sh.settings["output_fullscreen"] = False
++    sh.cues = [Cue("audio", number="1", name="Main", file=tone("gm.wav", sec=6)),
++               Cue("stoppanel", number="2", name="Stop", sp_panels=["*"], stop_fade=0.2)]
++    w._set_show(sh)
++    run(0.2)
++    w.add_panel("grid")
++    run(0.2)
++    lst = w.show_data.current
++    assert lst.is_grid and w.view_stack.currentWidget() is w.grid
++    w.grid_add_files([tone(f"gg{i}.wav", sec=4, freq=300 + 40 * i) for i in range(3)], [0, 1, 1])
++    run(0.2)
++    assert [tuple(c.grid_pos) for c in lst.cues] == [(0, 1, 1), (0, 1, 2), (0, 1, 3)]
++    c0 = lst.cues[0]
++    w.set_hotkey(c0, "F4")
++    w.grid_set_color(c0, "#7a2730")
++    can = w.grid.canvas
++    r = can.cell_rect(1, 2).center()
++    QTest.mouseClick(can, Qt.LeftButton, Qt.NoModifier, QPoint(int(r.x()), int(r.y())))
++    run(0.2)
++    assert lst.cues[1].id in w.ctrl.instances, "il clic sulla casella non avvia"
++    QTest.keyClick(w, Qt.Key_F4)
++    run(0.2)
++    assert c0.id in w.ctrl.instances, "la scorciatoia non avvia"
++    w.ctrl.trigger(sh.main.cues[0], cascade=False)
++    run(0.2)
++    w.ctrl.start_cue(sh.main.cues[1], cascade=False)       # Stop panel «Tutti»
++    run(0.6)
++    alive = sorted(w.show_data.by_id(k).name for k, i in w.ctrl.instances.items() if not i.done)
++    assert alive == ["Main"], alive
++    p = os.path.join(TMP, "grid.cueshow")
++    w.show_data.save(p)
++    l2 = Show.load(p).lists[1]
++    assert l2.is_grid and l2.cues[0].hotkey == "F4" and l2.cues[0].color == "#7a2730"
++    w.ctrl.stop_all(0)
++    run(0.2)
++
++
++def t_tap_tempo(w):
++    """Tap Tempo: BPM dalle battute; Loop e Sequence avanzano sul battito; i modi non adatti lo ignorano."""
++    from cuestage.engine import tap_active
++    for mode in ("loop", "sequence"):
++        sh = Show()
++        sh.settings["output_fullscreen"] = False
++        g = Cue("group", number="7", name="T", group_mode=mode, group_tap=True, group_xfade=0.0)
++        ms = [Cue("audio", number=f"7.{i}", name=f"t{i}", group=g.id, file=tone(f"tt{i}.wav", sec=2.0))
++              for i in range(3)]
++        sh.cues = [g, *ms]
++        w._set_show(sh)
++        run(0.3)
++        for k in range(4):                       # 4 battute a 0,25 s = 240 BPM
++            w.ctrl.clock = 50.0 + k * 0.25
++            w.ctrl.group_tap(g.id)
++        assert g.group_bpm == 240.0, g.group_bpm
++        w.go()
++        seen, t0 = [], time.monotonic()
++        while time.monotonic() - t0 < 0.95:
++            run(0.01)
++            for k2, inst in w.ctrl.instances.items():
++                n = w.show_data.by_id(k2).name
++                if n.startswith("t") and not inst.done and n not in seen:
++                    seen.append(n)
++        assert seen == ["t0", "t1", "t2"], (mode, seen)
++        w.ctrl.stop_all(0)
++        run(0.2)
++    for mode in ("random", "all", "playlist", "rplaylist"):
++        assert not tap_active(Cue("group", group_mode=mode, group_tap=True))
++
++
+ def t_text_sequence(w):
+     sh = Show()
+     sh.settings["output_fullscreen"] = False
+@@ -232,6 +333,9 @@ if __name__ == "__main__":
+     check("show portabile tra Linux, Windows e macOS", t_portable_paths)
+     check("GO, gruppo «tutte insieme», stop", lambda: t_go_and_groups(w))
+     check("cue di testo in sequenza", lambda: t_text_sequence(w))
++    check("gruppi Playlist e Random playlist", lambda: t_playlist(w))
++    check("PANEL GRID, scorciatoie e cue Stop panel", lambda: t_grid_and_stop_panel(w))
++    check("Tap Tempo dei gruppi", lambda: t_tap_tempo(w))
+     check("cue mixer su X32 simulato (mute a scena e fader)", lambda: t_mixer_x32(w))
+     check("profilo OSC ChamSys MagicQ", t_osc_profile)
+     check("lettura dei controlli ALSA", t_alsa_parser)

@@ -145,7 +145,7 @@ class ClusterMixin:
     def _lists_hash(show):
         import hashlib
         import json as _json
-        data = [[l.id, l.name, [c.to_dict(None) for c in l.cues]] for l in show.lists]
+        data = [[l.id, l.name, l.grid_data(), [c.to_dict(None) for c in l.cues]] for l in show.lists]
         return hashlib.sha1(_json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
 
     def _show_hash(self):

@@ -31,7 +31,8 @@ DISCOVER_MSG = b"CUESTAGE-MASTER?"
 # metodi del controller che sulle istanze in ridondanza si ripetono identici
 REPLICATED = ("go", "start_cue", "trigger", "stop_cue", "stop_all", "stop_list", "pause_cue", "pause_all",
               "resume_all", "set_playhead", "step_playhead", "playhead_to", "crossfade", "set_crossfader",
-              "set_live_level", "set_live_opacity", "exit_captured_groups", "text_step", "text_goto")
+              "set_live_level", "set_live_opacity", "exit_captured_groups", "text_step", "text_goto",
+              "group_tap")
 GUARDED = ("_tick",)             # chiamate interne: quello che fanno non va ritrasmesso
 
 

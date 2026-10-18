@@ -6,7 +6,7 @@ from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QKeySequence, QPainter, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QHBoxLayout, QHeaderView, QLabel,
-    QMainWindow, QMessageBox, QPushButton, QScrollArea, QSlider, QSplitter, QTableView,
+    QMainWindow, QMessageBox, QPushButton, QScrollArea, QSlider, QSplitter, QStackedWidget, QTableView,
     QVBoxLayout, QWidget,
 )
 
@@ -24,6 +24,7 @@ from .video_output import Compositor, OutputPreview
 from .window.cluster import ClusterMixin
 from .window.editing import EditingMixin
 from .window.files import FilesMixin
+from .window.grid import GridMixin
 from .window.groups import GroupsMixin
 from .window.hardware import HardwareMixin
 from .window.lists import ListsMixin
@@ -83,7 +84,8 @@ class MasterSlider(QSlider):
         self.setValue(0)
 
 
-class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, GroupsMixin, ListsMixin, RemoteMixin, WebMixin, VideoMixin, FilesMixin, QMainWindow):
+class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, GroupsMixin, GridMixin, ListsMixin,
+                 RemoteMixin, WebMixin, VideoMixin, FilesMixin, QMainWindow):
     def __init__(self, path=None):
         super().__init__()
         self.show_data = Show()
@@ -342,6 +344,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.list_tabs.renameRequested.connect(self.rename_panel)
         self.list_tabs.deleteRequested.connect(self.delete_panel)
         self.list_tabs.moveRequested.connect(self.move_panel)
+        self.list_tabs.addGridRequested.connect(lambda: self.add_panel("grid"))
+        self.list_tabs.kindRequested.connect(self.set_panel_kind)
         lv.addWidget(self.list_tabs)
         # GO locale del PANEL visualizzato (solo con «GO su: MAIN»)
         self.local_go = QWidget()
@@ -372,7 +376,13 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         lg.addWidget(self.local_standby, 1)
         self.local_go.setVisible(False)
         lv.addWidget(self.local_go)
-        lv.addWidget(self.table, 1)
+        # la lista (tabella) oppure, per un PANEL GRID, le caselle; la tabella resta la «selezione» comune
+        from .ui_grid import GridPanel
+        self.grid = GridPanel(self)
+        self.view_stack = QStackedWidget()
+        self.view_stack.addWidget(self.table)
+        self.view_stack.addWidget(self.grid)
+        lv.addWidget(self.view_stack, 1)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.table.customContextMenuRequested.connect(self._table_menu)
         top = QSplitter(Qt.Horizontal)
@@ -390,6 +400,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.inspector.stopRequested.connect(lambda cid: self.ctrl.stop_cue(cid, 0.1))
         self.inspector.learnMidi.connect(self.learn_midi)
         self.inspector.learnMidiControl.connect(lambda cb: self.learn_midi(cb, None, "control"))
+        self.inspector.hotkey_fn = self.learn_hotkey
+        self.inspector.set_hotkey_fn = self.set_hotkey
+        self.inspector.color_fn = self.grid_set_color
         self.inspector.oscSend.connect(self._send_osc_now)
 
         vsplit = QSplitter(Qt.Vertical)
@@ -644,6 +657,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
 
     def _ui_tick(self):
         self._update_edit_overlay()
+        self._apply_view_kind()
+        self._grid_tick()
         px = self._output_pixels()
         if px != self.comp.out_size:
             self.comp.out_size = px
