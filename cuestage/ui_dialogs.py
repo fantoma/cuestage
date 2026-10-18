@@ -107,6 +107,32 @@ class SettingsDialog(QDialog):
         fa.addRow("Durata crossfade", self.xftime)
         pages[0].addWidget(ga)
 
+        from .audio_engine import preview_settings
+        pvs = preview_settings(self.s)
+        gp = QGroupBox("Preascolto (cuffia)")
+        fp = QFormLayout(gp)
+        self.pv_on = QCheckBox("Attiva il preascolto")
+        self.pv_on.setChecked(pvs["enabled"])
+        self.pv_on.setToolTip("Le cue con «Preascolto» (ispettore) suonano solo qui, non sulle uscite dello "
+                              "spettacolo. Accanto al volume master compare il volume del preascolto.")
+        fp.addRow(self.pv_on)
+        self.pv_dev = QComboBox()
+        fp.addRow("Scheda", self.pv_dev)
+        pr = QHBoxLayout()
+        self.pv_l = QSpinBox()
+        self.pv_r = QSpinBox()
+        for sp, val, lab in ((self.pv_l, pvs["ch_l"], "Sinistro"), (self.pv_r, pvs["ch_r"], "Destro")):
+            sp.setRange(1, 64)
+            sp.setValue(val)
+            pr.addWidget(QLabel(lab))
+            pr.addWidget(sp)
+        pr.addStretch(1)
+        fp.addRow("Canali", pr)
+        self._pv_cur = pvs
+        self._fill_preview_devices()
+        self.pv_dev.currentIndexChanged.connect(lambda *_: self._fit_preview_channels())
+        pages[0].addWidget(gp)
+
         go = QGroupBox("OSC in ingresso")
         fo = QFormLayout(go)
         self.osc_on = QCheckBox("Abilita ricezione OSC")
@@ -364,8 +390,31 @@ class SettingsDialog(QDialog):
             del self.osc_devs[i]
             self._fill_osc_devs(min(i, len(self.osc_devs) - 1))
 
+    def _fill_preview_devices(self):
+        from .audio_engine import list_devices
+        cur = self.pv_dev.currentData() if self.pv_dev.count() else self._pv_cur["device"]
+        self.pv_dev.blockSignals(True)
+        self.pv_dev.clear()
+        self.pv_dev.addItem("Scheda predefinita del progetto", "")
+        for dv in list_devices():
+            self.pv_dev.addItem(f"{dv['name']}  [{dv['hostapi']}] — {dv['max_ch']} canali", dv["id"])
+        i = self.pv_dev.findData(cur or "")
+        if i < 0:
+            self.pv_dev.addItem(f"{cur.split('|', 1)[-1]} (non collegata)", cur)
+            i = self.pv_dev.count() - 1
+        self.pv_dev.setCurrentIndex(i)
+        self.pv_dev.blockSignals(False)
+        self._fit_preview_channels()
+
+    def _fit_preview_channels(self):
+        from .audio_engine import list_devices
+        dev_id = self.pv_dev.currentData() or ""
+        n = next((d["max_ch"] for d in list_devices() if d["id"] == dev_id), 64 if dev_id else 2)
+        for sp in (self.pv_l, self.pv_r):
+            sp.setMaximum(max(1, min(64, n)))
+
     def _fill_devices(self):
-        from .audio_engine import SYSTEM, device_label, list_devices
+        from .audio_engine import SYSTEM, busy_devices, device_label, list_devices
         cur = self.dev.currentData() if self.dev.count() else self.s.get("audio_device")
         if isinstance(cur, int):      # show di versioni precedenti: indice numerico
             cur = None
@@ -374,10 +423,23 @@ class SettingsDialog(QDialog):
         devs = list_devices()
         for dv in devs:
             self.dev.addItem(device_label(dv), dv["id"])
+        busy = busy_devices()
         i = self.dev.findData(cur)
+        cur_name = cur.split('|', 1)[-1] if cur else ""
         if i < 0 and cur:
-            self.dev.addItem(f"{cur.split('|', 1)[-1]} (non collegata)", cur)
+            why = next((f"occupata da {b['owner']}" for b in busy if b["name"] == cur_name), "non collegata")
+            self.dev.addItem(f"{cur_name} — {why}", cur)
             i = self.dev.count() - 1
+        # schede che un altro programma (di solito PipeWire/PulseAudio) tiene aperte: visibili ma non sceglibili
+        for b in busy:
+            if b["name"] == cur_name:
+                continue
+            self.dev.addItem(f"{b['name']} — occupata da {b['owner']}", None)
+            it = self.dev.model().item(self.dev.count() - 1)
+            if it is not None:
+                it.setEnabled(False)
+                it.setToolTip("Un altro programma usa l'uscita di questa scheda. Chiudilo, oppure in PipeWire/"
+                              "PulseAudio (pavucontrol › Configurazione) metti il profilo della scheda su «Spento»")
         self.dev.setCurrentIndex(max(0, i))
         # canali per scheda (0 = automatico)
         while self.ch_grid.count():
@@ -548,6 +610,7 @@ class SettingsDialog(QDialog):
         if self.rescan_fn:
             self.rescan_fn()
         self._fill_devices()
+        self._fill_preview_devices()
 
     def result_settings(self):
         s = self.s
@@ -575,6 +638,10 @@ class SettingsDialog(QDialog):
         s["midi_map"] = {k: normalize_spec(le.text()) for k, le in self.map_edits.items()}
         s["midi_controls"] = {k: normalize_control(le.text()) for k, le in self.ctl_edits.items()}
         s["xfade_time"] = self.xftime.value()
+        pv = dict(self._pv_cur)
+        pv.update(enabled=self.pv_on.isChecked(), device=self.pv_dev.currentData() or "",
+                  ch_l=self.pv_l.value(), ch_r=self.pv_r.value())
+        s["preview"] = pv
         return s
 
 

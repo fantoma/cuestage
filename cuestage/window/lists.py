@@ -1,5 +1,6 @@
 """Liste MAIN e PANEL: schede, GO su, spostamento tra liste (parte di MainWindow)."""
 
+from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import (
     QAbstractItemView, QInputDialog, QMenu, QMessageBox, )
 
@@ -159,9 +160,31 @@ class ListsMixin:
         self.status(f"{len(moving)} cue spostate in «{dest.name}»")
         self._update_standby()
 
+    def _new_cue_menu(self, menu):
+        from ..model import CUE_TYPES, TYPE_ICONS, TYPE_LABELS
+        for t in CUE_TYPES:
+            if t != "groupexit":
+                menu.addAction(f"{TYPE_ICONS.get(t, '')}  {TYPE_LABELS[t]}", lambda _=False, t=t: self.add_cue(t))
+
+    def eventFilter(self, obj, ev):
+        """Doppio clic nello spazio vuoto della lista: menu per aggiungere una cue in fondo."""
+        if hasattr(self, "table") and obj is self.table.viewport() and ev.type() == QEvent.MouseButtonDblClick:
+            if not self.table.indexAt(ev.position().toPoint()).isValid():
+                self.table.clearSelection()
+                m = QMenu(self)
+                m.addSection("Nuova cue in fondo alla lista")
+                self._new_cue_menu(m)
+                m.exec(ev.globalPosition().toPoint())
+                return True
+        return super().eventFilter(obj, ev)
+
     def _table_menu(self, pos):
         m = QMenu(self)
+        if not self.table.indexAt(pos).isValid():     # clic nello spazio vuoto: si aggiunge in fondo
+            self.table.clearSelection()
         rows = self._selected_rows()
+        self._new_cue_menu(m.addMenu("Nuova cue" + (" dopo la selezione" if rows else " in fondo")))
+        m.addSeparator()
         if rows:
             m.addAction("Duplica", self.duplicate)
             m.addAction("Elimina", self.delete_cues)

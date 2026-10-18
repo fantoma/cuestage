@@ -133,9 +133,10 @@ class CueTableModel(QAbstractTableModel):
                     fade = float(cue.stop_fade or 0)
                     tail = f" · fade {fade:g} s" if fade > 0 else ""
                     if "*" in (cue.sp_panels or []):
-                        return "⊠ tutti i PANEL" + tail
+                        pre = f"«{self.show.main.name}» + " if self.show.main.id in cue.sp_panels else ""
+                        return f"⊠ {pre}tutti i PANEL" + tail
                     names = [f"«{lst.name}»" for lst in stop_panel_targets(self.show, cue)]
-                    return ("⊠ " + ", ".join(names) + tail) if names else "— nessun PANEL scelto —"
+                    return ("⊠ " + ", ".join(names) + tail) if names else "— nessuna lista scelta —"
                 if cue.type == "groupexit":
                     tg = self.show.resolve_target(cue.target) if cue.target else self.show.by_id(cue.group)
                     return f"⇥ esce da «{tg.label()}»" if tg else "— nessun gruppo —"
@@ -157,6 +158,8 @@ class CueTableModel(QAbstractTableModel):
                         from .mixers import mute_states, mute_summary
                         return f"{who}: {mute_summary(mute_states(cue))}"
                     what = None
+                    if cue.mix_action == "duck":
+                        what = f"{fmt_db(float(cue.mix_level))} ⇣ ducking −{float(cue.mix_duck_db or 0):.1f} dB"
                     if what is None:
                         what = fmt_db(float(cue.mix_level)) + (f" in {float(cue.mix_fade):.1f} s" if cue.mix_fade else "")
                     from .mixers import parse_numbers
@@ -302,6 +305,11 @@ class CueTableModel(QAbstractTableModel):
     def dropMimeData(self, data, action, row, col, parent):
         if row < 0:
             row = parent.row() if parent.isValid() else len(self.show.cues)
+            cues = self.show.cues
+            if parent.isValid() and 0 <= row < len(cues) and cues[row].type == "group":
+                # rilasciate SOPRA la riga di un gruppo: entrano nel gruppo, in fondo
+                from .groups import block_end
+                row = block_end(cues, row)
         if data.hasFormat(ROW_MIME):
             rows = json.loads(bytes(data.data(ROW_MIME)).decode())
             self.rowsMoved.emit(rows, row)
@@ -389,6 +397,10 @@ class StateDelegate(QStyledItemDelegate):
             f.setPointSizeF(max(7.0, f.pointSizeF() * 0.85))
             p.setFont(f)
             p.drawText(r, Qt.AlignCenter, ("⏸ " if st.paused or self.ctrl.paused_all else "") + txt)
+        if st is not None and not isinstance(st, float):
+            from .ui_duckicon import paint_duck, paint_pfl
+            paint_duck(p, r, st, self.ctrl)
+            paint_pfl(p, r, st)
         p.restore()
 
     def helpEvent(self, event, view, opt, idx):
@@ -565,6 +577,9 @@ class ActivePanel(QWidget):
                         txt = inst.status_text()
                     p.setPen(QColor(255, 255, 255))
                     p.drawText(bar, Qt.AlignCenter, f"{fmt_time(inst.elapsed)}   {txt}")
+                from .ui_duckicon import paint_duck, paint_pfl
+                paint_duck(p, bar, inst, self.ctrl)
+                paint_pfl(p, bar, inst)
                 _paint_cue_meter(p, QRectF(bar.right() + 4, r.top() + 6, 10, r.height() - 12), inst, self.ctrl)
                 # pulsanti pausa / stop
                 pb = QRectF(r.right() - 66, r.top() + 8, 28, 26)

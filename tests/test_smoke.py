@@ -205,12 +205,293 @@ def t_grid_and_stop_panel(w):
         return sorted(w.show_data.by_id(k).name for k, i in w.ctrl.instances.items() if not i.done)
     wait_until(lambda: alive() == ["Main"])
     assert alive() == ["Main"], alive()
+    # Stop panel nel GRID che ferma solo la MAIN (il GRID continua)
+    sp_main = Cue("stoppanel", number="99", name="Ferma MAIN", sp_panels=[sh.main.id], stop_fade=0.1)
+    lst.cues.append(sp_main)
+    w.ctrl.trigger(sh.main.cues[0], cascade=False)
+    w.ctrl.trigger(lst.cues[0], cascade=False)
+    wait_until(lambda: alive() == ["Main", "gg0"])
+    w.ctrl.start_cue(sp_main, cascade=False)
+    wait_until(lambda: alive() == ["gg0"])
+    assert alive() == ["gg0"], alive()
+    sp_main.sp_panels = [sh.main.id, "*"]                     # MAIN + tutti i PANEL
+    w.ctrl.trigger(sh.main.cues[0], cascade=False)
+    wait_until(lambda: alive() == ["Main", "gg0"])
+    w.ctrl.start_cue(sp_main, cascade=False)
+    wait_until(lambda: alive() == [])
+    assert alive() == [], alive()
     p = os.path.join(TMP, "grid.cueshow")
     w.show_data.save(p)
     l2 = Show.load(p).lists[1]
-    assert l2.is_grid and l2.cues[0].hotkey == "F4" and l2.cues[0].color == "#7a2730"
+    k = next((c for c in l2.cues if c.hotkey == "F4"), None)
+    assert l2.is_grid and k is not None and k.color == "#7a2730"
+    s3 = next(c for c in l2.cues if c.type == "stoppanel")
+    assert s3.sp_panels == ["main", "*"], s3.sp_panels
     w.ctrl.stop_all(0)
     run(0.2)
+
+
+def t_grid_solo_blind_groups(w):
+    """GRID: Solo con fade, BLIND (vumeter sì, uscita no), gruppo aperto, rilascio sopra un gruppo."""
+    from PySide6.QtCore import Qt
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    w._set_show(sh)
+    run(0.2)
+    w.add_panel("grid")
+    run(0.2)
+    lst = w.show_data.current
+    w.grid_add_files([tone(f"so{i}.wav", sec=5, freq=350 + 70 * i) for i in range(2)], [0, 0, 0])
+    run(0.2)
+    a, b = lst.cues[:2]
+
+    def alive():
+        return sorted(w.show_data.by_id(k).name for k, i in w.ctrl.instances.items() if not i.done)
+    # SOLO nella barra, usabile con le Opzioni chiuse
+    w.grid.set_editing(False)
+    assert not w.grid.solo.isHidden() and w.grid.solo.parent() is not w.grid.size_box
+    w.grid.solo.setChecked(True)
+    assert lst.grid_solo is True
+    lst.grid_fade = 0.3
+    w.grid_activate(a)
+    wait_until(lambda: alive() == ["so0"])
+    w.grid_activate(b)
+    wait_until(lambda: alive() == ["so1"])
+    assert alive() == ["so1"], alive()
+    w.ctrl.stop_all(0)
+    run(0.2)
+    def out_level():
+        return max((float(o.meter.max()) for o in w.audio.outputs.values() if len(o.meter)), default=0.0)
+    wait_until(lambda: out_level() < 1e-4)                   # la coda del vumeter delle cue appena fermate
+    w.ctrl.set_blind(lst.id, True)
+    w.grid_activate(a)
+    wait_until(lambda: a.id in w.ctrl.instances and w.ctrl.instances[a.id].voice is not None
+               and float(w.ctrl.instances[a.id].voice.meter.max()) > 0.01)
+    inst = w.ctrl.instances[a.id]
+    run(0.3)
+    out = out_level()
+    assert inst.blind and float(inst.voice.meter.max()) > 0.01 and out < 1e-4, (inst.blind, out)
+    w.ctrl.set_blind(lst.id, False)
+    w.ctrl.stop_all(0)
+    run(0.2)
+    g = Cue("group", number="30", name="Gruppo")
+    lst.cues.append(g)
+    w._grid_sync(force=True)
+    w.grid.open_group(g)
+    w.grid_group_add_cue("memo", g, 0)
+    w.grid_group_add_cue("wait", g, 0)
+    assert [c.type for c in lst.cues if c.group == g.id] == ["wait", "memo"]
+    w.grid.close_group()
+    w.grid_add_to_group(b, g)
+    assert b.group == g.id and not b.grid_pos
+    w.show_list(0)
+    run(0.1)
+    sh.main.cues[:] = [Cue("group", number="1", name="G"), Cue("memo", number="2", name="x")]
+    w.model.beginResetModel()
+    w.model.endResetModel()
+    md = w.model.mimeData([w.model.index(1, 0)])
+    w.model.dropMimeData(md, Qt.MoveAction, -1, -1, w.model.index(0, 0))
+    run(0.1)
+    assert sh.main.cues[1].group == sh.main.cues[0].id
+
+
+def t_ducking(w):
+    """Ducking: gate/attacco/rilascio, riduzione della cue e del gruppo, Master ducking, finestra, icona."""
+    from cuestage.ducking import Ducker, duck_settings
+    from cuestage.ui_duckicon import duck_state
+    d = Ducker()
+    d.cfg = duck_settings({"ducking": {"threshold_db": -30, "attack_ms": 100, "hold_ms": 200,
+                                         "release_ms": 500}})
+    d.feed(0.5, 4800)                       # 100 ms sopra soglia: riduzione piena
+    assert d.gate and abs(d.env - 1.0) < 1e-6, d.env
+    d.feed(0.0, 4800)                       # 100 ms di silenzio: ancora in hold
+    assert not d.gate and d.env == 1.0, d.env
+    d.feed(0.0, 9600)                       # finito l'hold (200 ms), 100 ms di rilascio: 80%
+    assert abs(d.env - 0.8) < 1e-6, d.env
+    d.feed(0.01, 48000)                     # −40 dB: sotto soglia
+    assert not d.gate and d.env == 0.0
+
+    class FakeStream:
+        def stop(self):
+            pass
+
+        def close(self):
+            pass
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    w._set_show(sh)
+    run(0.2)
+    duck = w.audio.duck
+    duck.open = lambda: False               # niente schede in ingresso nei test: ascolto simulato
+    w.set_ducking({"enabled": True, "threshold_db": -30, "attack_ms": 0, "hold_ms": 0, "release_ms": 0})
+    duck.stream = FakeStream()
+    c = Cue("audio", number="1", file=tone("duck.wav", sec=6, freq=500), duck_db=20.0)
+    g = Cue("group", number="2", group_mode="all", duck_db=12.0)
+    m = Cue("audio", number="3", file=c.file, group=g.id)
+    sh.main.cues[:] = [c, g, m]
+    w.ctrl.trigger(c, cascade=False)
+    wait_until(lambda: c.id in w.ctrl.instances and w.ctrl.instances[c.id].voice is not None
+               and float(w.ctrl.instances[c.id].voice.meter.max()) > 0.05)
+    run(0.3)
+    inst = w.ctrl.instances[c.id]
+    m0 = float(inst.voice.meter.max())
+    assert duck_state(inst, w.ctrl) == "on"
+    duck.feed(0.5, 256)                     # parla il microfono (attacco 0: riduzione subito piena)
+    run(0.4)
+    m1 = float(inst.voice.meter.max())
+    assert 0.07 < m1 / m0 < 0.14, (m0, m1)  # −20 dB
+    assert duck_state(inst, w.ctrl) == "duck"
+    duck.feed(0.0, 256)
+    run(0.4)
+    assert abs(float(inst.voice.meter.max()) / m0 - 1) < 0.1
+    assert duck_state(inst, w.ctrl) == "on"
+    w.ctrl.trigger(m, cascade=False)
+    wait_until(lambda: m.id in w.ctrl.instances)
+    assert w.ctrl.instances[m.id].duck_db == 12.0          # ereditato dal gruppo
+    w.ctrl.stop_cue(m.id, 0)
+    # Master ducking col tasto Duck
+    c.duck_db = 0.0
+    run(0.4)
+
+    def out_level():
+        return max((float(o.meter.max()) for o in w.audio.outputs.values() if len(o.meter)), default=0.0)
+    o0 = out_level()
+    w.set_ducking(dict(duck_settings(sh.settings), master_db=6.0))
+    w.duck_btn.setChecked(True)
+    assert duck.master_active and duck_settings(sh.settings)["master_on"]
+    duck.feed(0.5, 256)
+    run(0.4)
+    w._update_duck_btn()
+    assert w._duck_look == "red"
+    o1 = out_level()
+    assert 0.42 < o1 / o0 < 0.6, (o0, o1)  # −6 dB
+    duck.feed(0.0, 256)
+    w.duck_btn.setChecked(False)
+    # finestra: le modifiche valgono subito, «Annulla» le toglie
+    w.ducking_dialog()
+    dlg = w._duck_dlg
+    assert duck.monitor
+    dlg.thr.setValue(-20)
+    assert duck_settings(sh.settings)["threshold_db"] == -20
+    dlg.reject()
+    assert duck_settings(sh.settings)["threshold_db"] == -30 and not duck.monitor
+    w.ctrl.stop_all(0)
+    w.set_ducking({"enabled": False})
+    assert duck.stream is None
+    run(0.2)
+
+
+def t_preview_and_mixer_duck(w):
+    """Preascolto (cue e gruppi, fuori dal master, col suo volume) e fader del mixer agganciati al ducking."""
+    from cuestage.model import db_to_lin
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    sh.settings["preview"] = {"enabled": True, "device": "", "ch_l": 1, "ch_r": 2, "db": 0.0}
+    w._set_show(sh)
+    w._apply_settings()
+    run(0.2)
+    assert w.pfl_box.isVisibleTo(w)
+    f = tone("pfl.wav", sec=6, freq=600)
+    c = Cue("audio", number="1", file=f, pfl=True)
+    g = Cue("group", number="2", group_mode="all", pfl=True)
+    m = Cue("audio", number="3", file=f, group=g.id)
+    sh.main.cues[:] = [c, g, m]
+
+    def out_level():
+        return max((float(o.meter.max()) for o in w.audio.outputs.values() if len(o.meter)), default=0.0)
+    w.master_slider.setValue(-600)          # master a −60 dB: il preascolto non ne risente
+    w.ctrl.trigger(c, cascade=False)
+    wait_until(lambda: c.id in w.ctrl.instances and w.ctrl.instances[c.id].voice is not None
+               and out_level() > 0.1)
+    inst = w.ctrl.instances[c.id]
+    assert inst.pfl and inst.voice.pfl
+    run(0.3)
+    lv = out_level()
+    assert lv > 0.1, lv
+    w.pfl_slider.setValue(-200)             # volume del preascolto −20 dB
+    run(0.4)
+    assert 0.07 < out_level() / lv < 0.14, (lv, out_level())
+    assert abs(w.audio.preview_gain - db_to_lin(-20)) < 1e-6
+    c.pfl = False                            # tolto dal vivo: torna sulle uscite, col master a −60 dB
+    run(0.4)
+    assert not inst.voice.pfl and out_level() < 0.01, out_level()
+    w.ctrl.trigger(m, cascade=False)
+    wait_until(lambda: m.id in w.ctrl.instances)
+    assert w.ctrl.instances[m.id].pfl          # preascolto ereditato dal gruppo
+    w.ctrl.stop_all(0)
+    w.master_slider.setValue(0)
+    w.pfl_slider.setValue(0)
+    run(0.2)
+
+    # Mixer: fader agganciati alla curva del ducking
+    class FakeMixers:
+        mixers = [{"id": "mx", "name": "Banco"}]
+
+        def __init__(self):
+            self.sent = []
+
+        def find(self, mid):
+            return self.mixers[0] if mid == "mx" else None
+
+        def fader(self, mid, kind, n, db, fade=0.0, report=True):
+            self.sent.append((kind, n, db))
+
+        def __getattr__(self, k):
+            return lambda *a, **kw: None
+    old_mm = w.ctrl.mixers
+    fm = w.ctrl.mixers = FakeMixers()
+    duck = w.audio.duck
+
+    class FakeStream:
+        def stop(self):
+            pass
+
+        def close(self):
+            pass
+    duck.open = lambda: setattr(duck, "stream", FakeStream()) or True
+    w.set_ducking({"enabled": False, "attack_ms": 0, "hold_ms": 0, "release_ms": 0, "threshold_db": -30})
+    mc = Cue("mixer", number="9", mix_target="mx", mix_action="duck", mix_kind="ch", mix_channels="1-2",
+             mix_level=-5.0, mix_duck_db=15.0)
+    sh.main.cues.append(mc)
+    try:
+        w.ctrl.trigger(mc, cascade=False)
+        run(0.1)
+        assert mc.id in w.ctrl.instances and duck.listening and mc.id in duck.hooks
+        assert fm.sent[-2:] == [("ch", 1, -5.0), ("ch", 2, -5.0)], fm.sent
+        duck.feed(0.5, 256)
+        run(0.2)
+        assert fm.sent[-1] == ("ch", 2, -20.0), fm.sent[-3:]
+        duck.feed(0.0, 256)
+        run(0.2)
+        assert fm.sent[-1] == ("ch", 2, -5.0), fm.sent[-3:]
+        duck.feed(0.5, 256)
+        run(0.2)
+        w.ctrl.stop_cue(mc.id, 0)
+        run(0.1)
+        assert mc.id not in duck.hooks and not duck.listening
+        assert fm.sent[-1] == ("ch", 2, -5.0), fm.sent[-3:]   # sganciato: livello normale
+        # ingresso del ducking dopo il gate nella cuffia del preascolto (fuori dal master)
+        w.master_slider.setValue(-600)
+        w.set_ducking({"to_preview": True, "threshold_db": -30, "attack_ms": 0, "hold_ms": 0, "release_ms": 0})
+        assert duck.listening
+
+        def pump(level, sec):
+            t_end = time.monotonic() + sec
+            while time.monotonic() < t_end:
+                duck.process(np.full(512, level, np.float32))
+                run(0.01)
+        pump(0.5, 0.6)
+        assert out_level() > 0.3, out_level()
+        pump(0.01, 0.6)                      # −40 dB: sotto la soglia, il gate chiude
+        assert out_level() < 0.02, out_level()
+        w.set_ducking({"to_preview": False})
+        w.master_slider.setValue(0)
+        assert not duck.listening
+    finally:
+        w.ctrl.mixers = old_mm
+        del duck.open
+    sh.settings["preview"] = {}
+    w._apply_settings()
 
 
 def t_tap_tempo(w):
@@ -278,6 +559,20 @@ def t_mixer_x32(w):
     sent = {a: v for a, v in x.log if v}
     assert sent.get("/ch/01/mix/on") == [0] and sent.get("/ch/03/mix/on") == [1], sent
     assert abs(sent["/ch/05/mix/fader"][0] - 0.5) < 0.01, sent
+    # azione «Ducking»: il livello normale si legge dal mixer come per l'azione Fader
+    from PySide6.QtWidgets import QDoubleSpinBox, QPushButton
+    d = Cue("mixer", number="3", name="Duck", mix_target="m", mix_action="duck", mix_kind="ch",
+            mix_channels="5", mix_level=0.0, mix_duck_db=12.0)
+    sh.cues.append(d)
+    w.inspector.set_cue(d)
+    run(0.2)
+    rb = next(b for b in w.inspector.findChildren(QPushButton) if "Leggi dal mixer" in b.text() and b.isVisible())
+    rb.click()
+    wait_until(lambda: abs(d.mix_level + 10.0) < 0.2)
+    assert abs(d.mix_level + 10.0) < 0.2, d.mix_level
+    spins = [sp for sp in w.inspector.findChildren(QDoubleSpinBox)
+             if sp.isVisible() and abs(sp.value() + 10.0) < 0.2]
+    assert spins, "il livello letto non compare nell'ispettore"
 
 
 def t_osc_profile():
@@ -348,6 +643,9 @@ if __name__ == "__main__":
     check("gruppi Playlist e Random playlist", lambda: t_playlist(w))
     check("PANEL GRID, scorciatoie e cue Stop panel", lambda: t_grid_and_stop_panel(w))
     check("Tap Tempo dei gruppi", lambda: t_tap_tempo(w))
+    check("ducking delle cue, dei gruppi e del master", lambda: t_ducking(w))
+    check("preascolto e fader del mixer agganciati al ducking", lambda: t_preview_and_mixer_duck(w))
+    check("GRID: Solo, BLIND, gruppo aperto, rilascio su un gruppo", lambda: t_grid_solo_blind_groups(w))
     check("cue mixer su X32 simulato (mute a scena e fader)", lambda: t_mixer_x32(w))
     check("profilo OSC ChamSys MagicQ", t_osc_profile)
     check("lettura dei controlli ALSA", t_alsa_parser)

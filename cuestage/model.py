@@ -85,6 +85,11 @@ class Cue:
         # (None = incrocio spento; lista vuota = routing predefinito), volume per uscita in dB
         "audio_device": "", "matrix": [], "out_levels": [],
         "video_audio": "engine",   # video: "engine" = motore CueStage, "system" = lettore di sistema
+        # ducking: riduzione in dB (positiva, 0 = spento) quando l'ingresso del ducking supera la soglia;
+        # su un gruppo vale per tutte le sue cue (che non ne hanno uno proprio)
+        "duck_db": 0.0,
+        # preascolto: la cue (o tutte le cue del gruppo) va solo alla scheda/canali del preascolto
+        "pfl": False,
         # video / immagine
         "layer": 1, "opacity": 1.0, "fit": "fit", "duration": 0.0,
         # crop: pixel del sorgente da tagliare per lato
@@ -115,6 +120,8 @@ class Cue:
         # cue Mixer: mixer, azione (mute / unmute / fader), sezione, canali («1-4, 7»), livello dB, fade s
         "mix_target": "", "mix_action": "mute", "mix_kind": "ch", "mix_channels": "1",
         "mix_level": 0.0, "mix_fade": 0.0,
+        # azione «duck»: i fader seguono la curva del ducking; mix_level = livello normale, riduzione in dB
+        "mix_duck_db": 10.0,
         # mute a scena: {sezione: {"mute": "1-4", "on": "7"}} (i canali non elencati non si toccano)
         "mix_states": {},
         # azione «control» (schede audio): chiave del controllo e valore grezzo
@@ -230,6 +237,8 @@ DEFAULT_SETTINGS = {
     "master_db": 0.0,
     "stop_fade": 0.3,
     "audio_buffer": "normale",
+    "ducking": {},
+    "preview": {},             # preascolto: {enabled, device, ch_l, ch_r, db} (vedi audio_engine.preview_settings)             # ingresso, canale, soglia, attacco, rilascio, Master ducking (vedi ducking.py)
     # istanze secondarie: questa istanza accetta slave / ridondanze sulla porta TCP indicata
     "cluster_enabled": False, "cluster_port": 53900, "cluster_name": "", "cluster_slave_edit": False,
     "osc_in_enabled": True,
@@ -269,7 +278,9 @@ class CueList:
     """Una lista di cue: la MAIN oppure un PANEL."""
 
     GRID_DEFAULTS = {"kind": "list", "grid_rows": 4, "grid_cols": 6, "grid_pages": ["Pagina 1"],
-                     "grid_click": "toggle"}
+                     "grid_click": "toggle",
+                     "grid_solo": False,     # Solo: una cue che parte ferma le altre attive del GRID
+                     "grid_fade": 0.5}       # fade out (s) degli stop del GRID (clic, Solo, STOP del PANEL)
 
     def __init__(self, name, cues=None, list_id=None, kind="list"):
         self.id = list_id or uuid.uuid4().hex[:8]
@@ -294,6 +305,11 @@ class CueList:
         self.grid_cols = max(1, min(16, int(self.grid_cols or 6)))
         if not isinstance(self.grid_pages, list) or not self.grid_pages:
             self.grid_pages = ["Pagina 1"]
+        self.grid_solo = bool(self.grid_solo)
+        try:
+            self.grid_fade = max(0.0, min(60.0, float(self.grid_fade)))
+        except (TypeError, ValueError):
+            self.grid_fade = 0.5
 
     @property
     def is_main(self):

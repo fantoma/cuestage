@@ -58,7 +58,8 @@ class PlaybackMixin:
             self.stop_list(lst)
 
     def stop_list(self, lst):
-        self.ctrl.stop_list(lst, float(self.show_data.settings.get("stop_fade", 0.3)))
+        fade = float(lst.grid_fade) if lst.is_grid else float(self.show_data.settings.get("stop_fade", 0.3))
+        self.ctrl.stop_list(lst, fade)
         self.status(f"STOP «{lst.name}»")
 
     def _update_local_go(self):

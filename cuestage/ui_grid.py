@@ -2,8 +2,8 @@
 from PySide6.QtCore import QPoint, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QPen
 from PySide6.QtWidgets import (
-    QColorDialog, QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QInputDialog, QKeySequenceEdit, QLabel,
-    QMenu, QMessageBox, QPushButton, QSpinBox, QTabBar, QVBoxLayout, QWidget,
+    QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox, QDoubleSpinBox, QHBoxLayout, QInputDialog,
+    QKeySequenceEdit, QLabel, QMenu, QMessageBox, QPushButton, QSpinBox, QTabBar, QVBoxLayout, QWidget,
 )
 
 from . import grid as G
@@ -60,7 +60,7 @@ class GridCanvas(QWidget):
         p.fillRect(self.rect(), QColor("#141519"))
         mw = self.panel.mw
         ctrl = mw.ctrl
-        occ = G.occupied(lst)
+        occ = self.panel.cue_map()
         sel = mw._current_cue()
         ph = ctrl.playhead_of(lst)
         nxt = lst.cues[ph] if 0 <= ph < len(lst.cues) else None
@@ -83,7 +83,7 @@ class GridCanvas(QWidget):
                     p.setBrush(EMPTY_BG)
                     p.drawRoundedRect(rect, 6, 6)
                     if self.drag_over == (self.panel.page, r, c) or (
-                            self.panel.editing and self.hover == (self.panel.page, r, c)):
+                            (self.panel.editing or self.panel.group_id) and self.hover == (self.panel.page, r, c)):
                         p.setPen(QColor("#6a6f7c"))
                         p.drawText(rect, Qt.AlignCenter, "+" if self.drag_from is None else "↓")
                     continue
@@ -137,6 +137,25 @@ class GridCanvas(QWidget):
         p.setPen(fg)
         p.setFont(f_small)
         p.drawText(inner, Qt.AlignLeft | Qt.AlignTop, f"{TYPE_ICONS.get(cue.type, '')} {cue.number}".strip())
+        bx = inner.left()
+        if active and getattr(inst, "blind", False):
+            fmb = p.fontMetrics()
+            bw = fmb.horizontalAdvance("BLIND") + 10
+            bb = QRect(inner.left(), inner.bottom() - fmb.height() - 2, bw, fmb.height() + 2)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor("#b3261e"))
+            p.drawRoundedRect(bb, 4, 4)
+            p.setPen(QColor("white"))
+            p.drawText(bb, Qt.AlignCenter, "BLIND")
+            p.setPen(fg)
+            bx = bb.right() + 4
+        if active:
+            from .ui_duckicon import paint_duck, paint_pfl
+            fmd = p.fontMetrics()
+            bx += paint_pfl(p, QRectF(bx, inner.bottom() - fmd.height() - 2, 200, fmd.height() + 2), inst)
+            paint_duck(p, QRectF(bx, inner.bottom() - fmd.height() - 2, fmd.height() + 4, fmd.height() + 2),
+                       inst, ctrl, right=False)
+            p.setPen(fg)
         if cue.hotkey:
             hk = QKeySequence.fromString(cue.hotkey, QKeySequence.PortableText).toString(QKeySequence.NativeText)
             fm = p.fontMetrics()
@@ -171,13 +190,13 @@ class GridCanvas(QWidget):
         cell = self.cell_at(e.position().toPoint())
         if cell is None:
             return
-        cue = G.cell_cue(self.panel.lst, *cell)
+        cue = self.panel.cell_cue(cell)
         if e.button() == Qt.RightButton:
             self.panel.cell_menu(cell, cue, e.globalPosition().toPoint())
             return
         if e.button() != Qt.LeftButton:
             return
-        if self.panel.editing:
+        if self.panel.editing or self.panel.group_id:     # Opzioni o dentro un gruppo: si seleziona e si sposta
             if cue is not None:
                 self.panel.mw.grid_select(cue, move_playhead=True)
                 self.drag_from = (cue, e.position().toPoint())
@@ -205,19 +224,27 @@ class GridCanvas(QWidget):
             self.drag_from = None
             self.drag_over = None
             self.unsetCursor()
-            if target is not None and list(target) != list(cue.grid_pos or []):
-                self.panel.mw.grid_move(cue, target)
+            if target is not None:
+                tcue = self.panel.cell_cue(target)
+                if self.panel.group_id:
+                    self.panel.mw.grid_group_move(cue, self.panel.cell_index(target))
+                elif tcue is not None and tcue.type == "group" and cue.type != "group" and tcue is not cue:
+                    self.panel.mw.grid_add_to_group(cue, tcue)       # casella trascinata su un gruppo: ci entra
+                elif list(target) != list(cue.grid_pos or []):
+                    self.panel.mw.grid_move(cue, target)
             self.update()
 
     def mouseDoubleClickEvent(self, e):
         cell = self.cell_at(e.position().toPoint())
         if cell is None:
             return
-        cue = G.cell_cue(self.panel.lst, *cell)
+        cue = self.panel.cell_cue(cell)
         if cue is None:
             self.panel.new_cue_menu(cell, e.globalPosition().toPoint())
-        elif self.panel.editing:
-            self.panel.mw.grid_select(cue, move_playhead=True)
+        elif cue.type == "group" and self.panel.editing and not self.panel.group_id:
+            self.panel.open_group(cue)
+        elif self.panel.editing or self.panel.group_id:
+            self.panel.mw.grid_select(cue, move_playhead=False)
             self.panel.mw.inspector.setFocus()
 
     def leaveEvent(self, _e):
@@ -245,7 +272,10 @@ class GridCanvas(QWidget):
         self.drag_over = None
         paths = [u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()]
         if paths and cell is not None:
-            self.panel.mw.grid_add_files(paths, list(cell))
+            if self.panel.group_id:
+                self.panel.mw.grid_group_add_files(paths, self.panel.group_cue(), self.panel.cell_index(cell))
+            else:
+                self.panel.mw.grid_add_files(paths, list(cell))
         e.acceptProposedAction()
         self.update()
 
@@ -260,10 +290,24 @@ class GridPanel(QWidget):
         self.lst = None
         self.page = 0
         self.editing = False
+        self.group_id = None      # gruppo «aperto»: si vedono e si modificano le sue cue
         self._pages = {}          # pagina mostrata per ogni PANEL
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(4)
+        self.group_bar = QWidget()
+        self.group_bar.setObjectName("groupBar")
+        self.group_bar.setStyleSheet("#groupBar{background:#342c4e;border-radius:5px;}")
+        gb = QHBoxLayout(self.group_bar)
+        gb.setContentsMargins(6, 3, 6, 3)
+        back = QPushButton("◀ Torna alla griglia")
+        back.clicked.connect(self.close_group)
+        gb.addWidget(back)
+        self.group_label = QLabel()
+        self.group_label.setStyleSheet("color:#e8e8ee;font-weight:bold;")
+        gb.addWidget(self.group_label, 1)
+        self.group_bar.setVisible(False)
+        v.addWidget(self.group_bar)
         bar = QHBoxLayout()
         self.tabs = QTabBar()
         self.tabs.setExpanding(False)
@@ -292,14 +336,40 @@ class GridPanel(QWidget):
         for k, t in CLICK_MODES:
             self.click.addItem(t, k)
         sb.addWidget(self.click)
+        sb.addWidget(QLabel("Fade out"))
+        self.fade = QDoubleSpinBox()
+        self.fade.setRange(0, 60)
+        self.fade.setDecimals(1)
+        self.fade.setSingleStep(0.1)
+        self.fade.setSuffix(" s")
+        self.fade.setKeyboardTracking(False)
+        self.fade.setSpecialValueText("nessuno")
+        self.fade.setToolTip("Sfumatura usata dagli stop del GRID: clic su una casella attiva, modalità Solo, "
+                             "STOP del PANEL")
+        sb.addWidget(self.fade)
         self.rows.valueChanged.connect(self._size_changed)
         self.cols.valueChanged.connect(self._size_changed)
         self.click.currentIndexChanged.connect(self._click_changed)
+        self.fade.valueChanged.connect(self._fade_changed)
         bar.addWidget(self.size_box)
-        self.edit_btn = QPushButton("✎ Modifica")
+        # Solo e BLIND sempre a portata di mano (anche con le Opzioni chiuse)
+        self.solo = QCheckBox("SOLO")
+        self.solo.setToolTip("Quando parte una cue (audio, video, immagine, testo o gruppo) le altre attive di "
+                             "questo GRID si fermano con il fade out (impostabile nelle Opzioni). "
+                             "Viene salvato nello show.")
+        self.solo.toggled.connect(self._solo_changed)
+        bar.addWidget(self.solo)
+        self.blind = QCheckBox("BLIND")
+        self.blind.setToolTip("Prova cieca: le cue di questo GRID funzionano (tempi, barre, vumeter, GO) ma non "
+                              "mandano audio né video in uscita. Le cue di controllo (OSC, MIDI, mixer…) agiscono "
+                              "comunque. Non viene salvato nello show.")
+        self.blind.toggled.connect(self._blind_changed)
+        bar.addWidget(self.blind)
+        self.edit_btn = QPushButton("⚙ Opzioni")
         self.edit_btn.setCheckable(True)
-        self.edit_btn.setToolTip("Modifica: clic seleziona (ispettore), trascina per spostare, doppio clic su una "
-                                 "casella vuota per una nuova cue. Senza modifica: clic avvia la cue.")
+        self.edit_btn.setToolTip("Opzioni: righe, colonne, pagine, clic e fade out. Con le Opzioni aperte un "
+                                 "clic seleziona (ispettore), si trascina per spostare, doppio clic su una casella "
+                                 "vuota crea una cue e su un gruppo lo apre. Chiuse: clic avvia la cue.")
         self.edit_btn.toggled.connect(self.set_editing)
         bar.addWidget(self.edit_btn)
         v.addLayout(bar)
@@ -322,11 +392,21 @@ class GridPanel(QWidget):
         lst = self.lst
         if lst is None:
             return
-        self.page = max(0, min(self.page, len(lst.grid_pages) - 1))
+        g = self.group_cue()
+        if self.group_id and g is None:          # gruppo eliminato o spostato altrove
+            self.group_id = None
+        self.group_bar.setVisible(g is not None)
+        if g is not None:
+            from .groups import GROUP_SHORT
+            n = len(self.members())
+            self.group_label.setText(f"◫ Dentro il gruppo «{g.name or g.number}» ({GROUP_SHORT.get(g.group_mode, '')}, "
+                                     f"{n} cue): l'ordine delle caselle è l'ordine di esecuzione")
+        names = self.page_names()
+        self.page = max(0, min(self.page, len(names) - 1))
         self.tabs.blockSignals(True)
         while self.tabs.count():
             self.tabs.removeTab(0)
-        for name in lst.grid_pages:
+        for name in names:
             self.tabs.addTab(name)
         self.tabs.setCurrentIndex(self.page)
         self.tabs.blockSignals(False)
@@ -337,23 +417,110 @@ class GridPanel(QWidget):
         self.click.blockSignals(True)
         self.click.setCurrentIndex(max(0, self.click.findData(lst.grid_click)))
         self.click.blockSignals(False)
+        self.solo.blockSignals(True)
+        self.solo.setChecked(bool(lst.grid_solo))
+        self.solo.blockSignals(False)
+        self._style_solo()
+        self.fade.blockSignals(True)
+        self.fade.setValue(float(lst.grid_fade or 0))
+        self.fade.blockSignals(False)
+        self.add_page_btn.setVisible(self.editing and g is None)
+        self._sync_blind()
         self._update_hint()
         self.canvas.update()
 
+    def _sync_blind(self):
+        on = self.lst is not None and self.lst.id in self.mw.ctrl.blind_lists
+        self.blind.blockSignals(True)
+        self.blind.setChecked(on)
+        self.blind.blockSignals(False)
+        self.blind.setStyleSheet("QCheckBox{background:#b3261e;color:white;font-weight:bold;padding:2px 8px;"
+                                 "border-radius:4px;}" if on else "QCheckBox{font-weight:bold;}")
+
+    def _blind_changed(self, on):
+        if self.lst is not None:
+            self.mw.ctrl.set_blind(self.lst.id, bool(on))
+            self.mw.status(f"BLIND {'attivo' if on else 'spento'} su «{self.lst.name}»"
+                           + (": niente audio né video in uscita da questo GRID" if on else ""))
+        self._sync_blind()
+        self._update_hint()
+        self.canvas.update()
+
+    # ---- caselle: griglia del PANEL oppure cue del gruppo aperto
+    def group_cue(self):
+        if not self.group_id or self.lst is None:
+            return None
+        c = next((x for x in self.lst.cues if x.id == self.group_id), None)
+        return c if (c is not None and c.type == "group") else None
+
+    def members(self):
+        return [c for c in self.lst.cues if c.group == self.group_id] if self.group_id else []
+
+    def cells_per_page(self):
+        return self.lst.grid_rows * self.lst.grid_cols
+
+    def page_names(self):
+        if self.group_cue() is None:
+            return list(self.lst.grid_pages)
+        n = len(self.members()) + 1                # sempre una casella libera per aggiungere
+        pages = max(1, -(-n // self.cells_per_page()))
+        return [f"Pagina {i + 1}" for i in range(pages)]
+
+    def cell_index(self, cell):
+        p, r, c = cell
+        return p * self.cells_per_page() + r * self.lst.grid_cols + c
+
+    def cue_map(self):
+        if self.group_cue() is None:
+            return G.occupied(self.lst)
+        cols, per = self.lst.grid_cols, self.cells_per_page()
+        return {(i // per, (i % per) // cols, i % cols): c for i, c in enumerate(self.members())}
+
+    def cell_cue(self, cell):
+        return self.cue_map().get(tuple(cell))
+
+    def open_group(self, cue):
+        self.group_id = cue.id
+        self._outer_page = self.page
+        self.page = 0
+        self.mw.grid_select(cue, move_playhead=False)
+        self.sync()
+
+    def close_group(self):
+        self.group_id = None
+        self.page = getattr(self, "_outer_page", 0)
+        self.sync()
+
     def _update_hint(self):
-        if self.editing:
-            self.hint.setText("Modifica: clic = seleziona · trascina = sposta (o scambia) · doppio clic su una casella "
-                              "vuota = nuova cue · tasto destro = colore, scorciatoia, elimina · trascina qui dei file "
-                              "audio/video per creare le cue.")
+        if self.lst is not None and self.lst.id in self.mw.ctrl.blind_lists:
+            self.hint.setStyleSheet("color:#ff6b5e;font-size:11px;font-weight:bold;")
+            pre = "BLIND: le cue di questo GRID non mandano audio né video in uscita · "
+        else:
+            self.hint.setStyleSheet("color:#888;font-size:11px;")
+            pre = ""
+        self._hint_prefix = pre
+        self._set_hint_body()
+
+    def _set_hint_body(self):
+        pre = getattr(self, "_hint_prefix", "")
+        if self.group_cue() is not None:
+            self.hint.setText(pre + "Gruppo aperto: clic = seleziona (ispettore) · trascina = cambia l'ordine · doppio clic "
+                              "su una casella vuota = nuova cue nel gruppo · trascina qui dei file = nuove cue nel "
+                              "gruppo · tasto destro = avvia, togli dal gruppo, elimina…")
+        elif self.editing:
+            self.hint.setText(pre + "Opzioni: clic = seleziona · trascina = sposta (o scambia; su un gruppo = entra nel "
+                              "gruppo) · doppio clic su una casella vuota = nuova cue, su un gruppo = lo apre · tasto "
+                              "destro = colore, scorciatoia, elimina · trascina qui dei file audio/video per creare le cue.")
         else:
             mode = dict(CLICK_MODES).get(self.lst.grid_click if self.lst else "toggle", "")
-            self.hint.setText(f"{mode} · tasto destro: colore, scorciatoia da tastiera, nuova cue · "
+            solo = " · Solo" if (self.lst and self.lst.grid_solo) else ""
+            self.hint.setText(f"{pre}{mode}{solo} · tasto destro: colore, scorciatoia, nuova cue, apri gruppo · "
                               "il GO del PANEL avanza casella dopo casella.")
 
     def set_editing(self, on):
         self.editing = bool(on)
         self.size_box.setVisible(self.editing)
-        self.add_page_btn.setVisible(self.editing)
+        self.add_page_btn.setVisible(self.editing and self.group_cue() is None)
         if self.lst is not None:
             self._update_hint()
         self.canvas.update()
@@ -367,6 +534,24 @@ class GridPanel(QWidget):
         if self.lst is None:
             return
         self.mw.grid_resize(self.lst, self.rows.value(), self.cols.value())
+
+    def _solo_changed(self, on):
+        if self.lst is not None:
+            self.lst.grid_solo = bool(on)
+            self.mw.show_data.dirty = True
+            self.mw.status(f"SOLO {'attivo' if on else 'spento'} su «{self.lst.name}»")
+            self._update_hint()
+        self._style_solo()
+
+    def _style_solo(self):
+        on = self.solo.isChecked()
+        self.solo.setStyleSheet("QCheckBox{background:#c98a00;color:black;font-weight:bold;padding:2px 8px;"
+                                "border-radius:4px;}" if on else "QCheckBox{font-weight:bold;}")
+
+    def _fade_changed(self, v):
+        if self.lst is not None:
+            self.lst.grid_fade = float(v)
+            self.mw.show_data.dirty = True
 
     def _click_changed(self, j):
         if self.lst is not None:
@@ -383,7 +568,7 @@ class GridPanel(QWidget):
         self.sync()
 
     def rename_page(self, i):
-        if i < 0:
+        if i < 0 or self.group_cue() is not None:
             return
         name, ok = QInputDialog.getText(self, "Rinomina pagina", "Nome della pagina:", text=self.lst.grid_pages[i])
         if ok and name.strip():
@@ -401,6 +586,8 @@ class GridPanel(QWidget):
             self.sync()
 
     def _page_menu(self, pos):
+        if self.group_cue() is not None:
+            return
         i = self.tabs.tabAt(pos)
         m = QMenu(self)
         m.addAction("Nuova pagina", self.add_page)
@@ -417,24 +604,38 @@ class GridPanel(QWidget):
         m.exec(gpos)
 
     def _fill_new(self, m, cell):
+        g = self.group_cue()
         for t in CUE_TYPES:
-            if t == "groupexit":
+            if t == "groupexit" or (g is not None and t == "group"):     # niente gruppi dentro i gruppi
                 continue
-            m.addAction(f"{TYPE_ICONS.get(t, '')}  {TYPE_LABELS[t]}",
-                        lambda _=False, t=t: self.mw.grid_add_cue(t, list(cell)))
+            if g is not None:
+                m.addAction(f"{TYPE_ICONS.get(t, '')}  {TYPE_LABELS[t]}",
+                            lambda _=False, t=t: self.mw.grid_group_add_cue(t, g, self.cell_index(cell)))
+            else:
+                m.addAction(f"{TYPE_ICONS.get(t, '')}  {TYPE_LABELS[t]}",
+                            lambda _=False, t=t: self.mw.grid_add_cue(t, list(cell)))
 
     def cell_menu(self, cell, cue, gpos):
         mw = self.mw
         m = QMenu(self)
+        g = self.group_cue()
         if cue is None:
-            self._fill_new(m.addMenu("Nuova cue qui"), cell)
+            self._fill_new(m.addMenu("Nuova cue nel gruppo" if g is not None else "Nuova cue qui"), cell)
+            if g is not None:
+                m.addSeparator()
+                m.addAction("◀ Torna alla griglia", self.close_group)
             m.exec(gpos)
             return
         m.addAction(f"{TYPE_ICONS.get(cue.type, '')}  {cue.label()}").setEnabled(False)
         m.addSeparator()
-        m.addAction("▶ Avvia", lambda: mw.ctrl.trigger(cue, cascade=False))
-        m.addAction("■ Ferma", lambda: mw.ctrl.stop_cue(cue.id, float(mw.show_data.settings.get("stop_fade", 0.3))))
-        m.addAction("Imposta come prossima del GO", lambda: mw.grid_select(cue, move_playhead=True))
+        if cue.type == "group" and g is None:
+            m.addAction("◫ Apri il gruppo (aggiungi e modifica le sue cue)", lambda: self.open_group(cue))
+            m.addSeparator()
+        m.addAction("▶ Avvia" + (" (solo questa cue)" if g is not None else ""),
+                    lambda: mw.ctrl.trigger(cue, cascade=False))
+        m.addAction("■ Ferma", lambda: mw.ctrl.stop_cue(cue.id, float(self.lst.grid_fade or 0)))
+        if g is None:
+            m.addAction("Imposta come prossima del GO", lambda: mw.grid_select(cue, move_playhead=True))
         m.addSeparator()
         cm = m.addMenu("Colore")
         for col in G.PALETTE:
@@ -448,7 +649,12 @@ class GridPanel(QWidget):
         a.setEnabled(bool(cue.hotkey))
         m.addSeparator()
         m.addAction("Modifica nell'ispettore", lambda: mw.grid_select(cue, move_playhead=False))
+        if g is not None:
+            m.addAction("Togli dal gruppo (diventa una casella)", lambda: mw.grid_ungroup_member(cue))
         m.addAction("Elimina cue…", lambda: mw.grid_delete(cue))
+        if g is not None:
+            m.addSeparator()
+            m.addAction("◀ Torna alla griglia", self.close_group)
         m.exec(gpos)
 
     def pick_color(self, cue):

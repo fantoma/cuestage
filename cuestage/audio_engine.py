@@ -23,6 +23,37 @@ BUFFER_LABELS = {"bassa": "Bassa latenza (512 · ~50 ms) — solo per computer s
                  "massima": "Massima sicurezza (4096 · ~500 ms)"}
 
 
+# preascolto: scheda e 2 canali (cuffia del tecnico) a cui vanno le cue con «Preascolto», al posto delle uscite
+PREVIEW_DEFAULTS = {"enabled": False, "device": "", "ch_l": 1, "ch_r": 2, "db": 0.0}
+
+
+def preview_settings(settings):
+    d = dict(PREVIEW_DEFAULTS)
+    d.update((settings or {}).get("preview") or {})
+    d["enabled"] = bool(d.get("enabled"))
+    d["device"] = d.get("device") or ""
+    d["ch_l"] = max(1, int(d.get("ch_l") or 1))
+    d["ch_r"] = max(1, int(d.get("ch_r") or 2))
+    d["db"] = max(-60.0, min(12.0, float(d.get("db") or 0.0)))
+    return d
+
+
+def preview_matrix(n_src, n_out, ch_l, ch_r):
+    """Matrice sorgente × uscite del preascolto: tutto in stereo sui canali ch_l / ch_r (da 1)."""
+    m = np.zeros((max(1, n_src), max(0, n_out)), np.float32)
+    if n_out <= 0:
+        return m
+    left = min(ch_l, n_out) - 1
+    right = min(ch_r, n_out) - 1
+    if n_src <= 1:
+        m[0, left] = m[0, right] = 0.7071 if left != right else 1.0
+        return m
+    k = max(1.0, n_src / 2.0)
+    for i in range(n_src):
+        m[i, left if i % 2 == 0 else right] = 1.0 / np.sqrt(k)
+    return m
+
+
 def silence_alsa_messages():
     """Le librerie ALSA scrivono «underrun occurred» sul terminale a ogni buco: li conta CueStage
     (barra di stato) e il terminale resta leggibile."""
@@ -157,6 +188,51 @@ def _extra_settings(dev):
         return {}
 
 
+def alsa_pcm_owner(card, dev):
+    """Chi tiene aperta l'uscita ALSA hw:card,dev (nome del programma), "" se è libera, None se non si sa."""
+    import os
+    base = f"/proc/asound/card{card}/pcm{dev}p"
+    if not os.path.isdir(base):
+        return None
+    try:
+        with open(f"{base}/sub0/status", encoding="utf-8", errors="replace") as f:
+            st = f.read()
+    except OSError:
+        return None
+    if st.strip() == "closed":
+        return ""
+    m = re.search(r"owner_pid\s*:\s*(\d+)", st)
+    if not m:
+        return "un altro programma"
+    try:
+        with open(f"/proc/{m.group(1)}/comm", encoding="utf-8") as f:
+            return f"{f.read().strip()} (pid {m.group(1)})"
+    except OSError:
+        return f"pid {m.group(1)}"
+
+
+def busy_devices():
+    """Schede hardware ALSA con uscite che PortAudio non può usare perché un altro programma (di solito
+    PipeWire/PulseAudio) le tiene aperte: [{name, owner}] — PortAudio le elenca con 0 uscite."""
+    if sd is None or IS_WIN:
+        return []
+    out = []
+    try:
+        apis = sd.query_hostapis()
+        for d in sd.query_devices():
+            if d.get("max_output_channels", 0) > 0 or apis[d["hostapi"]]["name"] != "ALSA":
+                continue
+            m = re.search(r"\(hw:(\d+),(\d+)\)", d["name"])
+            if not m:
+                continue
+            owner = alsa_pcm_owner(m.group(1), m.group(2))
+            if owner:
+                out.append({"name": _base_name(d["name"]), "owner": owner})
+    except Exception:
+        return []
+    return out
+
+
 def device_label(dev):
     return f"{dev['name']}  [{dev['hostapi']}]"
 
@@ -180,6 +256,8 @@ class AudioEngine:
         self.buffer = "normale"
         self.lock = threading.Lock()
         self.master = 1.0
+        self.preview = dict(PREVIEW_DEFAULTS)   # impostazioni del preascolto
+        self.preview_gain = 1.0                 # volume del preascolto (lineare)
         self.paused_all = False
         self.outputs = {}            # chiave scheda -> Output
         self.default_id = None       # scheda predefinita del progetto (None = sistema)
@@ -188,6 +266,9 @@ class AudioEngine:
         self.running = False
         self.messages = []           # avvisi per l'interfaccia
         self.status = "spento"
+        from .ducking import Ducker
+        self.duck = Ducker()         # ingresso del ducking (microfono → riduzione delle cue / del master)
+        self._mduck = {}             # chiave uscita -> ultimo guadagno del Master ducking (rampa senza scalini)
 
     # ------------------------------------------------------------ compatibilità
     @property
@@ -222,10 +303,15 @@ class AudioEngine:
             o = self.ensure_output(v.out_req)
             v.out_key = o.key
             v.fit_matrix(o.channels)
+        if self.duck.wanted():
+            self.duck.open()
+            if self.duck.error:
+                self.messages.append(f"Ducking: {self.duck.error}")
         self._update_status()
 
     def stop(self):
         self.running = False
+        self.duck.close()
         for o in {id(x): x for x in self.outputs.values()}.values():
             if o.stream is not None:
                 try:
@@ -277,8 +363,13 @@ class AudioEngine:
         else:
             dev = self.find_device(key)
             if dev is None:
-                self.messages.append(f"Scheda audio «{key.split('|', 1)[-1]}» non trovata: "
-                                     "uso la scheda predefinita")
+                name = key.split('|', 1)[-1]
+                busy = [b for b in busy_devices() if b["name"] == name]
+                if busy:
+                    self.messages.append(f"Scheda audio «{name}» occupata da {busy[0]['owner']}: uso la scheda "
+                                         "predefinita (chiudi quel programma o disattiva la scheda in PipeWire)")
+                else:
+                    self.messages.append(f"Scheda audio «{name}» non trovata: uso la scheda predefinita")
                 if dev_id and dev_id != self.default_id:
                     o = self.ensure_output(None)
                 else:
@@ -468,6 +559,7 @@ class AudioEngine:
     def _callback(self, o, outdata, frames):
         C = o.channels
         out = np.zeros((frames, C), np.float32)
+        pout = None                       # preascolto: fuori dal master e dal Master ducking
         if not self.paused_all:
             with self.lock:
                 voices = [v for v in self.voices.values() if v.out_key == o.key]
@@ -475,10 +567,37 @@ class AudioEngine:
                 if v.paused or v.done:
                     continue
                 try:
-                    self._mix_voice(v, out, frames, C)
+                    if v.pfl:
+                        if pout is None:
+                            pout = np.zeros((frames, C), np.float32)
+                        self._mix_voice(v, pout, frames, C)
+                    else:
+                        self._mix_voice(v, out, frames, C)
                 except Exception:
                     v.done = True
+        # ingresso del ducking dopo il gate, nella cuffia del preascolto
+        if self.preview.get("enabled") and o.key == self._key(self.preview.get("device") or None):
+            mic = self.duck.read_preview(frames)
+            if mic is not None and C > 0:
+                if pout is None:
+                    pout = np.zeros((frames, C), np.float32)
+                left = min(int(self.preview.get("ch_l", 1)), C) - 1
+                right = min(int(self.preview.get("ch_r", 2)), C) - 1
+                pout[:, left] += mic
+                if right != left:
+                    pout[:, right] += mic
         out *= self.master
+        # Master ducking: rampa dal guadagno del blocco precedente, così non ci sono scalini
+        g1 = self.duck.master_gain()
+        g0 = self._mduck.get(o.key, 1.0)
+        if g0 != 1.0 or g1 != 1.0:
+            if frames and abs(g1 - g0) > 1e-5:
+                out *= np.linspace(g0, g1, frames, dtype=np.float32)[:, None]
+            else:
+                out *= g1
+        self._mduck[o.key] = g1
+        if pout is not None:
+            out += pout * self.preview_gain
         np.clip(out, -1.0, 1.0, out=out)
         if frames:
             pk = np.abs(out).max(axis=0)
@@ -535,6 +654,14 @@ class AudioEngine:
                     v.done = True
         else:
             g *= v.env
+        # ducking della cue: rampa dal guadagno del blocco precedente
+        if v.duck_db > 0 or v.duck_g != 1.0:
+            d1 = self.duck.gain(v.duck_db)
+            if abs(d1 - v.duck_g) > 1e-5:
+                g *= np.linspace(v.duck_g, d1, filled, dtype=np.float32)
+            else:
+                g *= d1
+            v.duck_g = d1
         src = v.data[idx]
         if src.dtype == np.int16:
             src = src.astype(np.float32)
@@ -546,9 +673,12 @@ class AudioEngine:
             m = v.fit_matrix(C)
             prev = None
         # vumeter della voce: picco di ogni canale sorgente × guadagno più alto verso le uscite × master
-        pk = np.abs(src).max(axis=0) * (m.max(axis=1) if m.size else 0.0) * self.master
+        pk = np.abs(src).max(axis=0) * (m.max(axis=1) if m.size else 0.0) * \
+            (self.preview_gain if v.pfl else self.master)
         v.meter = np.maximum(pk.astype(np.float32), v.meter * 0.8) if v.meter.shape == pk.shape else pk
-        if prev is not None and prev.shape == m.shape:
+        if getattr(v, "blind", False):
+            pass                         # BLIND: vumeter sì, uscita no
+        elif prev is not None and prev.shape == m.shape:
             # cambio di matrice (keyframe, modifica dal vivo): rampa lungo il blocco, senza scalini
             v.mtx_prev = None
             a = src @ prev
@@ -593,6 +723,9 @@ class Voice:
             self.ramp = None  # [g0, g1, fatto, durata, forma, stop_alla_fine]
         self.paused = False
         self.done = False
+        self.duck_db = 0.0     # riduzione (dB) quando il ducking interviene; la imposta l'istanza
+        self.duck_g = 1.0      # guadagno di ducking del blocco precedente
+        self.pfl = False       # preascolto: va solo alla cuffia, fuori dal master
         # routing
         self.gains_fn = gains_fn or (lambda n_out: build_gains(None, None, self.n_src, n_out))
         self.out_req = ""

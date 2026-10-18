@@ -136,6 +136,8 @@ class ControlTabsMixin:
             ec.currentIndexChanged.connect(lambda j: (setattr(cue, "group_exit", ec.itemData(j)), self._emit()))
             f.addRow("All'uscita", ec)
         f.addRow(self._tap_box(cue))
+        f.addRow("Ducking", self._duck_row())
+        f.addRow("Preascolto", self._pfl_row())
         sh = self.show_fn()
         lst, i = sh.list_of(cue.id)
         n = (block_end(lst.cues, i) - i - 1) if lst is not None else 0
@@ -343,6 +345,9 @@ class ControlTabsMixin:
         box = QWidget()
         v = QVBoxLayout(box)
         v.setContentsMargins(0, 0, 0, 0)
+        main_cb = QCheckBox(f"{sh.main.name}   (lista principale)")
+        main_cb.setChecked(sh.main.id in (cue.sp_panels or []))
+        v.addWidget(main_cb)
         every = QCheckBox("Tutti i PANEL (anche quelli creati in seguito)")
         every.setChecked("*" in (cue.sp_panels or []))
         v.addWidget(every)
@@ -362,20 +367,24 @@ class ControlTabsMixin:
                 cb.setEnabled(not every.isChecked())
 
         def save(*_a):
+            sel = [sh.main.id] if main_cb.isChecked() else []
             if every.isChecked():
-                cue.sp_panels = ["*"]
+                sel.append("*")
             else:
-                cue.sp_panels = [pid for cb, pid in checks if cb.isChecked()]
+                sel += [pid for cb, pid in checks if cb.isChecked()]
+            cue.sp_panels = sel
             refresh()
             self._emit()
+        main_cb.toggled.connect(save)
         every.toggled.connect(save)
         for cb, _ in checks:
             cb.toggled.connect(save)
         refresh()
-        f.addRow("PANEL da fermare", box)
+        f.addRow("Liste da fermare", box)
         f.addRow("Fade", self._dspin("stop_fade", 0, 600, 0.1, 2, special="nessuno (stop immediato)"))
-        lab = QLabel("Ferma le cue in esecuzione (e i pre-wait) dei PANEL scelti, sfumandole nel tempo indicato. "
-                     "La MAIN e gli altri PANEL continuano. Con «Tutti» vale anche per i PANEL aggiunti dopo.")
+        lab = QLabel("Ferma le cue in esecuzione (e i pre-wait) delle liste scelte, sfumandole nel tempo indicato; "
+                     "le altre liste continuano. Con «Tutti i PANEL» vale anche per i PANEL aggiunti dopo; la MAIN "
+                     "si sceglie a parte. La cue «Stop panel» non ferma sé stessa.")
         lab.setWordWrap(True)
         lab.setStyleSheet("color:#999;")
         f.addRow(lab)

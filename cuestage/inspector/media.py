@@ -20,6 +20,84 @@ from .presets import PresetBar
 
 
 class MediaTabsMixin:
+    def _pfl_row(self):
+        """Preascolto: la cue (o il gruppo) suona solo sulla cuffia del preascolto."""
+        from PySide6.QtWidgets import QHBoxLayout, QWidget
+        from ..audio_engine import preview_settings
+        cue = self.cue
+        w = QWidget()
+        h = QHBoxLayout(w)
+        h.setContentsMargins(0, 0, 0, 0)
+        cb = self._check("pfl", "manda l'audio solo al preascolto" +
+                         (" (tutte le cue del gruppo)" if cue.type == "group" else ""))
+        h.addWidget(cb)
+        pv = preview_settings(self.show_fn().settings)
+        notes = []
+        if not pv["enabled"]:
+            notes.append("preascolto non configurato (Impostazioni › Audio, OSC e MIDI)")
+        else:
+            notes.append(f"{(pv['device'] or 'scheda predefinita').split('|', 1)[-1]}, canali "
+                         f"{pv['ch_l']}–{pv['ch_r']}")
+        if cue.type == "video" and cue.video_audio == "system":
+            notes.append("con il lettore di sistema in preascolto il video è muto")
+        sh = self.show_fn()
+        g = sh.by_id(cue.group) if cue.group else None
+        seen = set()
+        while g is not None and g.id not in seen:
+            seen.add(g.id)
+            if g.pfl:
+                notes.append(f"già in preascolto dal gruppo «{g.label()}»")
+                break
+            g = sh.by_id(g.group) if g.group else None
+        lab = QLabel(" · ".join(notes))
+        lab.setStyleSheet("color:#999;")
+        lab.setWordWrap(True)
+        h.addWidget(lab, 1)
+        cb.setToolTip("L'audio della cue non va alle uscite dello spettacolo ma solo alla scheda e ai 2 canali del "
+                      "preascolto, con il loro volume (accanto al volume master). Si può cambiare anche mentre "
+                      "la cue suona.")
+        return w
+
+    def _duck_row(self):
+        """Riduzione del ducking (dB) di questa cue o gruppo, con lo stato del ducking dello show."""
+        from PySide6.QtWidgets import QHBoxLayout, QPushButton, QWidget
+        from ..ducking import duck_settings
+        cue = self.cue
+        w = QWidget()
+        h = QHBoxLayout(w)
+        h.setContentsMargins(0, 0, 0, 0)
+        sp = self._dspin("duck_db", 0, 60, 1, 1, " dB", special="nessuno")
+        sp.setToolTip("Di quanti dB si abbassa questa cue quando l'ingresso del ducking supera la soglia "
+                      "(Impostazioni › Ducking…). " + ("Vale per tutte le cue del gruppo che non hanno un "
+                                                      "ducking proprio." if cue.type == "group" else
+                                                      "Se è «nessuno» vale quello del gruppo che la contiene."))
+        h.addWidget(sp)
+        note = QLabel()
+        note.setStyleSheet("color:#999;")
+        note.setWordWrap(True)
+        sh = self.show_fn()
+        cfg = duck_settings(sh.settings)
+        parts = []
+        g = sh.by_id(cue.group) if cue.group else None
+        seen = set()
+        while g is not None and g.id not in seen:
+            seen.add(g.id)
+            if float(g.duck_db or 0) > 0:
+                parts.append(f"gruppo «{g.label()}»: −{g.duck_db:.1f} dB" +
+                             (" (vale se qui è «nessuno»)" if float(cue.duck_db or 0) > 0 else " (in uso)"))
+                break
+            g = sh.by_id(g.group) if g.group else None
+        if not cfg["enabled"]:
+            parts.append("ducking spento nelle impostazioni")
+        note.setText(" · ".join(parts))
+        h.addWidget(note, 1)
+        b = QPushButton("Impostazioni…")
+        b.clicked.connect(lambda: self.duck_dialog_fn() if self.duck_dialog_fn else None)
+        h.addWidget(b)
+        if self.duck_dialog_fn is None:
+            b.hide()
+        return w
+
     def _audio_out_section(self, kbar, info):
         """Scheda audio della cue e matrice canali sorgente × uscite della scheda, al tempo del
         cursore della timeline dei keyframe (kbar)."""
@@ -48,6 +126,8 @@ class MediaTabsMixin:
             QTimer.singleShot(0, self.rebuild)   # la matrice dipende dai canali della scheda
         dev.currentIndexChanged.connect(dev_changed)
         f.addRow("Scheda audio", dev)
+        f.addRow("Ducking", self._duck_row())
+        f.addRow("Preascolto", self._pfl_row())
         engine_route = True
         if cue.type == "video":
             route = QComboBox()

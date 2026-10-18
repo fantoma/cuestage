@@ -65,7 +65,9 @@ class GridMixin:
         inst = ctrl.instances.get(cue.id)
         active = (inst is not None and not inst.done) or any(p[1].id == cue.id for p in ctrl.pending)
         if mode == "toggle" and active:
-            ctrl.stop_cue(cue.id, float(self.show_data.settings.get("stop_fade", 0.3)))
+            fade = float(lst.grid_fade) if (lst is not None and lst.is_grid) else \
+                float(self.show_data.settings.get("stop_fade", 0.3))
+            ctrl.stop_cue(cue.id, fade)
             self.status(f"■ {cue.label()}")
             return
         if mode == "start" and active:
@@ -95,6 +97,66 @@ class GridMixin:
     def grid_add_files(self, paths, cell):
         self._grid_pending_cell = list(cell)
         self._files_dropped(paths, len(self.show_data.cues))
+        self._grid_sync(force=True)
+
+    # ---- gruppo aperto nel GRID: le sue cue
+    def _member_row(self, group, index):
+        """Riga della lista in cui inserire una cue alla posizione «index» tra i membri del gruppo."""
+        from ..groups import block_end
+        lst = self.show_data.current
+        hi = lst.index_of(group.id)
+        members = [i for i in range(hi + 1, block_end(lst.cues, hi))]
+        return members[index] if 0 <= index < len(members) else block_end(lst.cues, hi)
+
+    def grid_group_add_cue(self, ctype, group, index):
+        self.add_cue(ctype, row=self._member_row(group, index), group=group.id)
+        self._grid_sync(force=True)
+
+    def grid_group_add_files(self, paths, group, index):
+        self._files_dropped(paths, self._member_row(group, index), group=group.id)
+        self._grid_sync(force=True)
+
+    def grid_group_move(self, cue, index):
+        """Cambia l'ordine di una cue dentro il suo gruppo (= ordine di esecuzione)."""
+        lst = self.show_data.current
+        g = self.show_data.by_id(cue.group)
+        if g is None:
+            return
+        members = [c for c in lst.cues if c.group == g.id]
+        if cue not in members:
+            return
+        index = max(0, min(index, len(members) - 1))
+        if members.index(cue) == index:
+            return
+        members.remove(cue)
+        members.insert(index, cue)
+        hi = lst.index_of(g.id)
+        self.model.beginResetModel()
+        rest = [c for c in lst.cues if c.group != g.id]
+        hi = rest.index(g)
+        lst.cues[:] = rest[:hi + 1] + members + rest[hi + 1:]
+        self.model.endResetModel()
+        self._structure_changed(select=[lst.index_of(cue.id)])
+        self._grid_sync(force=True)
+
+    def grid_add_to_group(self, cue, group):
+        """Una casella trascinata su un gruppo diventa l'ultima cue del gruppo."""
+        from ..groups import block_end
+        lst = self.show_data.current
+        self.model.beginResetModel()
+        lst.cues.remove(cue)
+        cue.group = group.id
+        cue.grid_pos = []
+        hi = lst.index_of(group.id)
+        lst.cues.insert(block_end(lst.cues, hi), cue)
+        self.model.endResetModel()
+        self._structure_changed(select=[lst.index_of(cue.id)])
+        self._grid_sync(force=True)
+        self.status(f"«{cue.label()}» ora è nel gruppo «{group.label()}»")
+
+    def grid_ungroup_member(self, cue):
+        self.grid_select(cue, move_playhead=False)
+        self.remove_from_group()
         self._grid_sync(force=True)
 
     def grid_set_color(self, cue, color):

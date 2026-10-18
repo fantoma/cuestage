@@ -72,7 +72,8 @@ class EditingMixin:
         self._structure_changed()
         self._select_row(row)
 
-    def add_cue(self, ctype):
+    def add_cue(self, ctype, row=None, group=None):
+        """Nuova cue (dopo la selezione). row/group: posizione e gruppo imposti (GRID, gruppo aperto)."""
         if ctype in ("audio", "video", "image"):
             from ..model import MEDIA_EXT
             pat = " ".join("*" + e for e in sorted(MEDIA_EXT[ctype]))
@@ -99,7 +100,10 @@ class EditingMixin:
             if ctype == "wait":
                 c.duration = 5.0
             cues = [c]
-        self._insert_cues(cues)
+        if group is not None:
+            for c in cues:
+                c.group = group
+        self._insert_cues(cues, row)
 
     def _cue_for_file(self, path, ctype=None):
         ctype = ctype or type_for_file(path) or "audio"
@@ -111,7 +115,7 @@ class EditingMixin:
         self.show_data.cues.remove(c)
         return c
 
-    def _files_dropped(self, paths, row):
+    def _files_dropped(self, paths, row, group=None):
         cues = []
         for p in paths:
             if os.path.isdir(p):
@@ -132,6 +136,8 @@ class EditingMixin:
             base = len(self.show_data.cues) + 1
         for i, c in enumerate(made):
             c.number = str(base + i)
+            if group is not None:
+                c.group = group
         if made:
             self._insert_cues(made, row)
         else:
@@ -285,3 +291,5 @@ class EditingMixin:
         for c in self.show_data.all_cues():
             if c.type in ("audio", "video") and c.audio_device:
                 self.audio.ensure_output(c.audio_device)
+        if self.audio.preview.get("enabled"):
+            self.audio.ensure_output(self.audio.preview.get("device") or None)

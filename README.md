@@ -141,14 +141,14 @@ Un PANEL può mostrare le sue cue come **caselle** da cliccare, come un campiona
 + PANEL, oppure tasto destro su un PANEL › «Mostra come griglia» (e «Mostra come lista» per tornare indietro:
 le cue restano le stesse).
 
-- **Dimensioni** in caselle (righe × colonne, fino a 16 × 16) e **più pagine**: premi **✎ Modifica** per
+- **Dimensioni** in caselle (righe × colonne, fino a 16 × 16) e **più pagine**: premi **⚙ Opzioni** per
   vedere «+ Pagina», righe, colonne e il comportamento del clic. Doppio clic su una pagina per rinominarla;
   tasto destro per eliminarla (solo se è vuota). Se riduci la griglia, le cue che non ci stanno passano nelle
   prime caselle libere (anche su una pagina nuova): nessuna va persa.
 - **Clic** su una casella: *avvia / ferma* (predefinito), *riavvia dall'inizio* oppure *avvia (se è già attiva
   non fa nulla)*. La casella attiva ha il bordo verde, la barra di avanzamento e il tempo che manca; in
   pre-wait il bordo è ambra.
-- **Modifica**: clic = seleziona (ispettore) · trascina = sposta (su una casella occupata le due cue si
+- **⚙ Opzioni** aperte: clic = seleziona (ispettore) · trascina = sposta (su una casella occupata le due cue si
   scambiano) · doppio clic su una casella vuota = nuova cue · trascina file audio/video dal file manager su
   una casella = nuove cue a partire da lì.
 - **Colore** di ogni casella: tasto destro › Colore (12 colori pronti o «Altro colore…»), oppure dalla scheda
@@ -160,13 +160,35 @@ le cue restano le stesse).
   cue, passa alla nuova. Il tasto compare in alto a destra nella casella.
 - **GO locale**: anche il GRID ha GO / STOP del PANEL; il GO avanza casella dopo casella (pagina, riga,
   colonna) e la prossima casella ha il bordo tratteggiato giallo.
-- I gruppi occupano una casella sola (clic = avvia il gruppo). Per modificarne i membri, «Mostra come lista».
+- **SOLO** (sempre in vista nella barra, accanto a BLIND; arancione quando è attivo): quando parte una cue
+  audio, video, immagine, testo o un gruppo, le altre attive del GRID si fermano. Le cue di controllo (OSC,
+  MIDI, mixer, fade…) non fermano nulla. Viene salvato nello show.
+- **Fade out** (in ⚙ Opzioni): la sfumatura usata da tutti gli stop del GRID: clic su una casella attiva,
+  modalità Solo, STOP del PANEL.
+- **BLIND** (sempre in vista nella barra): prova cieca. Le cue del GRID funzionano in tutto (tempi, barre,
+  vumeter delle cue, GO, Solo, gruppi) ma **non mandano audio né video in uscita**; le cue di controllo (OSC,
+  MIDI, mixer…) agiscono comunque. Le caselle in BLIND hanno l'etichetta rossa «BLIND». Non viene salvato nello
+  show (all'apertura è sempre spento) e in ridondanza vale anche per le secondarie.
+- **Gruppi**: un gruppo occupa una casella (clic = avvia il gruppo). Per vederne e modificarne le cue: tasto
+  destro › «Apri il gruppo», oppure doppio clic sulla casella con le Opzioni aperte. Nel gruppo aperto ogni cue
+  è una casella nell'ordine di esecuzione: doppio clic su una casella vuota (o tasto destro) = nuova cue nel
+  gruppo, trascina per cambiare l'ordine, trascina dei file per aggiungerli, tasto destro › «Togli dal gruppo»;
+  «◀ Torna alla griglia» per uscire. Per mettere una cue già esistente in un gruppo, trascina la sua casella
+  sulla casella del gruppo (con le Opzioni aperte).
+
+## Aggiungere cue e gruppi nelle liste
+
+- **Doppio clic nello spazio vuoto** sotto le cue (MAIN o PANEL a lista): menu per aggiungere una cue in fondo.
+  Il tasto destro ha sempre «Nuova cue» (dopo la selezione, o in fondo se si clicca nello spazio vuoto).
+- **Più cue in un gruppo**: selezionale (Ctrl/Maiusc + clic) e trascinale **sopra la riga del gruppo**: entrano
+  in fondo al gruppo. Rilasciate tra due cue del gruppo entrano in quel punto.
 
 ## Cue «Stop panel»
 
-Ferma le cue in esecuzione (e i pre-wait) dei PANEL scelti, con un **fade** facoltativo; la MAIN e gli altri
-PANEL continuano. Nella scheda dell'ispettore si scelgono uno o più PANEL, oppure **«Tutti i PANEL»**, che vale
-anche per i PANEL creati in seguito.
+Ferma le cue in esecuzione (e i pre-wait) delle liste scelte, con un **fade** facoltativo; le altre liste
+continuano. Nella scheda dell'ispettore si sceglie la **MAIN** e uno o più PANEL (anche GRID), oppure **«Tutti i
+PANEL»**, che vale anche per i PANEL creati in seguito (la MAIN si aggiunge a parte). La cue non ferma sé
+stessa: può stare in qualunque lista, anche in un GRID come casella «ferma tutto».
 
 ## Cue «Testo» (sottotitoli, sopratitoli, didascalie)
 
@@ -388,6 +410,10 @@ In **Impostazioni** si sceglie la scheda predefinita del progetto e i **canali u
 Se una scheda scelta non è collegata, la cue esce dalla predefinita e un avviso lo segnala.
 
 **Con PipeWire (Ubuntu predefinito)**: un dispositivo `hw:` usato da PipeWire può risultare occupato.
+In quel caso PortAudio lo vede senza uscite: CueStage lo mostra comunque nell'elenco, in grigio, come
+«‹scheda› — occupata da ‹programma›» (di solito `pipewire` o `wireplumber`). Per usarlo direttamente
+(tutti i canali, latenza minima) in pavucontrol › Configurazione metti il profilo della scheda su «Spento»,
+poi «Rileggi le schede collegate»; per vedere chi lo tiene aperto: `fuser -v /dev/snd/pcmC1D0p`.
 Due strade: scegliere in Impostazioni › Audio di Ubuntu il profilo **Pro Audio** della scheda e usare il
 dispositivo `pipewire` impostandone i canali (es. 8); oppure chiudere le altre applicazioni audio.
 
@@ -412,6 +438,55 @@ Routing, Altro): interruttori, menu e cursori agiscono subito; il phantom 48V ch
 Mixer con azione **«Imposta un controllo della scheda»** porta un controllo a un valore (es. ingresso 1 su
 Inst, speaker switching su Alt, direct monitor spento). Serve `amixer` (pacchetto **alsa-utils**). I nomi
 dei controlli dipendono dal modello e dalla versione del kernel: CueStage li legge dalla scheda.
+
+### Ducking (microfono che abbassa la musica)
+
+Un ingresso audio (es. il microfono dello speaker) abbassa automaticamente le cue quando si parla.
+
+- **Impostazioni › Ducking…** (anche col tasto destro sul tasto «Duck» o con «Impostazioni…» nell'ispettore):
+  - **scheda in ingresso** e **canale**;
+  - **vumeter** dell'ingresso con la soglia (linea bianca), il LED del gate e quanta riduzione è applicata;
+  - **gate**: solo la **soglia** (dBFS); sopra la soglia il ducking interviene;
+  - **attacco** (0–1000 ms): il tempo per arrivare alla riduzione piena;
+  - **hold** (0–5000 ms, di serie 1000): quanto la riduzione resta piena dopo che il segnale è sceso sotto la
+    soglia, così il volume non risale tra una parola e l'altra;
+  - **rilascio** (0–5000 ms): il tempo per tornare al volume pieno, dopo l'hold;
+  - **Master ducking**: riduzione dell'uscita master (di serie 0 dB = nessuna);
+  - **«Manda l'ingresso, dopo il gate, al preascolto»**: in cuffia si sente il microfono solo quando supera la
+    soglia (e durante l'hold), con scheda, canali e volume del preascolto; utile per regolare la soglia. Il
+    ritardo è di qualche decina di millisecondi.
+  Le modifiche valgono subito (si vede e si sente l'effetto); «Annulla» rimette i valori di prima. Con la
+  finestra aperta l'ingresso è in ascolto anche se il ducking è spento, per regolare la soglia.
+- **Ducking della cue**: nell'ispettore delle cue audio e video (sezione «Uscita audio»), i dB di cui si
+  abbassa la cue quando il ducking interviene («nessuno» = 0). Su un **gruppo** vale per tutte le sue cue che
+  non hanno un ducking proprio. Funziona solo con «Attiva il ducking delle cue» acceso.
+- **Tasto «Duck»** accanto al volume master: accende il Master ducking (abbassa tutta l'uscita, audio e audio
+  dei video, della riduzione impostata). Grigio = spento, verde = acceso e in ascolto, rosso = sta
+  intervenendo, ambra = acceso ma senza effetto (riduzione a 0 dB o ingresso non disponibile).
+- **Icona del microfono** nella barra di avanzamento (lista, cue attive, caselle del GRID) delle cue con il
+  ducking: **verde** = pronto, **rossa** = sta abbassando la cue, grigia = ducking spento nelle impostazioni.
+- Cue e master si sommano: una cue con 10 dB di ducking e il Master ducking a 6 dB scende di 16 dB.
+- **Fader del mixer agganciati al ducking**: cue Mixer, azione «Ducking: aggancia i fader alla curva del
+  ducking» (mixer digitali e schede audio con fader). Si scelgono sezione e canali, il **livello normale** e la
+  **riduzione** in dB: finché la cue è attiva i fader stanno al livello normale e scendono della riduzione quando
+  il ducking interviene, seguendo attacco, hold e rilascio (al massimo 25 aggiornamenti al secondo). STOP
+  sgancia i fader e li riporta al livello normale. Basta che l'ingresso del ducking sia configurato: non serve
+  «Attiva il ducking delle cue».
+- In ridondanza ogni istanza ascolta il proprio ingresso.
+
+### Preascolto (cuffia)
+
+- **Impostazioni › Audio, OSC e MIDI › Preascolto**: «Attiva il preascolto», la **scheda** e i **2 canali**
+  (sinistro e destro) della cuffia del tecnico. Può essere un'altra scheda o due canali liberi della stessa
+  («Scheda predefinita del progetto» = quella scelta in alto come scheda predefinita).
+- **Ispettore** delle cue audio e video (sezione «Uscita audio») e dei **gruppi**: «Preascolto». La cue non va
+  più alle uscite dello spettacolo ma solo alla cuffia, in stereo (mono su entrambi i lati; più canali
+  alternati sinistra/destra). Su un gruppo vale per tutte le sue cue. Si può accendere e spegnere anche mentre
+  la cue suona.
+- Accanto al volume master compare il **volume del preascolto** (doppio clic = 0 dB): il volume master e il
+  Master ducking non toccano il preascolto.
+- Le cue in preascolto hanno l'etichetta blu **PFL** nella barra di avanzamento.
+- Il video col «Lettore di sistema» non può andare alla cuffia: in preascolto il suo audio tace.
 
 ### Buffer audio e «underrun»
 Un *underrun* è un piccolo buco nell'audio: la scheda ha chiesto il blocco successivo prima che il computer

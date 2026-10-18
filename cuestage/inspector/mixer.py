@@ -422,6 +422,8 @@ class MixerTabMixin:
         acts = []
         if cls.sections(conf):
             acts += [("mute", "Mute: forza acceso / spento canale per canale"), ("fader", "Fader: porta al livello")]
+            if any("fader" in caps for _k, _n, caps in cls.sections(conf)):
+                acts.append(("duck", "Ducking: aggancia i fader alla curva del ducking"))
         if cls.CONTROLS:
             acts.append(("control", "Imposta un controllo della scheda (interruttore, menu, volume)"))
         for code, text in acts:
@@ -438,7 +440,7 @@ class MixerTabMixin:
         f.addRow("Azione", ac)
         if cue.mix_action == "control":
             return self._mixer_control_tab(w, f, cls, conf, mm)
-        if cue.mix_action != "fader":
+        if cue.mix_action not in ("fader", "duck"):
             return self._mixer_mute_tab(w, f, cls, conf, mm)
         need = "fader"
         secs = [(k, n) for k, n, caps in cls.sections(conf) if need in caps]
@@ -469,7 +471,7 @@ class MixerTabMixin:
         res = QLabel()
         res.setWordWrap(True)
         res.setStyleSheet("color:#999;")
-        if cue.mix_action == "fader":
+        if cue.mix_action in ("fader", "duck"):
             lv = QDoubleSpinBox()
             lv.setRange(-90.0, 10.0)
             lv.setDecimals(1)
@@ -483,8 +485,22 @@ class MixerTabMixin:
             rb = QPushButton("⟲ Leggi dal mixer")
             rb.setToolTip("Registra nella cue il livello attuale del fader sul mixer (primo canale indicato)")
             row.addWidget(rb)
-            f.addRow("Livello", row)
-            f.addRow("Fade", self._dspin("mix_fade", 0, 600, 0.1, 1))
+            if cue.mix_action == "duck":
+                f.addRow("Livello normale", row)
+                dd = self._dspin("mix_duck_db", 0, 90, 1, 1, " dB")
+                dd.setToolTip("Di quanti dB scendono i fader quando il ducking interviene (con attacco, hold e "
+                              "rilascio delle impostazioni del ducking)")
+                f.addRow("Riduzione", dd)
+                hint = QLabel("Finché la cue è attiva i fader seguono la curva del ducking: «livello normale» "
+                              "quando nessuno parla, «livello normale − riduzione» quando l'ingresso del "
+                              "ducking supera la soglia. STOP sgancia i fader e li riporta al livello normale. "
+                              "Ingresso, soglia e tempi: Impostazioni › Ducking…")
+                hint.setWordWrap(True)
+                hint.setStyleSheet("color:#999;")
+                f.addRow(hint)
+            else:
+                f.addRow("Livello", row)
+                f.addRow("Fade", self._dspin("mix_fade", 0, 600, 0.1, 1))
 
             def read():
                 nums = parse_numbers(cue.mix_channels) or [1]
@@ -510,8 +526,9 @@ class MixerTabMixin:
             if not nums:
                 res.setText("✘ Indica almeno un canale")
                 return
+            fade = float(cue.mix_fade or 0) if cue.mix_action == "fader" else 0.0
             for n in nums:
-                mm.fader(cue.mix_target, cue.mix_kind, n, float(cue.mix_level), float(cue.mix_fade or 0))
+                mm.fader(cue.mix_target, cue.mix_kind, n, float(cue.mix_level), fade)
             res.setText("Inviato (l'esito compare nella barra di stato)")
             res.setStyleSheet("color:#999;")
         b.clicked.connect(send)

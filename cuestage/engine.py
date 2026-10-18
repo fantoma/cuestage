@@ -52,6 +52,23 @@ class Instance:
         self.started_at = ctrl.clock
         # avviata da una Playlist: suona una volta sola, anche se la cue ha il loop
         self.no_loop = getattr(ctrl, "_play_once", None) == cue.id
+        # BLIND: cue di un GRID in prova cieca: tutto funziona (tempi, barre, vumeter) ma niente audio né video
+        blind = getattr(ctrl, "blind_lists", None)
+        self.blind = False
+        if blind:
+            lst, _i = ctrl.show.list_of(cue.id)
+            self.blind = lst is not None and lst.id in blind
+        # ducking: la cue e i gruppi che la contengono (vale il primo con una riduzione)
+        self._duck_chain = [cue]
+        seen = {cue.id}
+        gid = getattr(cue, "group", "")
+        while gid and gid not in seen and len(self._duck_chain) < 16:
+            seen.add(gid)
+            g = ctrl.show.by_id(gid) if getattr(ctrl, "show", None) is not None else None
+            if g is None:
+                break
+            self._duck_chain.append(g)
+            gid = getattr(g, "group", "")
         pend = getattr(ctrl, "_xf_incoming", None)
         if pend is not None and pend == cue.id:      # cue che entra con un crossfade: parte da zero
             self.xf_gain = 0.0
@@ -62,12 +79,30 @@ class Instance:
         return bool(self.cue.loop) and not self.no_loop
 
     @property
+    def pfl(self):
+        """Preascolto: la cue (o un gruppo che la contiene) va solo alla scheda del preascolto."""
+        pv = getattr(getattr(self.ctrl, "audio", None), "preview", None)
+        return bool(pv and pv.get("enabled")) and any(getattr(c, "pfl", False) for c in self._duck_chain)
+
+    @property
+    def duck_db(self):
+        """Riduzione del ducking (dB) di questa esecuzione: quella della cue o del gruppo più vicino."""
+        for c in self._duck_chain:
+            d = float(getattr(c, "duck_db", 0.0) or 0.0)
+            if d > 0:
+                return d
+        return 0.0
+
+    def duck_gain(self):
+        return self.ctrl.audio.duck.gain(self.duck_db)
+
+    @property
     def trim_gain(self):
         return self.live_gain * self.xf_gain
 
     @property
     def trim_op(self):
-        return self.live_op * self.xf_op
+        return 0.0 if self.blind else self.live_op * self.xf_op
 
     # interfaccia
     def start(self, silent=False):
@@ -280,11 +315,21 @@ class RoutedVoice:
     voice = None
     _aud_override = None     # funzione(n_out) -> (livello dB, matrice dB, volumi uscite dB) oppure None
 
+    def _out_dev(self):
+        """Scheda su cui suona: quella del preascolto se la cue è in preascolto."""
+        if self.pfl:
+            return self.ctrl.audio.preview.get("device") or None
+        return self.cue.audio_device
+
     def _gains(self, n_out):
         c = self.cue
         n_src = self.voice.n_src
-        ov = self._aud_override(n_out) if self._aud_override else None
         trim = self.trim_gain
+        if self.pfl:
+            from .audio_engine import preview_matrix
+            pv = self.ctrl.audio.preview
+            return preview_matrix(n_src, n_out, int(pv.get("ch_l", 1)), int(pv.get("ch_r", 2))) * trim
+        ov = self._aud_override(n_out) if self._aud_override else None
         if ov is None:
             return build_gains(c.matrix, c.out_levels, n_src, n_out) * trim
         lvl, mat, lev = ov
@@ -298,6 +343,9 @@ class RoutedVoice:
                   int(c.loop_count or 0), db_to_lin(c.level_db),
                   curve_arrays(c.curve), 0.0 if silent else c.fade_in, c.fade_out, gains_fn=None)
         self.voice = v
+        v.blind = self.blind               # il mixer calcola il vumeter ma non manda il suono all'uscita
+        v.duck_db = self.duck_db
+        v.pfl = self.pfl
         v.gains_fn = self._gains
         if silent:
             v.env = 0.0
@@ -309,7 +357,7 @@ class RoutedVoice:
             n_loops = max(0, v.loops_left) if v.loop else 0
             self._total = ((v.end - v.start) + n_loops * (v.le - v.ls)) / SR
         self._route_sig = self._route_key()
-        self.ctrl.audio.play(self.key, v, c.audio_device)
+        self.ctrl.audio.play(self.key, v, self._out_dev())
         return v
 
     def _route_key(self):
@@ -319,13 +367,18 @@ class RoutedVoice:
             lvl, mat, lev = self._aud_override(self.voice.n_out())
             r = lambda x: None if x is None else round(x, 2)
             ov = repr((r(lvl), [[r(x) for x in row] for row in mat], [r(x) for x in lev]))
-        return (c.audio_device, repr(c.matrix), repr(c.out_levels), c.level_db, ov, round(self.trim_gain, 4))
+        pv = repr(sorted(self.ctrl.audio.preview.items())) if self.pfl else ""
+        return (c.audio_device, repr(c.matrix), repr(c.out_levels), c.level_db, ov, round(self.trim_gain, 4), pv)
 
     def _update_route(self):
+        if self.voice is not None:
+            self.voice.duck_db = self.duck_db
         k = self._route_key()
         if k != self._route_sig:
             self._route_sig = k
-            self.ctrl.audio.route(self.key, self.cue.audio_device, self._gains)
+            if self.voice is not None:
+                self.voice.pfl = self.pfl
+            self.ctrl.audio.route(self.key, self._out_dev(), self._gains)
 
 
 class AudioInstance(RoutedVoice, KeyframeMixin, Instance):
@@ -586,8 +639,9 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             fo = max(0.0, min(1.0, (end - pos) / c.fade_out))
         if self.aout is not None:
             vol = self.env_vol.get(now) * float(curve_gain(self.curve, pos)) * fo * self.ctrl.audio.master \
-                * self.kf_level_ratio * self.trim_gain
-            self.aout.setVolume(max(0.0, min(1.0, vol)))
+                * self.kf_level_ratio * self.trim_gain * self.duck_gain() * self.ctrl.audio.duck.master_gain()
+            # il lettore di sistema non può andare alla cuffia del preascolto: in preascolto tace
+            self.aout.setVolume(0.0 if (self.blind or self.pfl) else max(0.0, min(1.0, vol)))
         self.layer.opacity = min(1.0, self.env_op.get(now) * fo * self.kf_op_ratio * self.trim_op)
 
     def stop(self, fade=0.0):
@@ -1259,11 +1313,13 @@ class GroupExitInstance(Instance):
 
 
 def stop_panel_targets(show, cue):
-    """PANEL fermati da una cue «Stop panel»: tutti (anche quelli creati dopo) oppure quelli scelti."""
+    """Liste fermate da una cue «Stop panel»: la MAIN se scelta, poi tutti i PANEL (anche quelli creati
+    dopo) oppure quelli scelti."""
     ids = list(cue.sp_panels or [])
+    out = [show.main] if show.main.id in ids else []
     if "*" in ids:
-        return list(show.panels)
-    return [lst for lst in show.panels if lst.id in ids]
+        return out + list(show.panels)
+    return out + [lst for lst in show.panels if lst.id in ids]
 
 
 class StopPanelInstance(Instance):
@@ -1279,7 +1335,7 @@ class StopPanelInstance(Instance):
         for inst in list(ctrl.instances.values()):
             if inst.cue.id in ids and not inst.done:
                 inst.stop(fade)
-        names = ", ".join(f"«{lst.name}»" for lst in lists) or "nessun PANEL"
+        names = ", ".join(f"«{lst.name}»" for lst in lists) or "nessuna lista"
         ctrl.message.emit(f"Stop panel: {names}" + (f" (fade {fade:g} s)" if fade > 0 else ""))
         ctrl.changed.emit()
         self.finish()
@@ -1324,6 +1380,17 @@ class MixerInstance(Instance):
             self.ctrl.message.emit(f"Mixer '{c.label()}': nessun canale indicato")
             self.finish()
             return
+        if c.mix_action == "duck":
+            # i fader seguono la curva del ducking finché la cue è attiva (STOP li riporta al livello)
+            self.hooked = (c.mix_target, c.mix_kind, list(nums))
+            self._sent = None
+            self._sent_at = -1.0
+            duck = self.ctrl.audio.duck
+            duck.hook(self.key, True)
+            if duck.error:
+                self.ctrl.message.emit(f"Mixer '{c.label()}': ducking — {duck.error}")
+            self._duck_send(force=True)
+            return
         self.fade = max(0.0, float(c.mix_fade or 0))
         for n in nums:
             h = mm.fader(c.mix_target, c.mix_kind, n, float(c.mix_level), self.fade)
@@ -1331,16 +1398,55 @@ class MixerInstance(Instance):
         if self.fade <= 0:
             self.finish()
 
+    hooked = None
+
+    @property
+    def duck_db(self):
+        return float(self.cue.mix_duck_db or 0) if self.hooked else 0.0
+
+    def _duck_send(self, force=False, level_only=False):
+        """Porta i fader a «livello − riduzione × inviluppo» (al massimo 25 volte al secondo)."""
+        mm = getattr(self.ctrl, "mixers", None)
+        if mm is None or not self.hooked:
+            return
+        c = self.cue
+        mid, kind, nums = self.hooked
+        env = 0.0 if level_only else (self.ctrl.audio.duck.env if self.ctrl.audio.duck.listening else 0.0)
+        v = round(float(c.mix_level) - float(c.mix_duck_db or 0) * env, 1)
+        if not force:
+            if self._sent is not None and abs(v - self._sent) < 0.3 and not (env == 0.0 and v != self._sent):
+                return
+            if self.elapsed - self._sent_at < 0.04:
+                return
+        self._sent, self._sent_at = v, self.elapsed
+        for n in nums:
+            mm.fader(mid, kind, n, v, 0.0, report=force)
+
     def tick(self, now, dt):
         super().tick(now, dt)
+        if self.hooked:
+            if not self.paused:
+                self._duck_send()
+            return
         if self.elapsed >= self.fade + 0.1:
             self.finish()
 
     def total(self):
+        if self.hooked:
+            return None
         return self.fade or None
+
+    def cleanup(self):
+        if self.hooked:
+            self._duck_send(force=True, level_only=True)      # sganciato: fader al livello normale
+            self.ctrl.audio.duck.hook(self.key, False)
+            self.hooked = None
 
     def stop(self, fade=0.0):
         self.user_stopped = True
+        if self.hooked:
+            self.finish()
+            return
         mm = getattr(self.ctrl, "mixers", None)
         if mm is not None:
             from .mixers import parse_numbers
@@ -1405,6 +1511,7 @@ class Controller(QObject):
         self.paused_all = False
         self._xf_incoming = None   # id delle cue che entrano con un crossfade (partono a zero)
         self.taps = {}             # Tap Tempo: id gruppo -> istanti delle ultime battute
+        self.blind_lists = set()   # GRID in BLIND (prova senza audio né video in uscita)
         self.tempo_runs = {}       # gruppi Sequence col Tap Tempo in corso: id -> {"lst", "next"}
         import uuid as _uuid
         self.seed_base = _uuid.uuid4().hex[:8]   # semi dei gruppi casuali (uguali sulle istanze in ridondanza)
@@ -1721,7 +1828,29 @@ class Controller(QObject):
         else:
             self.start_cue(cue, cascade, depth=depth)
 
+    SOLO_TYPES = ("audio", "video", "image", "text", "group")
+
+    def _grid_solo(self, cue):
+        """GRID in modalità Solo: una cue che parte (audio, video, immagine, testo o gruppo) ferma con il fade
+        del GRID le altre cue di quel tipo attive nel GRID. Le cue di controllo (OSC, MIDI, mixer, fade…)
+        non fermano nulla; le cue di un gruppo avviate dal gruppo stesso nemmeno."""
+        if cue.type not in self.SOLO_TYPES or cue.group:
+            return
+        lst, _i = self.show.list_of(cue.id)
+        if lst is None or not lst.is_grid or not lst.grid_solo:
+            return
+        keep = {cue.id} | {c.id for c in lst.cues if c.group == cue.id}
+        ids = {c.id for c in lst.cues if c.type in self.SOLO_TYPES} - keep
+        if not ids:
+            return
+        self.pending = [p for p in self.pending if p[1].id not in ids]
+        fade = float(lst.grid_fade or 0)
+        for inst in list(self.instances.values()):
+            if inst.cue.id in ids and not inst.done:
+                inst.stop(fade)
+
     def start_cue(self, cue, cascade=True, silent=False, depth=0):
+        self._grid_solo(cue)
         old = self.instances.pop(cue.id, None)
         if old is not None:
             old.user_stopped = True
@@ -1790,6 +1919,14 @@ class Controller(QObject):
         inst = self.instances.get(cue_id)
         if inst:
             inst.stop(fade)
+        self.changed.emit()
+
+    def set_blind(self, list_id, on):
+        """BLIND di un GRID: le cue che partono da lì funzionano ma non mandano audio e video in uscita."""
+        if on:
+            self.blind_lists.add(list_id)
+        else:
+            self.blind_lists.discard(list_id)
         self.changed.emit()
 
     # ------------------------------------------------------------------ Tap Tempo

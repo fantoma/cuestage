@@ -264,6 +264,36 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         mv.addWidget(self.master_slider)
         mv.addStretch(1)
         bar.addLayout(mv)
+        # volume del preascolto (solo se il preascolto è configurato)
+        self.pfl_box = QWidget()
+        pv = QVBoxLayout(self.pfl_box)
+        pv.setContentsMargins(0, 0, 0, 0)
+        self.pfl_label = QLabel("Preascolto")
+        self.pfl_label.setAlignment(Qt.AlignCenter)
+        self.pfl_label.setStyleSheet("font-weight:bold;color:#3d8fd6;")
+        self.pfl_slider = MasterSlider(Qt.Horizontal)
+        self.pfl_slider.setRange(-600, 120)
+        self.pfl_slider.setFixedWidth(130)
+        self.pfl_slider.setFocusPolicy(Qt.NoFocus)
+        self.pfl_slider.setToolTip("Volume del preascolto (cuffia): solo le cue con «Preascolto» · doppio clic = 0 dB")
+        self.pfl_slider.valueChanged.connect(self._pfl_changed)
+        pv.addStretch(1)
+        pv.addWidget(self.pfl_label)
+        pv.addWidget(self.pfl_slider)
+        pv.addStretch(1)
+        bar.addWidget(self.pfl_box)
+        self.pfl_box.setVisible(False)
+        # Duck: il Master ducking (riduzione dell'uscita master quando parla il microfono del ducking)
+        self.duck_btn = QPushButton("Duck")
+        self.duck_btn.setCheckable(True)
+        self.duck_btn.setFocusPolicy(Qt.NoFocus)
+        self.duck_btn.setFixedHeight(40)
+        self.duck_btn.setMinimumWidth(64)
+        self.duck_btn.toggled.connect(self._duck_master_toggled)
+        self.duck_btn.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.duck_btn.customContextMenuRequested.connect(lambda *_: self.ducking_dialog())
+        bar.addWidget(self.duck_btn, 0, Qt.AlignVCenter)
+        self._duck_look = None
         for text, color, fn, tip in (
             ("❚❚ Pausa", "#8a6d1a", self.pause_all, "F7"),
             ("▶ Riprendi", "#2d5f8a", self.resume_all, "F8"),
@@ -384,6 +414,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.view_stack.addWidget(self.grid)
         lv.addWidget(self.view_stack, 1)
         self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.table.viewport().installEventFilter(self)     # doppio clic nello spazio vuoto = nuova cue
         self.table.customContextMenuRequested.connect(self._table_menu)
         top = QSplitter(Qt.Horizontal)
         top.addWidget(left)
@@ -393,6 +424,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         top.setSizes([1000, 380])
 
         self.inspector = Inspector(lambda: self.show_data, self.ctrl, self.loader)
+        self.inspector.duck_dialog_fn = lambda: self.ducking_dialog()
         self.inspector.edited.connect(self._inspector_edited)
         self.inspector.size_fn = self._visual_size
         self.inspector.out_size_fn = lambda: self.comp.out_size
@@ -491,6 +523,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
 
         m = mb.addMenu("&Impostazioni")
         add(m, "Audio, OSC e MIDI…", self.settings_dialog, "Ctrl+,")
+        add(m, "Ducking…", self.ducking_dialog)
         add(m, "Proiettori…", self.projectors_dialog)
         add(m, "Pannello proiettori", self.toggle_projector_panel, "F9")
         m.addSeparator()
@@ -528,6 +561,23 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
             self.audio.start(s.get("audio_device"), s.get("device_channels") or {})
             self._open_cue_outputs()
         self.audio.master = db_to_lin(float(s.get("master_db", 0)))
+        from .audio_engine import preview_settings
+        self.audio.preview = preview_settings(s)
+        self.audio.preview_gain = db_to_lin(self.audio.preview["db"])
+        if self.audio.preview["enabled"]:
+            self.audio.ensure_output(self.audio.preview["device"] or None)
+        self.pfl_box.setVisible(self.audio.preview["enabled"])
+        self.pfl_slider.blockSignals(True)
+        self.pfl_slider.setValue(int(round(self.audio.preview["db"] * 10)))
+        self.pfl_slider.blockSignals(False)
+        self._update_pfl_label()
+        self.audio.duck.configure(s.get("ducking") or {})
+        if self.audio.duck.wanted() and self.audio.duck.error:
+            self.status(f"Ducking: {self.audio.duck.error}")
+        self.duck_btn.blockSignals(True)
+        self.duck_btn.setChecked(bool(self.audio.duck.cfg.get("master_on")))
+        self.duck_btn.blockSignals(False)
+        self._update_duck_btn()
         self._set_projectors(s.get("projectors") or [])
         self._set_mixers(s.get("mixers") or [])
         self._cluster_apply_settings()
@@ -583,6 +633,21 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.audio.master = db_to_lin(db)
         self.show_data.dirty = True
         self._update_master_label()
+
+    def _pfl_changed(self, v):
+        from .audio_engine import preview_settings
+        db = v / 10.0
+        pv = preview_settings(self.show_data.settings)
+        pv["db"] = db
+        self.show_data.settings["preview"] = pv
+        self.audio.preview = pv
+        self.audio.preview_gain = db_to_lin(db) if db > MIN_DB else 0.0
+        self.show_data.dirty = True
+        self._update_pfl_label()
+
+    def _update_pfl_label(self):
+        db = self.pfl_slider.value() / 10.0
+        self.pfl_label.setText("Preascolto  " + ("-∞ dB" if db <= MIN_DB else f"{db:+.1f} dB"))
 
     def _update_master_label(self):
         db = self.master_slider.value() / 10.0
@@ -670,6 +735,57 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self._update_title()
         self._update_engine_label()
         self.go_btn.setText("GO" if not self.ctrl.paused_all else "GO ❚❚")
+        self._update_duck_btn()
+
+    # =========================================================== ducking
+    def ducking_dialog(self):
+        from .ui_ducking import DuckingDialog
+        d = getattr(self, "_duck_dlg", None)
+        if d is None:
+            d = self._duck_dlg = DuckingDialog(self)
+        d.load()
+        d.show()
+        d.raise_()
+        d.activateWindow()
+
+    def set_ducking(self, cfg):
+        """Nuove impostazioni del ducking (dalla finestra o dal tasto Duck)."""
+        from .ducking import duck_settings
+        new = duck_settings({"ducking": cfg})
+        if new != duck_settings(self.show_data.settings):
+            self.show_data.settings["ducking"] = new
+            self.show_data.dirty = True
+        self.audio.duck.configure(self.show_data.settings["ducking"])
+        self._update_duck_btn()
+
+    def _duck_master_toggled(self, on):
+        from .ducking import duck_settings
+        cfg = duck_settings(self.show_data.settings)
+        cfg["master_on"] = bool(on)
+        self.set_ducking(cfg)
+        d = self.audio.duck
+        if on and cfg["master_db"] <= 0:
+            self.status("Duck acceso ma il Master ducking è a 0 dB: impostalo in Impostazioni › Ducking…")
+        elif on and d.error:
+            self.status(f"Ducking: {d.error}")
+        else:
+            self.status(f"Duck {'acceso' if on else 'spento'} (Master ducking −{cfg['master_db']:.1f} dB)")
+
+    def _update_duck_btn(self):
+        d = self.audio.duck
+        on = bool(d.cfg.get("master_on"))
+        look = ("red" if d.master_ducking else "green") if (on and d.master_active) else ("warn" if on else "off")
+        if look == self._duck_look:
+            return
+        self._duck_look = look
+        bg = {"red": "#c62828", "green": "#2e7d32", "warn": "#8a6d1a", "off": "#3a3c44"}[look]
+        self.duck_btn.setStyleSheet(f"QPushButton{{background:{bg};color:white;font-weight:bold;"
+                                    f"border-radius:6px;padding:0 10px;}}")
+        db = float(d.cfg.get("master_db") or 0)
+        why = {"red": "sta intervenendo", "green": "acceso, in ascolto",
+               "warn": "acceso ma non attivo (riduzione a 0 dB o ingresso non disponibile)", "off": "spento"}[look]
+        self.duck_btn.setToolTip(f"Master ducking: abbassa l'uscita master di {db:.1f} dB quando l'ingresso del "
+                                 f"ducking supera la soglia — {why}. Tasto destro: impostazioni del ducking.")
 
     def closeEvent(self, e):
         if not self._confirm_discard():

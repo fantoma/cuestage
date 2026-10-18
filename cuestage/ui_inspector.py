@@ -44,6 +44,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         self.hotkey_fn = None     # cue -> «impara» la scorciatoia (finestra principale)
         self.set_hotkey_fn = None  # (cue, tasto) -> imposta/toglie la scorciatoia
         self.color_fn = None      # (cue, "#rrggbb" o "") -> colore della cue
+        self.duck_dialog_fn = None  # apre Impostazioni › Ducking
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         self.header = QLabel("Nessuna cue selezionata")
