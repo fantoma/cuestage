@@ -295,6 +295,25 @@ def t_grid_solo_blind_groups(w):
     assert sh.main.cues[1].group == sh.main.cues[0].id
 
 
+def t_wav_without_ffmpeg():
+    """I WAV si leggono anche se ffprobe/ffmpeg non rispondono (lettura diretta del file)."""
+    import cuestage.media as media
+    path = tone("noff.wav", sec=1, freq=440)
+    ref = media.decode_audio(path, channels=1)
+    old = media.FFPROBE, media.FFMPEG
+    media.FFPROBE = media.FFMPEG = os.path.join(TMP, "manca-ffmpeg")
+    try:
+        info = media.probe(path)
+        assert info["has_audio"] and info["channels"] == 1 and abs(info["duration"] - 1.0) < 0.01, info
+        a = media.decode_audio(path, channels=1)
+        assert a.shape == ref.shape and int(np.abs(a.astype(int) - ref.astype(int)).max()) <= 1
+        assert "manca-ffmpeg" in media.LAST_PROBE_ERROR or "FileNotFound" in media.LAST_PROBE_ERROR, \
+            media.LAST_PROBE_ERROR
+    finally:
+        media.FFPROBE, media.FFMPEG = old
+        media.LAST_PROBE_ERROR = ""
+
+
 def t_ducking(w):
     """Ducking: gate/attacco/rilascio, riduzione della cue e del gruppo, Master ducking, finestra, icona."""
     from cuestage.ducking import Ducker, duck_settings
@@ -337,10 +356,12 @@ def t_ducking(w):
     def vmeter():
         i = w.ctrl.instances.get(c.id)
         return float(i.voice.meter.max()) if i is not None and i.voice is not None else -1.0
+    import cuestage.media as media
     if not wait_until(lambda: vmeter() > 0.02, 15):
-        from cuestage.media import FFMPEG, FFPROBE, probe
-        raise AssertionError((vmeter(), msgs, duck.error, w.audio.status, os.path.getsize(c.file), probe(c.file),
-                              FFMPEG, FFPROBE, len(w.loader.audio_now(c.file))))
+        raise AssertionError((vmeter(), msgs, duck.error, w.audio.status, os.path.getsize(c.file),
+                              media.probe(c.file), media.FFMPEG, media.FFPROBE, media.LAST_PROBE_ERROR))
+    if media.LAST_PROBE_ERROR:
+        print("AVVISO (diagnostica): " + media.LAST_PROBE_ERROR)
     run(0.3)
     inst = w.ctrl.instances[c.id]
     m0 = vmeter()
@@ -656,6 +677,7 @@ if __name__ == "__main__":
     check("cue mixer su X32 simulato (mute a scena e fader)", lambda: t_mixer_x32(w))
     check("profilo OSC ChamSys MagicQ", t_osc_profile)
     check("lettura dei controlli ALSA", t_alsa_parser)
+    check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     w.show_data.dirty = False
     w.close()
     check("master + ridondanza: comandi, modifiche, heartbeat", t_cluster_redundancy)

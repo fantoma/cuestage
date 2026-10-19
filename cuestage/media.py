@@ -24,13 +24,19 @@ def probe(path):
     """Restituisce dict con durata, presenza audio/video, dimensioni."""
     info = {"duration": 0.0, "has_audio": False, "has_video": False, "width": 0, "height": 0,
             "channels": 0, "layout": ""}
-    if not FFPROBE or not path:
+    global LAST_PROBE_ERROR
+    if not path:
         return info
+    if not FFPROBE:
+        return _probe_wav(path) or info
     try:
-        out = subprocess.run(
+        p = subprocess.run(
             [FFPROBE, "-v", "error", "-print_format", "json", "-show_format", "-show_streams", path],
             capture_output=True, timeout=20, check=False, **subprocess_flags(),
-        ).stdout
+        )
+        out = p.stdout
+        if p.returncode != 0 or not out:
+            LAST_PROBE_ERROR = f"ffprobe uscita {p.returncode}: {p.stderr.decode(errors='replace').strip()[:300]}"
         data = json.loads(out or b"{}")
         info["duration"] = float(data.get("format", {}).get("duration") or 0.0)
         for st in data.get("streams", []):
@@ -42,9 +48,59 @@ def probe(path):
                 info["has_video"] = True
                 info["width"] = st.get("width", 0)
                 info["height"] = st.get("height", 0)
-    except Exception:
-        pass
+    except Exception as e:
+        LAST_PROBE_ERROR = f"ffprobe: {type(e).__name__}: {e}"
+    if not info["has_audio"] and not info["has_video"]:
+        # ffprobe non ha risposto (o non c'è): i WAV si leggono anche senza
+        info = _probe_wav(path) or info
     return info
+
+
+LAST_PROBE_ERROR = ""      # ultimo errore di ffprobe (diagnostica)
+
+
+def _probe_wav(path):
+    """Informazioni di un WAV PCM letto con il modulo wave di Python (None se non è un WAV leggibile)."""
+    import wave
+    try:
+        with wave.open(path, "rb") as w:
+            ch, sr, n = w.getnchannels(), w.getframerate(), w.getnframes()
+    except Exception:
+        return None
+    if ch <= 0 or sr <= 0:
+        return None
+    return {"duration": n / float(sr), "has_audio": True, "has_video": False, "width": 0, "height": 0,
+            "channels": ch, "layout": "mono" if ch == 1 else ("stereo" if ch == 2 else "")}
+
+
+def _decode_wav(path, sr=SR):
+    """Decodifica un WAV PCM (8/16/24/32 bit) in int16 (n, canali), ricampionato a sr. None se non riesce."""
+    import wave
+    try:
+        with wave.open(path, "rb") as w:
+            ch, width, rate, n = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
+            raw = w.readframes(n)
+    except Exception:
+        return None
+    if width == 1:
+        x = (np.frombuffer(raw, np.uint8).astype(np.float32) - 128.0) / 128.0
+    elif width == 2:
+        x = np.frombuffer(raw, "<i2").astype(np.float32) / 32768.0
+    elif width == 3:
+        b = np.frombuffer(raw, np.uint8).reshape(-1, 3).astype(np.int32)
+        v = b[:, 0] | (b[:, 1] << 8) | (b[:, 2] << 16)
+        v = np.where(v & 0x800000, v - 0x1000000, v)
+        x = v.astype(np.float32) / 8388608.0
+    elif width == 4:
+        x = np.frombuffer(raw, "<i4").astype(np.float32) / 2147483648.0
+    else:
+        return None
+    x = x[: (len(x) // ch) * ch].reshape(-1, ch)
+    if rate != sr and len(x):
+        t_new = np.arange(int(round(len(x) * sr / rate))) * (rate / sr)
+        idx = np.arange(len(x))
+        x = np.stack([np.interp(t_new, idx, x[:, c]) for c in range(ch)], axis=1).astype(np.float32)
+    return np.ascontiguousarray(np.clip(x * 32767.0, -32768, 32767).astype(np.int16))
 
 
 MAX_SRC_CHANNELS = 32
@@ -74,6 +130,9 @@ def decode_audio(path, sr=SR, channels=None):
     (int16: qualità CD e metà della memoria rispetto a float32).
     Restituisce un array (0, 2) se il file non ha audio."""
     if not FFMPEG:
+        a = _decode_wav(path, sr)
+        if a is not None:
+            return a
         raise RuntimeError(f"ffmpeg non trovato: {install_hint('ffmpeg')}")
     if channels is None:
         info = probe(path)
@@ -86,9 +145,17 @@ def decode_audio(path, sr=SR, channels=None):
         ch = 2
         args += ["-ac", "2"]
     args += ["-ar", str(sr), "-"]
-    p = subprocess.run(args, capture_output=True, check=False, **subprocess_flags())
-    if p.returncode != 0 and not p.stdout:
-        raise RuntimeError(p.stderr.decode(errors="replace").strip() or "decodifica fallita")
+    try:
+        p = subprocess.run(args, capture_output=True, check=False, **subprocess_flags())
+    except OSError as e:
+        p = None
+        err = str(e)
+    if p is None or (p.returncode != 0 and not p.stdout):
+        a = _decode_wav(path, sr)          # ffmpeg non risponde: i WAV si leggono anche senza
+        if a is not None:
+            return a
+        raise RuntimeError((p.stderr.decode(errors="replace").strip() if p is not None else err)
+                           or "decodifica fallita")
     a = np.frombuffer(p.stdout, dtype=np.int16)
     a = a[: (len(a) // ch) * ch].reshape(-1, ch)
     return np.ascontiguousarray(a)
