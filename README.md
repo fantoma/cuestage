@@ -463,6 +463,11 @@ Un ingresso audio (es. il microfono dello speaker) abbassa automaticamente le cu
 - **Tasto «Duck»** accanto al volume master: accende il Master ducking (abbassa tutta l'uscita, audio e audio
   dei video, della riduzione impostata). Grigio = spento, verde = acceso e in ascolto, rosso = sta
   intervenendo, ambra = acceso ma senza effetto (riduzione a 0 dB o ingresso non disponibile).
+- **Tasto «DIM»** sotto «Duck»: abbassa subito l'uscita master della riduzione del Master ducking e la lascia
+  così finché non lo spegni (non serve il microfono). Arancione = acceso, ambra = acceso ma con riduzione a
+  0 dB. Con Duck e DIM accesi insieme le riduzioni non si sommano. Si comanda anche da **MIDI** (Impostazioni ›
+  MIDI › «DIM acceso / spento», e «Duck acceso / spento») e da **OSC**: `/dim` cambia stato, `/dim 1` accende,
+  `/dim 0` spegne; lo stesso per `/duck`. Tasto destro su Duck o DIM: impostazioni del ducking.
 - **Icona del microfono** nella barra di avanzamento (lista, cue attive, caselle del GRID) delle cue con il
   ducking: **verde** = pronto, **rossa** = sta abbassando la cue, grigia = ducking spento nelle impostazioni.
 - Cue e master si sommano: una cue con 10 dB di ducking e il Master ducking a 6 dB scende di 16 dB.
@@ -479,13 +484,15 @@ Un ingresso audio (es. il microfono dello speaker) abbassa automaticamente le cu
 - **Impostazioni › Audio, OSC e MIDI › Preascolto**: «Attiva il preascolto», la **scheda** e i **2 canali**
   (sinistro e destro) della cuffia del tecnico. Può essere un'altra scheda o due canali liberi della stessa
   («Scheda predefinita del progetto» = quella scelta in alto come scheda predefinita).
-- **Ispettore** delle cue audio e video (sezione «Uscita audio») e dei **gruppi**: «Preascolto». La cue non va
-  più alle uscite dello spettacolo ma solo alla cuffia, in stereo (mono su entrambi i lati; più canali
-  alternati sinistra/destra). Su un gruppo vale per tutte le sue cue. Si può accendere e spegnere anche mentre
-  la cue suona.
+- **Pulsante PFL**: nella lista c'è la colonna **PFL** (compare solo con il preascolto attivo) e nel GRID un
+  pulsante **PFL** dentro la casella, in alto a destra. Un clic manda la cue audio, video o il **gruppo** (con
+  tutte le sue cue) alla cuffia invece che alle uscite dello spettacolo; un altro clic la riporta alle uscite.
+  Il clic sul pulsante non avvia la cue e non sposta il playhead. Si può usare anche mentre la cue suona.
+  Pulsante blu pieno = acceso; bordo blu = la cue è in preascolto perché lo è il suo gruppo; grigio = spento.
+  L'audio va in stereo (mono su entrambi i lati; più canali alternati sinistra/destra).
 - Accanto al volume master compare il **volume del preascolto** (doppio clic = 0 dB): il volume master e il
   Master ducking non toccano il preascolto.
-- Le cue in preascolto hanno l'etichetta blu **PFL** nella barra di avanzamento.
+- Nel pannello delle cue attive le cue in preascolto hanno l'etichetta blu **PFL**.
 - Il video col «Lettore di sistema» non può andare alla cuffia: in preascolto il suo audio tace.
 
 ### Buffer audio e «underrun»

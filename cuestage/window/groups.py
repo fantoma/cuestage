@@ -9,9 +9,11 @@ FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 
 class GroupsMixin:
     def _table_clicked(self, idx):
-        from ..ui_cuelist import C_TYPE
+        from ..ui_cuelist import C_PFL, C_TYPE
         cues = self.show_data.cues
         r = idx.row()
+        if idx.column() == C_PFL:          # il pulsante PFL non sposta il playhead
+            return
         if idx.column() == C_TYPE and 0 <= r < len(cues) and cues[r].type == "group":
             self.toggle_group(r)
             return

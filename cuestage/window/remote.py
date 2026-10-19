@@ -24,6 +24,10 @@ class RemoteMixin:
             self.pause_all()
         elif a == "/resume":
             self.resume_all()
+        elif a in ("/dim", "/duck"):
+            # senza argomento cambia stato; 1 = acceso, 0 = spento
+            on = None if not args else bool(float(args[0]))
+            (self.set_dim if a == "/dim" else self.set_duck)(on)
         elif a == "/next":
             ctrl.step_playhead(1)
         elif a in ("/previous", "/prev"):
@@ -224,7 +228,8 @@ class RemoteMixin:
                    "resume_all": self.resume_all,
                    "next": lambda: self.ctrl.step_playhead(1),
                    "prev": lambda: self.ctrl.step_playhead(-1),
-                   "xfade_go": self.crossfade_next}
+                   "xfade_go": self.crossfade_next,
+                   "dim": self.set_dim, "duck": self.set_duck}
         for key, fn in actions.items():
             if mm.get(key) and spec_matches(mm[key], spec, port):
                 fn()

@@ -20,44 +20,6 @@ from .presets import PresetBar
 
 
 class MediaTabsMixin:
-    def _pfl_row(self):
-        """Preascolto: la cue (o il gruppo) suona solo sulla cuffia del preascolto."""
-        from PySide6.QtWidgets import QHBoxLayout, QWidget
-        from ..audio_engine import preview_settings
-        cue = self.cue
-        w = QWidget()
-        h = QHBoxLayout(w)
-        h.setContentsMargins(0, 0, 0, 0)
-        cb = self._check("pfl", "manda l'audio solo al preascolto" +
-                         (" (tutte le cue del gruppo)" if cue.type == "group" else ""))
-        h.addWidget(cb)
-        pv = preview_settings(self.show_fn().settings)
-        notes = []
-        if not pv["enabled"]:
-            notes.append("preascolto non configurato (Impostazioni › Audio, OSC e MIDI)")
-        else:
-            notes.append(f"{(pv['device'] or 'scheda predefinita').split('|', 1)[-1]}, canali "
-                         f"{pv['ch_l']}–{pv['ch_r']}")
-        if cue.type == "video" and cue.video_audio == "system":
-            notes.append("con il lettore di sistema in preascolto il video è muto")
-        sh = self.show_fn()
-        g = sh.by_id(cue.group) if cue.group else None
-        seen = set()
-        while g is not None and g.id not in seen:
-            seen.add(g.id)
-            if g.pfl:
-                notes.append(f"già in preascolto dal gruppo «{g.label()}»")
-                break
-            g = sh.by_id(g.group) if g.group else None
-        lab = QLabel(" · ".join(notes))
-        lab.setStyleSheet("color:#999;")
-        lab.setWordWrap(True)
-        h.addWidget(lab, 1)
-        cb.setToolTip("L'audio della cue non va alle uscite dello spettacolo ma solo alla scheda e ai 2 canali del "
-                      "preascolto, con il loro volume (accanto al volume master). Si può cambiare anche mentre "
-                      "la cue suona.")
-        return w
-
     def _duck_row(self):
         """Riduzione del ducking (dB) di questa cue o gruppo, con lo stato del ducking dello show."""
         from PySide6.QtWidgets import QHBoxLayout, QPushButton, QWidget
@@ -127,7 +89,6 @@ class MediaTabsMixin:
         dev.currentIndexChanged.connect(dev_changed)
         f.addRow("Scheda audio", dev)
         f.addRow("Ducking", self._duck_row())
-        f.addRow("Preascolto", self._pfl_row())
         engine_route = True
         if cue.type == "video":
             route = QComboBox()

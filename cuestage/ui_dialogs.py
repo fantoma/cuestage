@@ -25,6 +25,7 @@ MIDI_ACTIONS = [
     ("go", "GO"), ("stop_all", "Stop tutto"), ("pause_all", "Pausa tutto"),
     ("resume_all", "Riprendi tutto"), ("next", "Playhead avanti"), ("prev", "Playhead indietro"),
     ("xfade_go", "Crossfade alla successiva"),
+    ("dim", "DIM acceso / spento"), ("duck", "Duck acceso / spento"),
 ]
 MIDI_CONTROLS = [
     ("vol_selected", "Volume della cue selezionata"),
@@ -808,6 +809,8 @@ OSC_HELP = """
 <tr><td><b>/go</b></td><td>GO sulla cue al playhead</td></tr>
 <tr><td><b>/stop</b> &nbsp; <b>/panic</b></td><td>Stop di tutte le cue (con fade / immediato)</td></tr>
 <tr><td><b>/pause</b> &nbsp; <b>/resume</b></td><td>Pausa / ripresa generale</td></tr>
+<tr><td><b>/dim</b> [1|0]</td><td>DIM: master abbassato della riduzione del ducking (senza argomento cambia stato)</td></tr>
+<tr><td><b>/duck</b> [1|0]</td><td>Duck: Master ducking acceso / spento (senza argomento cambia stato)</td></tr>
 <tr><td><b>/next</b> &nbsp; <b>/previous</b></td><td>Sposta il playhead</td></tr>
 <tr><td><b>/playhead/&lt;numero&gt;</b></td><td>Porta il playhead sulla cue indicata</td></tr>
 <tr><td><b>/text/next</b>, <b>/text/prev</b>, <b>/text/goto</b> n</td><td>Frase successiva / precedente / n-esima del testo in sequenza</td></tr>

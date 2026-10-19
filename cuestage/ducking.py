@@ -22,6 +22,7 @@ DUCK_DEFAULTS = {
     "master_db": 0.0,        # Master ducking: riduzione (dB) dell'uscita master quando interviene
     "master_on": False,      # tasto «Duck» accanto al volume master
     "to_preview": False,     # manda il canale d'ingresso, dopo il gate, alla cuffia del preascolto
+    "dim_on": False,         # tasto «DIM»: master abbassato della riduzione del Master ducking, fisso
 }
 MIN_METER_DB = -70.0
 
@@ -38,6 +39,7 @@ def duck_settings(settings):
     d["master_db"] = max(0.0, min(60.0, float(d.get("master_db") or 0.0)))
     d["master_on"] = bool(d.get("master_on"))
     d["to_preview"] = bool(d.get("to_preview"))
+    d["dim_on"] = bool(d.get("dim_on"))
     return d
 
 
@@ -130,11 +132,19 @@ class Ducker:
             return 1.0
         return 10.0 ** (-float(duck_db) * self.env / 20.0)
 
+    @property
+    def dim_active(self):
+        return bool(self.cfg.get("dim_on")) and float(self.cfg.get("master_db") or 0) > 0
+
     def master_gain(self):
-        """Guadagno lineare del Master ducking (1 = nessuna riduzione)."""
-        if not self.master_active:
+        """Guadagno lineare dell'uscita master: Master ducking e DIM (1 = nessuna riduzione).
+        Duck e DIM insieme non si sommano: vale la riduzione maggiore (al massimo quella impostata)."""
+        amount = self.env if self.master_active else 0.0
+        if self.dim_active:
+            amount = 1.0
+        if amount <= 0:
             return 1.0
-        return 10.0 ** (-float(self.cfg["master_db"]) * self.env / 20.0)
+        return 10.0 ** (-float(self.cfg["master_db"]) * amount / 20.0)
 
     # ------------------------------------------------------------ configurazione
     def configure(self, cfg, monitor=None):

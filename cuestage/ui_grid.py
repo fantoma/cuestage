@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 
 from . import grid as G
 from .model import CUE_TYPES, TYPE_ICONS, TYPE_LABELS
+from .ui_cuelist import PFL_TYPES, paint_pfl_button, pfl_inherited
 
 CLICK_MODES = [("toggle", "Clic: avvia / ferma"), ("restart", "Clic: riavvia dall'inizio"),
                ("start", "Clic: avvia (se è già attiva non fa nulla)")]
@@ -61,6 +62,8 @@ class GridCanvas(QWidget):
         mw = self.panel.mw
         ctrl = mw.ctrl
         occ = self.panel.cue_map()
+        self.pfl_hits = {}                 # id cue -> rettangolo del pulsante PFL
+        self._pfl_on = bool(mw.audio.preview.get("enabled"))
         sel = mw._current_cue()
         ph = ctrl.playhead_of(lst)
         nxt = lst.cues[ph] if 0 <= ph < len(lst.cues) else None
@@ -150,12 +153,12 @@ class GridCanvas(QWidget):
             p.setPen(fg)
             bx = bb.right() + 4
         if active:
-            from .ui_duckicon import paint_duck, paint_pfl
+            from .ui_duckicon import paint_duck
             fmd = p.fontMetrics()
-            bx += paint_pfl(p, QRectF(bx, inner.bottom() - fmd.height() - 2, 200, fmd.height() + 2), inst)
             paint_duck(p, QRectF(bx, inner.bottom() - fmd.height() - 2, fmd.height() + 4, fmd.height() + 2),
                        inst, ctrl, right=False)
             p.setPen(fg)
+        right = inner.right()
         if cue.hotkey:
             hk = QKeySequence.fromString(cue.hotkey, QKeySequence.PortableText).toString(QKeySequence.NativeText)
             fm = p.fontMetrics()
@@ -166,6 +169,16 @@ class GridCanvas(QWidget):
             p.drawRoundedRect(badge, 4, 4)
             p.setPen(fg)
             p.drawText(badge, Qt.AlignCenter, hk)
+            right = badge.left() - 4
+        if self._pfl_on and cue.type in PFL_TYPES:
+            # pulsante PFL dentro la casella: manda la cue al preascolto (clic sul pulsante, non avvia la cue)
+            fm = p.fontMetrics()
+            h = fm.height() + 6
+            w = fm.horizontalAdvance("PFL") + 14
+            pr = QRectF(right - w, inner.top() - 1, w, h)
+            paint_pfl_button(p, pr, bool(cue.pfl), pfl_inherited(self.panel.mw.show_data, cue) is not None)
+            self.pfl_hits[cue.id] = pr.adjusted(-3, -3, 3, 3)
+            p.setPen(fg)
         p.setFont(f_name)
         name = cue.name or TYPE_LABELS.get(cue.type, cue.type)
         if cue.type == "group":
@@ -196,6 +209,8 @@ class GridCanvas(QWidget):
             return
         if e.button() != Qt.LeftButton:
             return
+        if self._pfl_click(cue, e):
+            return
         if self.panel.editing or self.panel.group_id:     # Opzioni o dentro un gruppo: si seleziona e si sposta
             if cue is not None:
                 self.panel.mw.grid_select(cue, move_playhead=True)
@@ -206,6 +221,15 @@ class GridCanvas(QWidget):
             self.panel.mw.grid_activate(cue)
             self.panel.mw.grid_select(cue, move_playhead=False)
             self.update()
+
+    def _pfl_click(self, cue, e):
+        """Clic sul pulsante PFL della casella: preascolto acceso/spento (la cue non parte)."""
+        r = getattr(self, "pfl_hits", {}).get(cue.id) if cue is not None else None
+        if r is None or not r.contains(e.position()):
+            return False
+        self.panel.mw.toggle_pfl(cue)
+        self.update()
+        return True
 
     def mouseMoveEvent(self, e):
         cell = self.cell_at(e.position().toPoint())
@@ -239,6 +263,8 @@ class GridCanvas(QWidget):
         if cell is None:
             return
         cue = self.panel.cell_cue(cell)
+        if self._pfl_click(cue, e):           # doppio clic sul PFL = due clic
+            return
         if cue is None:
             self.panel.new_cue_menu(cell, e.globalPosition().toPoint())
         elif cue.type == "group" and self.panel.editing and not self.panel.group_id:

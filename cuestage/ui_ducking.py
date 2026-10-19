@@ -161,7 +161,8 @@ class DuckingDialog(QDialog):
         self.mdb.setSingleStep(1)
         self.mdb.setSuffix(" dB")
         self.mdb.setSpecialValueText("0 dB (nessuna riduzione)")
-        self.mdb.setToolTip("Riduzione dell'uscita master quando il ducking interviene e il tasto «Duck» è acceso")
+        self.mdb.setToolTip("Riduzione dell'uscita master: quando il ducking interviene con il tasto «Duck» acceso, "
+                            "e sempre con il tasto «DIM» acceso")
         fm.addRow("Riduzione del master", self.mdb)
         self.mstate = QLabel()
         self.mstate.setStyleSheet("color:#999;")
@@ -227,7 +228,7 @@ class DuckingDialog(QDialog):
         return {"enabled": self.on.isChecked(), "device": self.dev.currentData() or "", "channel": self.ch.value(),
                 "threshold_db": self.thr.value(), "attack_ms": self.att.value(), "hold_ms": self.hold.value(),
                 "release_ms": self.rel.value(),
-                "master_db": self.mdb.value(), "master_on": cur["master_on"],
+                "master_db": self.mdb.value(), "master_on": cur["master_on"], "dim_on": cur["dim_on"],
                 "to_preview": self.to_pv.isChecked()}
 
     def _dev_changed(self, *_a):
@@ -247,8 +248,10 @@ class DuckingDialog(QDialog):
         if self.err.text() != d.error:
             self.err.setText(d.error)         # la riga resta sempre: la finestra non cambia altezza
         on = bool(d.cfg.get("master_on"))
-        self.mstate.setText("Tasto «Duck»: " + ("acceso" if on else "spento") +
-                            ("" if self.mdb.value() > 0 or not on else " — con 0 dB non riduce nulla"))
+        dim = bool(d.cfg.get("dim_on"))
+        self.mstate.setText("Tasto «Duck»: " + ("acceso" if on else "spento") + " · tasto «DIM»: " +
+                            ("acceso" if dim else "spento") +
+                            ("" if self.mdb.value() > 0 or not (on or dim) else " — con 0 dB non riduce nulla"))
         self.meter.update()
 
     def showEvent(self, e):
@@ -266,7 +269,9 @@ class DuckingDialog(QDialog):
 
     def reject(self):
         orig = dict(self.orig)
-        orig["master_on"] = duck_settings(self.mw.show_data.settings)["master_on"]   # il tasto Duck resta com'è
+        cur = duck_settings(self.mw.show_data.settings)
+        orig["master_on"] = cur["master_on"]          # i tasti Duck e DIM restano come sono
+        orig["dim_on"] = cur["dim_on"]
         self.mw.set_ducking(orig)
         self._close_monitor()
         super().reject()

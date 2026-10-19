@@ -393,6 +393,27 @@ def t_ducking(w):
     assert wait_until(lambda: 0.42 < out_level() / o0 < 0.6, 10), (o0, out_level())  # −6 dB
     duck.feed(0.0, 256)
     w.duck_btn.setChecked(False)
+    # DIM: master fisso a −6 dB, anche senza microfono; da OSC e da MIDI
+    assert wait_until(lambda: abs(out_level() / o0 - 1) < 0.1, 10), (o0, out_level())
+    w.dim_btn.click()
+    assert duck_settings(sh.settings)["dim_on"] and duck.dim_active and w._dim_look == "on"
+    assert wait_until(lambda: 0.42 < out_level() / o0 < 0.6, 10), (o0, out_level())
+    duck.feed(0.5, 256)                     # Duck spento: il microfono non cambia nulla
+    run(0.2)
+    assert 0.42 < out_level() / o0 < 0.6, (o0, out_level())
+    duck.feed(0.0, 256)
+    w._osc_message("/dim", [0])
+    assert not w.dim_btn.isChecked() and not duck_settings(sh.settings)["dim_on"]
+    assert wait_until(lambda: abs(out_level() / o0 - 1) < 0.1, 10), (o0, out_level())
+    w._osc_message("/dim", [])
+    assert w.dim_btn.isChecked()
+    sh.settings["midi_map"]["dim"] = "note 1 60"
+    w._midi_message("note 1 60")
+    assert not w.dim_btn.isChecked() and not duck.dim_active
+    w._osc_message("/duck", [1])
+    assert w.duck_btn.isChecked()
+    w._osc_message("/duck", [0])
+    assert not w.duck_btn.isChecked()
     # finestra: le modifiche valgono subito, «Annulla» le toglie
     w.ducking_dialog()
     dlg = w._duck_dlg
@@ -404,6 +425,63 @@ def t_ducking(w):
     w.ctrl.stop_all(0)
     w.set_ducking({"enabled": False})
     assert duck.stream is None
+    run(0.2)
+
+
+def t_pfl_buttons(w):
+    """Pulsante PFL: colonna della lista e pulsante nella casella del GRID (non avvia la cue)."""
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from cuestage.ui_cuelist import C_PFL
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    w._set_show(sh)
+    w._apply_settings()
+    run(0.1)
+    assert w.table.isColumnHidden(C_PFL)               # preascolto non configurato: niente colonna
+    sh.settings["preview"] = {"enabled": True}
+    w._apply_settings()
+    a = Cue("audio", number="1", file=tone("pflb.wav", sec=4))
+    m = Cue("memo", number="2")
+    sh.main.cues[:] = [a, m]
+    w.model.beginResetModel()
+    w.model.endResetModel()
+    run(0.1)
+    assert not w.table.isColumnHidden(C_PFL)
+    w.ctrl.set_playhead(1)
+
+    def click_pfl(row):
+        w.table.scrollTo(w.model.index(row, C_PFL))
+        run(0.05)
+        r = w.table.visualRect(w.model.index(row, C_PFL))
+        QTest.mouseClick(w.table.viewport(), Qt.LeftButton, Qt.NoModifier, r.center())
+        run(0.05)
+    click_pfl(0)
+    assert a.pfl, (w.table.visualRect(w.model.index(0, C_PFL)), w.table.viewport().size(), w.show_data.current.name)
+    assert w.ctrl.playhead == 1, w.ctrl.playhead       # acceso, il playhead non si sposta
+    click_pfl(1)
+    assert not getattr(m, "pfl", False)                 # i memo non hanno PFL
+    click_pfl(0)
+    assert not a.pfl
+    # GRID: il pulsante dentro la casella
+    w.add_panel("grid")
+    run(0.2)
+    lst = w.show_data.current
+    w.grid_add_files([tone("pflg.wav", sec=4)], [0, 0, 0])
+    run(0.2)
+    gc = lst.cues[0]
+    w.grid.canvas.update()
+    run(0.1)
+    hit = w.grid.canvas.pfl_hits.get(gc.id)
+    assert hit is not None, w.grid.canvas.pfl_hits
+    QTest.mouseClick(w.grid.canvas, Qt.LeftButton, Qt.NoModifier, hit.center().toPoint())
+    run(0.2)
+    assert gc.pfl and gc.id not in w.ctrl.instances      # PFL acceso, la cue non è partita
+    r = w.grid.canvas.cell_rect(0, 0)
+    QTest.mouseClick(w.grid.canvas, Qt.LeftButton, Qt.NoModifier, QPoint(int(r.center().x()), int(r.bottom() - 12)))
+    wait_until(lambda: gc.id in w.ctrl.instances)
+    assert gc.id in w.ctrl.instances and w.ctrl.instances[gc.id].pfl   # il resto della casella la avvia
+    w.ctrl.stop_all(0)
     run(0.2)
 
 
@@ -673,6 +751,7 @@ if __name__ == "__main__":
     check("Tap Tempo dei gruppi", lambda: t_tap_tempo(w))
     check("ducking delle cue, dei gruppi e del master", lambda: t_ducking(w))
     check("preascolto e fader del mixer agganciati al ducking", lambda: t_preview_and_mixer_duck(w))
+    check("pulsante PFL nella lista e nel GRID", lambda: t_pfl_buttons(w))
     check("GRID: Solo, BLIND, gruppo aperto, rilascio su un gruppo", lambda: t_grid_solo_blind_groups(w))
     check("cue mixer su X32 simulato (mute a scena e fader)", lambda: t_mixer_x32(w))
     check("profilo OSC ChamSys MagicQ", t_osc_profile)

@@ -137,7 +137,6 @@ class ControlTabsMixin:
             f.addRow("All'uscita", ec)
         f.addRow(self._tap_box(cue))
         f.addRow("Ducking", self._duck_row())
-        f.addRow("Preascolto", self._pfl_row())
         sh = self.show_fn()
         lst, i = sh.list_of(cue.id)
         n = (block_end(lst.cues, i) - i - 1) if lst is not None else 0

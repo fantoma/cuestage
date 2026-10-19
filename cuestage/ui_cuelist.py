@@ -1,15 +1,94 @@
 """Lista delle cue (modello tabellare con drag&drop) e pannello delle cue attive."""
 import json
 
-from PySide6.QtCore import QAbstractTableModel, QMimeData, QModelIndex, QRectF, Qt, Signal, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter
+from PySide6.QtCore import QAbstractTableModel, QEvent, QMimeData, QModelIndex, QRectF, Qt, Signal, QTimer
+from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QStyledItemDelegate, QStyle, QWidget
 
 from .media import fmt_time
 from .model import TRIGGER_SHORT, TYPE_ICONS, TYPE_LABELS
 
-COLS = ["", "#", "Tipo", "Nome", "File / Target", "Ritardo", "Durata", "Avvio", "Stato"]
-C_PLAYHEAD, C_NUM, C_TYPE, C_NAME, C_TARGET, C_DELAY, C_DUR, C_TRIG, C_STATE = range(9)
+COLS = ["", "#", "Tipo", "Nome", "File / Target", "Ritardo", "Durata", "Avvio", "Stato", "PFL"]
+C_PLAYHEAD, C_NUM, C_TYPE, C_NAME, C_TARGET, C_DELAY, C_DUR, C_TRIG, C_STATE, C_PFL = range(10)
+PFL_TYPES = ("audio", "video", "group")      # cue che possono andare al preascolto
+
+
+def pfl_inherited(show, cue):
+    """Il gruppo (o un gruppo sopra) che manda la cue al preascolto, None se nessuno."""
+    seen = set()
+    g = show.by_id(cue.group) if cue.group else None
+    while g is not None and g.id not in seen:
+        seen.add(g.id)
+        if g.pfl:
+            return g
+        g = show.by_id(g.group) if g.group else None
+    return None
+
+
+def paint_pfl_button(p, r, on, inherited=False):
+    """Pulsante «PFL»: blu pieno se acceso, bordo blu se ereditato dal gruppo, grigio se spento."""
+    p.save()
+    p.setRenderHint(QPainter.Antialiasing)
+    f = QFont(p.font())
+    f.setBold(True)
+    ps = f.pointSizeF() if f.pointSizeF() > 0 else 9.0
+    f.setPointSizeF(max(6.5, min(ps, r.height() * 0.48)))
+    p.setFont(f)
+    if on:
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(40, 120, 200))
+        p.drawRoundedRect(r, 4, 4)
+        p.setPen(QColor(255, 255, 255))
+    else:
+        p.setBrush(QColor(0, 0, 0, 60))
+        p.setPen(QPen(QColor(70, 150, 230) if inherited else QColor(120, 122, 132), 1.2))
+        p.drawRoundedRect(r.adjusted(0.5, 0.5, -0.5, -0.5), 4, 4)
+        p.setPen(QColor(110, 170, 240) if inherited else QColor(150, 152, 162))
+    p.drawText(r, Qt.AlignCenter, "PFL")
+    p.restore()
+
+
+class PflDelegate(QStyledItemDelegate):
+    """Colonna «PFL» della lista: un clic manda la cue (o il gruppo) al preascolto o la toglie."""
+
+    def __init__(self, show_fn, toggle_fn, parent=None):
+        super().__init__(parent)
+        self.show_fn = show_fn
+        self.toggle_fn = toggle_fn
+
+    @staticmethod
+    def _btn(rect):
+        r = QRectF(rect)
+        w = min(r.width() - 6, 40.0)
+        return QRectF(r.center().x() - w / 2, r.top() + 4, w, r.height() - 8)
+
+    def paint(self, p, opt, idx):
+        if opt.state & QStyle.State_Selected:
+            p.fillRect(opt.rect, opt.palette.highlight())
+        else:
+            bg = idx.data(Qt.BackgroundRole)
+            if bg is not None:
+                p.fillRect(opt.rect, bg)
+        cues = self.show_fn().cues
+        if not 0 <= idx.row() < len(cues):
+            return
+        cue = cues[idx.row()]
+        if cue.type not in PFL_TYPES:
+            return
+        inh = pfl_inherited(self.show_fn(), cue) is not None
+        paint_pfl_button(p, self._btn(opt.rect), bool(cue.pfl), inh)
+
+    def editorEvent(self, event, model, opt, idx):
+        t = event.type()
+        if t in (QEvent.MouseButtonPress, QEvent.MouseButtonRelease, QEvent.MouseButtonDblClick) \
+                and event.button() == Qt.LeftButton:
+            cues = self.show_fn().cues
+            if 0 <= idx.row() < len(cues) and cues[idx.row()].type in PFL_TYPES \
+                    and self._btn(opt.rect).contains(event.position()):
+                if t == QEvent.MouseButtonRelease:
+                    self.toggle_fn(cues[idx.row()])
+                return True              # il clic sul pulsante non seleziona la riga né sposta il playhead
+        return False
 ROW_MIME = "application/x-cuestage-rows"
 
 
@@ -203,7 +282,7 @@ class CueTableModel(QAbstractTableModel):
                 return fmt_time(d) if d else ""
             if col == C_TRIG:
                 return TRIGGER_SHORT.get(cue.trigger, cue.trigger)
-            if col == C_STATE:
+            if col in (C_STATE, C_PFL):
                 return ""
         if role == Qt.FontRole and cue.type == "group" and col in (C_TYPE, C_NAME):
             f = QFont()
@@ -242,6 +321,12 @@ class CueTableModel(QAbstractTableModel):
                 return c
         if role == Qt.TextAlignmentRole and col in (C_DELAY, C_DUR):
             return int(Qt.AlignRight | Qt.AlignVCenter)
+        if role == Qt.ToolTipRole and col == C_PFL and cue.type in PFL_TYPES:
+            g = pfl_inherited(self.show, cue)
+            return ("Preascolto acceso: la cue suona solo in cuffia · clic per spegnere" if cue.pfl else
+                    f"In preascolto tramite il gruppo «{g.label()}»" if g else
+                    "Clic: manda la cue al preascolto (solo in cuffia)") + \
+                (" — vale per tutte le cue del gruppo" if cue.type == "group" else "")
         if role == Qt.ToolTipRole and col == C_TARGET and cue.file:
             return cue.file
         if role == Qt.ToolTipRole and cue.notes:
@@ -398,9 +483,8 @@ class StateDelegate(QStyledItemDelegate):
             p.setFont(f)
             p.drawText(r, Qt.AlignCenter, ("⏸ " if st.paused or self.ctrl.paused_all else "") + txt)
         if st is not None and not isinstance(st, float):
-            from .ui_duckicon import paint_duck, paint_pfl
+            from .ui_duckicon import paint_duck
             paint_duck(p, r, st, self.ctrl)
-            paint_pfl(p, r, st)
         p.restore()
 
     def helpEvent(self, event, view, opt, idx):

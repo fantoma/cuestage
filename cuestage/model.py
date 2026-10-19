@@ -247,7 +247,7 @@ DEFAULT_SETTINGS = {
     "midi_in_port": "",
     "midi_map": {
         "go": "", "stop_all": "", "pause_all": "", "resume_all": "",
-        "next": "", "prev": "", "xfade_go": "",
+        "next": "", "prev": "", "xfade_go": "", "dim": "", "duck": "",
     },
     # controlli MIDI continui (fader/potenziometri): "cc 1 7", "pb 1 0" (pitch bend), "pc 1 *"
     "midi_in_ports": [],

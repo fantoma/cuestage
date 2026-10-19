@@ -17,7 +17,7 @@ from .model import (
     CUE_TYPES, MIN_DB, TYPE_LABELS, Show, db_to_lin, )
 from .remote import MidiInput, OscServer
 from .ui_crop import EDIT_KEY
-from .ui_cuelist import C_STATE, ActivePanel, CueTableModel, StateDelegate
+from .ui_cuelist import C_PFL, C_STATE, ActivePanel, CueTableModel, PflDelegate, StateDelegate
 from .ui_dialogs import HelpDialog, SettingsDialog
 from .ui_inspector import Inspector
 from .video_output import Compositor, OutputPreview
@@ -287,12 +287,28 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.duck_btn = QPushButton("Duck")
         self.duck_btn.setCheckable(True)
         self.duck_btn.setFocusPolicy(Qt.NoFocus)
-        self.duck_btn.setFixedHeight(40)
+        self.duck_btn.setFixedHeight(32)
         self.duck_btn.setMinimumWidth(64)
         self.duck_btn.toggled.connect(self._duck_master_toggled)
         self.duck_btn.setContextMenuPolicy(Qt.CustomContextMenu)
         self.duck_btn.customContextMenuRequested.connect(lambda *_: self.ducking_dialog())
-        bar.addWidget(self.duck_btn, 0, Qt.AlignVCenter)
+        # DIM: abbassa subito l'uscita master della riduzione del Master ducking (anche senza microfono)
+        self.dim_btn = QPushButton("DIM")
+        self.dim_btn.setCheckable(True)
+        self.dim_btn.setFocusPolicy(Qt.NoFocus)
+        self.dim_btn.setFixedHeight(32)
+        self.dim_btn.setMinimumWidth(64)
+        self.dim_btn.toggled.connect(self.set_dim)
+        self.dim_btn.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.dim_btn.customContextMenuRequested.connect(lambda *_: self.ducking_dialog())
+        dv = QVBoxLayout()
+        dv.setSpacing(4)
+        dv.addStretch(1)
+        dv.addWidget(self.duck_btn)
+        dv.addWidget(self.dim_btn)
+        dv.addStretch(1)
+        bar.addLayout(dv)
+        self._dim_look = None
         self._duck_look = None
         for text, color, fn, tip in (
             ("❚❚ Pausa", "#8a6d1a", self.pause_all, "F7"),
@@ -336,8 +352,10 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.table.verticalHeader().setDefaultSectionSize(28)
         self.table.setAlternatingRowColors(True)
         self.table.setItemDelegateForColumn(C_STATE, StateDelegate(self.ctrl, lambda: self.show_data, self.table))
+        self.table.setItemDelegateForColumn(C_PFL, PflDelegate(lambda: self.show_data, self.toggle_pfl, self.table))
+        self.table.setColumnHidden(C_PFL, True)          # compare quando il preascolto è configurato
         hh = self.table.horizontalHeader()
-        for col, w in enumerate([24, 50, 125, 230, 220, 70, 70, 110, 190]):
+        for col, w in enumerate([24, 50, 125, 230, 220, 70, 70, 110, 190, 50]):
             self.table.setColumnWidth(col, w)
         hh.setSectionResizeMode(3, QHeaderView.Stretch)
         self.table.selectionModel().selectionChanged.connect(self._selection_changed)
@@ -567,6 +585,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         if self.audio.preview["enabled"]:
             self.audio.ensure_output(self.audio.preview["device"] or None)
         self.pfl_box.setVisible(self.audio.preview["enabled"])
+        self.table.setColumnHidden(C_PFL, not self.audio.preview["enabled"])
+        self.grid.canvas.update()
         self.pfl_slider.blockSignals(True)
         self.pfl_slider.setValue(int(round(self.audio.preview["db"] * 10)))
         self.pfl_slider.blockSignals(False)
@@ -577,6 +597,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.duck_btn.blockSignals(True)
         self.duck_btn.setChecked(bool(self.audio.duck.cfg.get("master_on")))
         self.duck_btn.blockSignals(False)
+        self.dim_btn.blockSignals(True)
+        self.dim_btn.setChecked(bool(self.audio.duck.cfg.get("dim_on")))
+        self.dim_btn.blockSignals(False)
         self._update_duck_btn()
         self._set_projectors(s.get("projectors") or [])
         self._set_mixers(s.get("mixers") or [])
@@ -633,6 +656,22 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.audio.master = db_to_lin(db)
         self.show_data.dirty = True
         self._update_master_label()
+
+    def toggle_pfl(self, cue, on=None):
+        """Manda la cue (o il gruppo, con tutte le sue cue) al preascolto, o la toglie. Vale anche dal vivo."""
+        from .ui_cuelist import PFL_TYPES
+        if cue is None or cue.type not in PFL_TYPES:
+            return
+        cue.pfl = (not cue.pfl) if on is None else bool(on)
+        self.show_data.dirty = True
+        self.model.refresh()
+        self.grid.canvas.update()
+        if self.inspector.cue is cue:
+            self.inspector.set_cue(cue)
+        if cue.pfl and not self.audio.preview.get("enabled"):
+            self.status("Preascolto non configurato: Impostazioni › Audio, OSC e MIDI › Preascolto")
+        else:
+            self.status(f"PFL {'acceso' if cue.pfl else 'spento'}: {cue.label()}")
 
     def _pfl_changed(self, v):
         from .audio_engine import preview_settings
@@ -771,7 +810,29 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         else:
             self.status(f"Duck {'acceso' if on else 'spento'} (Master ducking −{cfg['master_db']:.1f} dB)")
 
+    def set_dim(self, on=None):
+        """DIM acceso/spento (None = cambia): dal tasto, da MIDI o da OSC."""
+        from .ducking import duck_settings
+        cfg = duck_settings(self.show_data.settings)
+        on = (not cfg["dim_on"]) if on is None else bool(on)
+        cfg["dim_on"] = on
+        self.set_ducking(cfg)
+        if self.dim_btn.isChecked() != on:
+            self.dim_btn.blockSignals(True)
+            self.dim_btn.setChecked(on)
+            self.dim_btn.blockSignals(False)
+        if on and cfg["master_db"] <= 0:
+            self.status("DIM acceso ma la riduzione del master è 0 dB: impostala in Impostazioni › Ducking…")
+        else:
+            self.status(f"DIM {'acceso' if on else 'spento'} (master −{cfg['master_db']:.1f} dB)")
+
+    def set_duck(self, on=None):
+        """Duck (Master ducking) acceso/spento (None = cambia): da MIDI o da OSC."""
+        on = (not self.duck_btn.isChecked()) if on is None else bool(on)
+        self.duck_btn.setChecked(on)
+
     def _update_duck_btn(self):
+        self._update_dim_btn()
         d = self.audio.duck
         on = bool(d.cfg.get("master_on"))
         look = ("red" if d.master_ducking else "green") if (on and d.master_active) else ("warn" if on else "off")
@@ -786,6 +847,22 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
                "warn": "acceso ma non attivo (riduzione a 0 dB o ingresso non disponibile)", "off": "spento"}[look]
         self.duck_btn.setToolTip(f"Master ducking: abbassa l'uscita master di {db:.1f} dB quando l'ingresso del "
                                  f"ducking supera la soglia — {why}. Tasto destro: impostazioni del ducking.")
+
+    def _update_dim_btn(self):
+        d = self.audio.duck
+        on = bool(d.cfg.get("dim_on"))
+        look = ("on" if d.dim_active else "warn") if on else "off"
+        if look == self._dim_look:
+            return
+        self._dim_look = look
+        bg = {"on": "#d08000", "warn": "#8a6d1a", "off": "#3a3c44"}[look]
+        self.dim_btn.setStyleSheet(f"QPushButton{{background:{bg};color:white;font-weight:bold;"
+                                   f"border-radius:6px;padding:0 10px;}}")
+        db = float(d.cfg.get("master_db") or 0)
+        why = {"on": "acceso", "warn": "acceso ma la riduzione è 0 dB", "off": "spento"}[look]
+        self.dim_btn.setToolTip(f"DIM: abbassa l'uscita master di {db:.1f} dB (la riduzione del Master ducking) — "
+                                f"{why}. Anche da MIDI (Impostazioni › MIDI) e OSC (/dim). Tasto destro: "
+                                "impostazioni del ducking.")
 
     def closeEvent(self, e):
         if not self._confirm_discard():
