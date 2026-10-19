@@ -337,7 +337,10 @@ def t_ducking(w):
     def vmeter():
         i = w.ctrl.instances.get(c.id)
         return float(i.voice.meter.max()) if i is not None and i.voice is not None else -1.0
-    assert wait_until(lambda: vmeter() > 0.02, 15), (vmeter(), msgs, duck.error, w.audio.status)
+    if not wait_until(lambda: vmeter() > 0.02, 15):
+        from cuestage.media import FFMPEG, FFPROBE, probe
+        raise AssertionError((vmeter(), msgs, duck.error, w.audio.status, os.path.getsize(c.file), probe(c.file),
+                              FFMPEG, FFPROBE, len(w.loader.audio_now(c.file))))
     run(0.3)
     inst = w.ctrl.instances[c.id]
     m0 = vmeter()

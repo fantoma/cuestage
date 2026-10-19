@@ -1,8 +1,10 @@
 """Utility media: durata (ffprobe), decodifica audio (ffmpeg), forme d'onda, curve."""
 import json
 import math
+import os
 import subprocess
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -250,12 +252,28 @@ class MediaLoader(QObject):
         """Audio decodificato; se non ancora pronto lo decodifica subito (bloccante)."""
         with self.lock:
             a = self.audio.get(path)
-        if a is None:
-            info = self.info.get(path) or probe(path)
-            self.info.setdefault(path, info)
-            a = decode_audio(path, channels=info["channels"]) if info["has_audio"] else np.zeros((0, 2), np.int16)
-            with self.lock:
-                self.audio[path] = a
+        if a is None or not len(a):
+            # anche se in cache risulta vuoto: un ffprobe/ffmpeg andato male una volta (computer molto
+            # impegnato) non deve lasciare la cue muta per sempre
+            a = self._decode_fresh(path, retry=a is not None)
+        return a
+
+    def _decode_fresh(self, path, retry=False):
+        info = self.info.get(path)
+        if retry or info is None or not info.get("has_audio"):
+            info = probe(path)
+            if not info["has_audio"] and os.path.exists(path):
+                time.sleep(0.2)
+                info = probe(path)
+            self.info[path] = info
+        a = np.zeros((0, 2), np.int16)
+        if info["has_audio"]:
+            a = decode_audio(path, channels=info["channels"])
+            if not len(a):
+                time.sleep(0.2)
+                a = decode_audio(path, channels=info["channels"])
+        with self.lock:
+            self.audio[path] = a
         return a
 
     def info_now(self, path):
@@ -320,11 +338,7 @@ class MediaLoader(QObject):
         self.peaksReady.emit(path)
 
     def _load_audio(self, path):
-        info = self.info.get(path) or probe(path)
-        self.info.setdefault(path, info)
-        a = decode_audio(path, channels=info["channels"]) if info["has_audio"] else np.zeros((0, 2), np.int16)
-        with self.lock:
-            self.audio[path] = a
+        self._decode_fresh(path)
         self.audioReady.emit(path)
 
 
