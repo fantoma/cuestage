@@ -93,6 +93,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.audio = AudioEngine()
         self.comp = Compositor()
         self.ctrl = Controller(self.show_data, self.audio, self.loader, self.comp)
+        from .video_deck import VideoPreloader
+        self.ctrl.video_decks = VideoPreloader()     # video tenuti pronti (cue vicine al playhead, GRID)
+        self._preload_at = 0.0
         self.ctrl.visual_started = self._ensure_output_visible
         # istanze secondarie (master / slave / ridondanza): avvolge i comandi del controller prima di
         # qualsiasi collegamento dell'interfaccia
@@ -538,6 +541,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.act_grid.setCheckable(True)
         self.act_gl = add(m, "Usa accelerazione OpenGL (al riavvio dell'uscita)", self.toggle_gl)
         self.act_gl.setCheckable(True)
+        self.act_vpre = add(m, "Precarica i video (cue con «Precarica»)", self._toggle_video_preload)
+        self.act_vpre.setCheckable(True)
 
         m = mb.addMenu("&Impostazioni")
         add(m, "Audio, OSC e MIDI…", self.settings_dialog, "Ctrl+,")
@@ -633,6 +638,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.comp.grid = bool(s.get("output_grid", False))
         self.act_grid.setChecked(self.comp.grid)
         self.act_gl.setChecked(bool(s.get("output_opengl", True)))
+        self.act_vpre.setChecked(bool(s.get("video_preload", True)))
         self.act_full.setChecked(bool(s.get("output_fullscreen", True)))
         self.comp.changed()
         self._update_engine_label()
@@ -775,6 +781,48 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self._update_engine_label()
         self.go_btn.setText("GO" if not self.ctrl.paused_all else "GO ❚❚")
         self._update_duck_btn()
+        if time.monotonic() - self._preload_at > 0.25:
+            self._preload_at = time.monotonic()
+            self._preload_videos()
+
+    def _toggle_video_preload(self):
+        self.show_data.settings["video_preload"] = self.act_vpre.isChecked()
+        self.show_data.dirty = True
+        self._preload_videos()
+        self.status("Precaricamento dei video " + ("attivo" if self.act_vpre.isChecked() else
+                                                  "spento: i video si aprono quando partono"))
+
+    def _preload_videos(self):
+        """Sceglie i video da tenere pronti: vicini al playhead di ogni lista, poi la pagina del GRID, poi gli
+        altri, solo per le cue con «Precarica» e fino al massimo di VideoPreloader."""
+        from .video_deck import MAX_DECKS
+        pre = self.ctrl.video_decks
+        sh = self.show_data
+        pre.enabled = bool(sh.settings.get("video_preload", True))
+        busy = set(self.ctrl.instances) | {x[1].id for x in self.ctrl.pending}
+        order, seen = [], set()
+
+        def add(c):
+            if len(order) >= MAX_DECKS or c.id in seen:
+                return
+            seen.add(c.id)
+            if c.type == "video" and c.preload and c.file and c.id not in busy and os.path.exists(c.file):
+                order.append((c.id, c.file, float(c.start or 0.0)))
+        for lst in sh.lists:
+            ph = self.ctrl.playhead_of(lst)
+            if 0 <= ph < len(lst.cues):
+                for c in lst.cues[ph:ph + 4]:
+                    add(c)
+        cur = sh.current
+        if cur.is_grid:
+            for c in cur.cues:
+                if c.grid_pos and int(c.grid_pos[0]) == self.grid.page:
+                    add(c)
+        for c in sh.all_cues():
+            if len(order) >= MAX_DECKS:
+                break
+            add(c)
+        pre.update(order)
 
     # =========================================================== ducking
     def ducking_dialog(self):
@@ -871,6 +919,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.qs.setValue("geometry", self.saveGeometry())
         self._remove_autosave()        # chiusura regolare: nessun recupero necessario
         self.ctrl.stop_all(0)
+        self.ctrl.video_decks.clear()
         self.audio.stop()
         self.osc.stop()
         self.midi.close()

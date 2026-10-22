@@ -385,6 +385,13 @@ class MediaTabsMixin:
         row.addWidget(self._dspin("loop_end", 0, 36000, 0.1, 3, special="OUT"))
         row.addWidget(QLabel("ripetizioni"))
         row.addWidget(self._ispin("loop_count", 0, 100000, special="∞"))
+        if cue.type == "video":
+            pc = self._check("preload", "Precarica")
+            pc.setToolTip("Tiene il video pronto in anticipo (file aperto, fermo sul primo fotogramma) quando la "
+                          "cue è vicina al playhead o nella pagina del GRID: parte subito. Nei loop un secondo "
+                          "lettore aspetta all'inizio del loop, così la ripetizione non ha attese. Toglilo per "
+                          "risparmiare memoria con molti video grandi.")
+            row.addWidget(pc)
         row.addStretch(1)
         bc = QPushButton("Cancella curva volume")
         bc.clicked.connect(lambda: (cue.curve.clear(), self._timeline_changed()))

@@ -2,9 +2,9 @@
 import math
 import time
 
-from PySide6.QtCore import QObject, QTimer, QUrl, Qt, Signal
+from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QImage
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer, QVideoSink
+from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 
 from .audio_engine import Voice, build_gains
 from .media import SR, Envelope, curve_arrays, curve_gain
@@ -430,35 +430,6 @@ class AudioInstance(RoutedVoice, KeyframeMixin, Instance):
 
 # ------------------------------------------------------------------ video
 
-class _VideoBridge(QObject):
-    """Riceve i segnali del player nel thread della GUI.
-
-    È un QObject: quando viene distrutto Qt scarta i fotogrammi ancora in coda, e
-    `inst = None` scollega l'istanza anche se un segnale arriva in ritardo."""
-
-    def __init__(self, inst):
-        super().__init__()
-        self.inst = inst
-
-    def on_frame(self, frame):
-        inst = self.inst
-        if inst is None or inst.done or inst.layer is None:
-            return
-        if frame.isValid():
-            img = frame.toImage()
-            if not img.isNull():
-                inst.layer.image = img
-                inst.frames += 1
-
-    def on_status(self, st):
-        if self.inst is not None and not self.inst.done:
-            self.inst._status(st)
-
-    def on_error(self, *a):
-        if self.inst is not None and not self.inst.done:
-            self.inst._error()
-
-
 _graveyard = []  # oggetti multimediali in attesa di distruzione sicura
 
 
@@ -502,18 +473,19 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             if len(data):
                 # in pausa finché il lettore non mostra il primo fotogramma
                 self._start_voice(data, silent, paused=True)
-        self.bridge = _VideoBridge(self)
-        self.player = QMediaPlayer()
+        from .video_deck import VideoDeck
+        self.alt = None                       # deck fermo all'inizio del loop (ripetizione senza attesa)
+        pre = getattr(ctrl, "video_decks", None)
+        deck = pre.take(c.id, c.file, c.start) if (pre is not None and c.preload) else None
+        self.preloaded = deck is not None and deck.ready
+        if deck is None:
+            deck = VideoDeck(c.file, c.start)
+        self._use_deck(deck)
         self.aout = None
         if self.voice is None:
             self.aout = QAudioOutput()
             self.aout.setVolume(0.0)
             self.player.setAudioOutput(self.aout)
-        self.sink = QVideoSink()
-        self.player.setVideoSink(self.sink)
-        self.sink.videoFrameChanged.connect(self.bridge.on_frame)
-        self.player.mediaStatusChanged.connect(self.bridge.on_status)
-        self.player.errorOccurred.connect(self.bridge.on_error)
         now = ctrl.clock
         lvl = db_to_lin(c.level_db)
         self.env_vol = Envelope(lvl)          # usato solo con il lettore di sistema
@@ -527,26 +499,77 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             self.env_vol.ramp_to(now, lvl, c.fade_in)
             self.env_op.ramp_to(now, float(c.opacity), c.fade_in)
         self.curve = curve_arrays(c.curve)
-        self.seeked = c.start <= 0
+        self.seeked = deck.loaded
         self.loops_left = (int(c.loop_count) - 1) if c.loop_count and c.loop_count > 0 else -1
         self.ended = False
-        self.player.setSource(QUrl.fromLocalFile(c.file))
-        if not self.seeked:
-            self.player.setPosition(int(c.start * 1000))
-        self.player.play()
+        if deck.ready and deck.image is not None:      # precaricato: il primo fotogramma c'è già
+            self.layer.image = deck.image
+            self.frames = 1
+        if self.player.duration() > 0:
+            self.file_dur = self.player.duration() / 1000.0
+        deck.go()
 
-    def _status(self, st):
-        if st in (QMediaPlayer.LoadedMedia, QMediaPlayer.BufferedMedia) and not self.seeked:
+    # ---------------------------------------------------- deck (lettore + sink)
+    def _use_deck(self, deck):
+        self.deck = deck
+        deck.owner = self
+        self.player = deck.player
+        self.sink = deck.sink
+        self.bridge = deck          # compatibilità: «bridge» non è None finché c'è un lettore
+
+    def _deck_status(self, deck, st):
+        if self.done or deck is not self.deck:
+            return
+        if st in (QMediaPlayer.LoadedMedia, QMediaPlayer.BufferedMedia):
             self.seeked = True
-            self.player.setPosition(int(self.cue.start * 1000))
         if st == QMediaPlayer.EndOfMedia:
             self.ended = True
         if self.player.duration() > 0:
             self.file_dur = self.player.duration() / 1000.0
 
-    def _error(self, *a):
-        self.ctrl.message.emit(f"Errore video '{self.cue.label()}': {self.player.errorString()}")
+    def _deck_frame(self, deck, img):
+        if self.done or deck is not self.deck or self.layer is None:
+            return
+        self.layer.image = img
+        self.frames += 1
+
+    def _deck_error(self, deck):
+        if self.done or deck is not self.deck:
+            return
+        self.ctrl.message.emit(f"Errore video '{self.cue.label()}': {deck.error}")
         self.finish()
+
+    def _want_alt(self):
+        """Serve un secondo deck fermo all'inizio del loop? (loop di almeno 1 s, precaricamento attivo)"""
+        if not self.cue.preload or not self.looping() or self.alt is not None or self.frames == 0:
+            return False
+        end, ls, le = self._bounds()
+        return le - ls >= 1.0 and le < 1e8
+
+    def _loop_swap(self):
+        """Ripetizione del loop: parte il deck già fermo all'inizio del loop, l'altro si riarma lì.
+        False se il deck di riserva non è pronto (allora si cerca nel file come prima)."""
+        alt = self.alt
+        if alt is None or not alt.ready:
+            return False
+        end, ls, le = self._bounds()
+        old = self.deck
+        self._use_deck(alt)
+        if alt.image is not None and self.layer is not None:
+            self.layer.image = alt.image
+        if self.aout is not None:
+            old.player.setAudioOutput(None)
+            self.player.setAudioOutput(self.aout)
+        self.ended = False
+        self.seeked = True
+        if not (self.paused or self.ctrl.paused_all):
+            alt.go()
+        old.player.pause()
+        old.arm(ls)
+        old.owner = self
+        self.alt = old
+        self.sync_cool = self.ctrl.clock + 0.8
+        return True
 
     def _bounds(self):
         c = self.cue
@@ -586,7 +609,8 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             return
         if v.wraps != self.wraps:             # l'audio è ripartito dall'inizio del loop
             self.wraps = v.wraps
-            self._seek_video(v.pos / SR)
+            if not self._loop_swap():
+                self._seek_video(v.pos / SR)
             return
         if self.paused or self.ctrl.paused_all or now < self.sync_cool:
             return
@@ -603,6 +627,10 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             self._tick_kf(dt)
         c = self.cue
         end, ls, le = self._bounds()
+        if self._want_alt():
+            from .video_deck import VideoDeck
+            self.alt = VideoDeck(c.file, ls)
+            self.alt.owner = self
         if self._audio_master():
             v = self.voice
             self._update_route()
@@ -626,9 +654,10 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
                 if self.loops_left > 0:
                     self.loops_left -= 1
                 self.ended = False
-                self.player.setPosition(int(ls * 1000))
-                if self.player.playbackState() != QMediaPlayer.PlayingState and not self.paused:
-                    self.player.play()
+                if not self._loop_swap():
+                    self.player.setPosition(int(ls * 1000))
+                    if self.player.playbackState() != QMediaPlayer.PlayingState and not self.paused:
+                        self.player.play()
                 pos = ls
             elif not self.looping() and self.seeked and (self.ended or pos >= end - 0.01):
                 self.finish()
@@ -705,16 +734,13 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
         if self.voice is not None:
             self.ctrl.audio.remove(self.key)
         if getattr(self, "bridge", None) is not None:
-            self.bridge.inst = None
-            for sig in (self.sink.videoFrameChanged, self.player.mediaStatusChanged,
-                        self.player.errorOccurred):
-                try:
-                    sig.disconnect()
-                except (RuntimeError, TypeError):
-                    pass
-            self.player.stop()
-            _bury(*[o for o in (self.player, self.aout, self.sink, self.bridge) if o is not None])
+            for d in (self.deck, self.alt):
+                if d is not None:
+                    d.dispose()
+            if self.aout is not None:
+                _bury(self.aout)
             self.bridge = None
+            self.alt = None
         self.ctrl.comp.remove(self.key, self.layer)
 
 

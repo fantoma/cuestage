@@ -594,6 +594,22 @@ Menu **Uscita video**: scelta dello schermo (di default l'ultimo, cioè il proie
 uscita, con griglia di test, valori numerici e nudge da tastiera (1–4 = angolo, frecce, Maiusc ×10).
 La correzione è una trasformazione prospettica applicata a tutti i layer, salvata nello show.
 
+### Video precaricati (partenza immediata e loop senza attesa)
+
+Aprire un video grande (e saltare al punto IN) può richiedere da qualche decimo di secondo a qualche secondo.
+Con **«Precarica»** (ispettore della cue video, accanto al loop; acceso di serie) CueStage tiene il video
+**pronto in anticipo**: file aperto e fermo sul primo fotogramma da mostrare. Al GO parte subito.
+
+- Sono tenuti pronti i video **vicini al playhead** di ogni lista (la cue in standby e le 3 successive), poi
+  quelli della **pagina visibile del GRID**, poi gli altri, fino a **8** video insieme. Se ne apre uno alla
+  volta, per non rallentare le cue che stanno suonando.
+- Nei **loop** un secondo lettore aspetta fermo all'inizio del loop: alla ripetizione si passa dall'uno
+  all'altro senza cercare nel file, poi il primo si riposiziona per la ripetizione successiva. Vale per loop di
+  almeno 1 secondo.
+- Ogni video pronto occupa un decoder e un po' di memoria: con molti video 4K togli «Precarica» a quelli che
+  non ne hanno bisogno, oppure spegni tutto da **Uscita video › Precarica i video**.
+- L'audio del video (motore CueStage) è già decodificato in memoria all'apertura dello show.
+
 ## Mixer digitali
 
 **Impostazioni › Mixer…**: elenco dei mixer, con **🔍 Cerca mixer in rete**, che trova da solo:

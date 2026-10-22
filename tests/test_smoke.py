@@ -600,6 +600,51 @@ def t_preview_and_mixer_duck(w):
     w._apply_settings()
 
 
+def make_video(name, sec=4):
+    import subprocess
+    from cuestage.media import FFMPEG
+    path = os.path.join(TMP, name)
+    subprocess.run([FFMPEG, "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=25",
+                    "-f", "lavfi", "-i", "sine=frequency=500:sample_rate=48000", "-t", str(sec),
+                    "-c:v", "libx264", "-g", "25", "-pix_fmt", "yuv420p", "-c:a", "aac", path],
+                   check=True, capture_output=True)
+    return path
+
+
+def t_video_preload(w):
+    """Video precaricato: parte con il primo fotogramma già pronto; nel loop si passa al secondo lettore."""
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    path = make_video("pre.mp4", sec=4)
+    v = Cue("video", number="1", file=path, start=0.5, loop=True, loop_start=0.5, loop_end=2.0)
+    n = Cue("video", number="2", file=path, preload=False)
+    sh.main.cues[:] = [v, n]
+    w._set_show(sh)
+    w._apply_settings()
+    w.ctrl.set_playhead(0)
+    w.loader.audio_now(path)
+    pre = w.ctrl.video_decks
+    assert wait_until(lambda: v.id in pre.decks and pre.decks[v.id].ready, 20), list(pre.decks)
+    assert wait_until(lambda: len(pre.decks) == 1, 5), list(pre.decks)   # «Precarica» spento: niente deck
+    w.ctrl.trigger(v, cascade=False)
+    inst = w.ctrl.instances[v.id]
+    assert inst.preloaded and inst.layer.image is not None and inst.frames >= 1
+    assert v.id not in pre.decks                               # il deck è passato alla cue
+    decks = {id(inst.deck)}
+
+    def swapped():
+        decks.add(id(inst.deck))
+        return len(decks) >= 2
+    assert wait_until(swapped, 20), "il loop non è passato al secondo lettore"
+    assert not inst.done
+    w.ctrl.stop_all(0)
+    run(0.3)
+    w.ctrl.trigger(n, cascade=False)
+    assert not w.ctrl.instances[n.id].preloaded
+    w.ctrl.stop_all(0)
+    run(0.3)
+
+
 def t_tap_tempo(w):
     """Tap Tempo: BPM dalle battute; Loop e Sequence avanzano sul battito; i modi non adatti lo ignorano."""
     from cuestage.engine import tap_active
@@ -752,6 +797,7 @@ if __name__ == "__main__":
     check("ducking delle cue, dei gruppi e del master", lambda: t_ducking(w))
     check("preascolto e fader del mixer agganciati al ducking", lambda: t_preview_and_mixer_duck(w))
     check("pulsante PFL nella lista e nel GRID", lambda: t_pfl_buttons(w))
+    check("video precaricati e loop senza attesa", lambda: t_video_preload(w))
     check("GRID: Solo, BLIND, gruppo aperto, rilascio su un gruppo", lambda: t_grid_solo_blind_groups(w))
     check("cue mixer su X32 simulato (mute a scena e fader)", lambda: t_mixer_x32(w))
     check("profilo OSC ChamSys MagicQ", t_osc_profile)

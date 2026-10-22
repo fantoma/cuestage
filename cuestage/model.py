@@ -85,6 +85,8 @@ class Cue:
         # (None = incrocio spento; lista vuota = routing predefinito), volume per uscita in dB
         "audio_device": "", "matrix": [], "out_levels": [],
         "video_audio": "engine",   # video: "engine" = motore CueStage, "system" = lettore di sistema
+        # video: tenuto pronto in anticipo (file aperto, fermo sul primo fotogramma) e loop senza attesa
+        "preload": True,
         # ducking: riduzione in dB (positiva, 0 = spento) quando l'ingresso del ducking supera la soglia;
         # su un gruppo vale per tutte le sue cue (che non ne hanno uno proprio)
         "duck_db": 0.0,
@@ -260,6 +262,7 @@ DEFAULT_SETTINGS = {
     "output_corners": [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
     "output_opengl": True,
     "output_grid": False,
+    "video_preload": True,     # tiene pronti i video delle cue con «Precarica» (vedi video_deck.py)
     "edit_blind": False,
     "go_target": "main",
     "web_enabled": False,  # interfaccia web
