@@ -326,15 +326,177 @@ class CueList:
         return -1
 
 
+def _now():
+    import time
+    return time.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def copy_lists(lists):
+    """Copia indipendente di MAIN e PANEL (stessi id di liste e cue)."""
+    out = []
+    for l in lists:
+        n = CueList(l.name, [Cue.from_dict(c.to_dict(None), None) for c in l.cues], l.id)
+        n.set_grid_data(l.grid_data())
+        out.append(n)
+    return out
+
+
+def lists_to_data(lists, base_dir):
+    """MAIN e PANEL nel formato del file: (cue della MAIN, PANEL)."""
+    main = lists[0] if lists else CueList("MAIN", list_id=MAIN_ID)
+    return ([c.to_dict(base_dir) for c in main.cues],
+            [dict({"id": l.id, "name": l.name, "cues": [c.to_dict(base_dir) for c in l.cues]}, **l.grid_data())
+             for l in lists[1:]])
+
+
+def lists_from_data(cues, panels, base):
+    main = CueList("MAIN", [Cue.from_dict(d, base) for d in cues or []], MAIN_ID)
+    out = [main]
+    for p in panels or []:
+        if isinstance(p, dict):
+            lst = CueList(str(p.get("name") or "PANEL"), [Cue.from_dict(d, base) for d in p.get("cues", [])],
+                          p.get("id") if p.get("id") != MAIN_ID else None)
+            lst.set_grid_data(p)
+            out.append(lst)
+    return out
+
+
+class ShowVersion:
+    """Una versione dello show: nome, annotazioni e le sue liste (MAIN e PANEL).
+    La versione attiva ha lists = None: le sue liste sono quelle dello show (Show.lists).
+    Le impostazioni (schede, mixer, proiettori, OSC, MIDI…) sono comuni a tutte le versioni."""
+
+    def __init__(self, name, notes="", version_id=None, lists=None, created=None, modified=None):
+        self.id = version_id or uuid.uuid4().hex[:8]
+        self.name = name
+        self.notes = notes
+        self.lists = lists
+        self.created = created or _now()
+        self.modified = modified or self.created
+
+    def meta(self):
+        return {"id": self.id, "name": self.name, "notes": self.notes,
+                "created": self.created, "modified": self.modified}
+
+
 class Show:
     VERSION = 1
 
     def __init__(self):
+        self.on_change = None          # chiamata a ogni modifica (dirty = True): cronologia undo/redo
         self.lists = [CueList("MAIN", list_id=MAIN_ID)]   # [0] = MAIN, poi i PANEL
         self.view = 0                                      # lista visualizzata/modificata
         self.settings = copy.deepcopy(DEFAULT_SETTINGS)
         self.path = None
         self.dirty = False
+        first = ShowVersion(tr("Versione {0}", 1))
+        self.versions = [first]        # versioni dello show (almeno una); quella attiva è in self.lists
+        self.active_version = first.id
+
+    @property
+    def dirty(self):
+        return self._dirty
+
+    @dirty.setter
+    def dirty(self, value):
+        self._dirty = bool(value)
+        if value and self.on_change is not None:
+            self.on_change()
+
+    # ---- versioni
+    @property
+    def active(self):
+        return self.version_by_id(self.active_version) or self.versions[0]
+
+    def version_by_id(self, vid):
+        return next((v for v in self.versions if v.id == vid), None)
+
+    def version_lists(self, vid):
+        """Liste di una versione (quelle dello show per la versione attiva)."""
+        v = self.version_by_id(vid)
+        if v is None:
+            return []
+        return self.lists if v.id == self.active_version else (v.lists or [])
+
+    def every_cue(self):
+        """Tutte le cue di tutte le versioni (per i file multimediali da copiare)."""
+        yield from self.all_cues()
+        for v in self.versions:
+            if v.id != self.active_version:
+                for lst in v.lists or []:
+                    yield from lst.cues
+
+    def _unique_version_name(self, name):
+        names = {v.name for v in self.versions}
+        base, n = name, 2
+        while name in names:
+            name = f"{base} ({n})"
+            n += 1
+        return name
+
+    def add_version(self, name, source=None, lists=None, notes=""):
+        """Nuova versione (non attiva), copia della versione «source» (o delle liste date)."""
+        if lists is None:
+            lists = copy_lists(self.version_lists(source or self.active_version))
+        v = ShowVersion(self._unique_version_name(name), notes, lists=lists)
+        self.versions.append(v)
+        self.dirty = True
+        return v
+
+    def switch_version(self, vid):
+        """Rende attiva la versione vid: le liste correnti restano nella versione che si lascia."""
+        if vid == self.active_version:
+            return False
+        target = self.version_by_id(vid)
+        if target is None:
+            return False
+        view_id = self.current.id
+        cur = self.active
+        cur.lists = self.lists
+        self.lists = target.lists or [CueList("MAIN", list_id=MAIN_ID)]
+        target.lists = None
+        self.active_version = target.id
+        self.view = next((i for i, l in enumerate(self.lists) if l.id == view_id), 0)
+        self.dirty = True
+        return True
+
+    def remove_version(self, vid):
+        if vid == self.active_version or len(self.versions) < 2:
+            return False
+        self.versions = [v for v in self.versions if v.id != vid]
+        self.dirty = True
+        return True
+
+    def versions_data(self, base_dir):
+        out = []
+        for v in self.versions:
+            d = v.meta()
+            if v.id != self.active_version:
+                d["cues"], d["panels"] = lists_to_data(v.lists or [], base_dir)
+            out.append(d)
+        return out
+
+    def set_versions_data(self, items, active, base):
+        vs = []
+        for d in items or []:
+            if not isinstance(d, dict):
+                continue
+            vid = str(d.get("id") or "") or None
+            v = ShowVersion(str(d.get("name") or tr("Versione {0}", len(vs) + 1)), str(d.get("notes") or ""),
+                            vid, None, d.get("created"), d.get("modified"))
+            if v.id != active:
+                v.lists = lists_from_data(d.get("cues"), d.get("panels"), base)
+            vs.append(v)
+        if not vs or not any(v.id == active for v in vs):
+            # nessuna versione salvata (show di una versione precedente) o attiva mancante
+            first = next((v for v in vs if v.id == active), None)
+            if first is None:
+                first = ShowVersion(tr("Versione {0}", 1)) if not vs else ShowVersion(
+                    self._unique_version_name(tr("Versione {0}", len(vs) + 1)))
+                vs.insert(0, first)
+            active = first.id
+        self.versions = vs
+        self.active_version = active
 
     # ---- liste
     @property
@@ -461,6 +623,10 @@ class Show:
             "cues": [c.to_dict(base_dir) for c in self.main.cues],
             "panels": [dict({"id": l.id, "name": l.name, "cues": [c.to_dict(base_dir) for c in l.cues]},
                             **l.grid_data()) for l in self.panels],
+            # le cue della versione attiva sono quelle qui sopra («cues» e «panels»): un CueStage
+            # precedente apre la versione attiva e ignora le altre
+            "active_version": self.active_version,
+            "versions": self.versions_data(base_dir),
         }
 
     def save(self, path, copy_only=False):
@@ -498,13 +664,8 @@ class Show:
         s.settings["midi_controls"] = mc
         if not s.settings.get("midi_in_ports") and s.settings.get("midi_in_port"):   # versioni precedenti
             s.settings["midi_in_ports"] = [s.settings["midi_in_port"]]
-        s.main.cues = [Cue.from_dict(d, base) for d in data.get("cues", [])]
-        for p in data.get("panels") or []:
-            if isinstance(p, dict):
-                lst = CueList(str(p.get("name") or "PANEL"), [Cue.from_dict(d, base) for d in p.get("cues", [])],
-                              p.get("id") if p.get("id") != MAIN_ID else None)
-                lst.set_grid_data(p)
-                s.lists.append(lst)
+        s.lists = lists_from_data(data.get("cues", []), data.get("panels"), base)
+        s.set_versions_data(data.get("versions"), str(data.get("active_version") or ""), base)
         s._migrate_global_presets(data.get("presets") or {})
         s.original_path = data.get("original_path")
         return s

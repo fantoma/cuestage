@@ -73,7 +73,7 @@ class ClusterMixin:
         from ..model import Show
         hub = self.cluster
         new = Show.from_data(data, None)
-        for c in new.all_cues():
+        for c in new.every_cue():
             if c.file in info["remap"]:
                 c.file = info["remap"][c.file]
         sh = self.show_data
@@ -126,24 +126,34 @@ class ClusterMixin:
         view_id = sh.current.id
         sel = self.inspector.cue.id if getattr(self.inspector, "cue", None) else None
         old = dict(sh.settings)
-        sh.lists = new.lists
-        sh.view = next((i for i, l in enumerate(sh.lists) if l.id == view_id), 0)
-        if take_settings:
-            sh.settings = new.settings
-            self._apply_settings(old=old)
-        self.model.set_show(sh)
-        for c in sh.all_cues():
-            self._preload(c)
-        self._apply_collapse()
-        cue = next((c for c in sh.all_cues() if c.id == sel), None) if sel else None
-        self.inspector.set_cue(cue)
-        self._update_standby()
+        self._history_flush()
+        self._hist_restoring = True
+        try:
+            sh.lists = new.lists
+            sh.versions = new.versions
+            sh.active_version = new.active_version
+            sh.view = next((i for i, l in enumerate(sh.lists) if l.id == view_id), 0)
+            if take_settings:
+                sh.settings = new.settings
+                self._apply_settings(old=old)
+            self.model.set_show(sh)
+            for c in sh.all_cues():
+                self._preload(c)
+            self._apply_collapse()
+            cue = next((c for c in sh.all_cues() if c.id == sel), None) if sel else None
+            self.inspector.set_cue(cue)
+            self._update_tabs()
+            self._update_standby()
+        finally:
+            self._hist_restoring = False
+        self._history_capture(tr("Modifica da un'altra istanza"))
 
     @staticmethod
     def _lists_hash(show):
         import hashlib
         import json as _json
         data = [[l.id, l.name, l.grid_data(), [c.to_dict(None) for c in l.cues]] for l in show.lists]
+        data.append([show.active_version, show.versions_data(None)])
         return hashlib.sha1(_json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()
 
     def _show_hash(self):

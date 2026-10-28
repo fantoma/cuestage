@@ -407,6 +407,43 @@ smette di seguire i keyframe) partendo dal valore che ha in quel momento.
   Dopo un crash, alla riapertura CueStage propone di recuperarlo. L'autosave viene cancellato
   quando si salva o si chiude normalmente.
 
+## Annulla, ripeti e cronologia
+
+- **Modifica › Annulla** (Ctrl+Z) e **Ripeti** (Ctrl+Shift+Z o Ctrl+Y): il menu dice cosa si annulla
+  («Annulla: cue 5 «Pioggia»: livello, fade out»). Vale per tutto quello che cambia lo show: cue, liste,
+  PANEL e GRID, gruppi, impostazioni, versioni.
+- Dentro un campo di testo Ctrl+Z annulla la digitazione del campo; fuori, annulla l'ultima modifica dello show.
+- Una modifica diventa un passo dopo mezzo secondo di pausa: digitare un nome o trascinare un cursore è un passo solo.
+- **Modifica › Cronologia…** (Ctrl+H): l'elenco dei passi dall'apertura dello show, con l'ora. Doppio clic (o
+  «Torna a questo punto») riporta lo show a quel passo; i passi successivi restano grigi e si riprendono con
+  Ripeti, finché non si fa una nuova modifica. **★ Segna punto…** dà un nome a un passo («prima della prova»);
+  **Crea versione da questo punto…** fa una nuova versione con lo show com'era in quel passo, senza toccare
+  quello attuale.
+- Annullare non ferma le cue in esecuzione e non tocca i comandi dal vivo: volume master, Duck, DIM, volume
+  del preascolto, BLIND, gruppi aperti o chiusi.
+- Tornando al passo salvato lo show risulta di nuovo «non modificato».
+- La cronologia vale finché lo show è aperto (fino a 500 passi): per conservare un punto, farne una versione.
+
+## Versioni dello show
+
+**File › Versioni dello show…** (Ctrl+Alt+V): più versioni dello stesso spettacolo nello stesso file, per
+esempio «Teatro grande», «Tournée», «Matinée per le scuole».
+
+- Ogni versione ha le sue cue, la MAIN, i PANEL e i GRID, e le sue **annotazioni**: un testo libero per cosa
+  cambia, per quale teatro, cose da provare («Inserisci data e ora» aggiunge una riga datata).
+- Le **impostazioni** (schede audio, matrice, mixer, proiettori, OSC, MIDI, ducking, preascolto) sono comuni
+  a tutte le versioni.
+- Si lavora e si va in scena con la **versione attiva** (●). «＋ Nuova versione da questa…» ne fa una copia;
+  «● Rendi attiva» (o doppio clic) passa a un'altra. Le cue in esecuzione continuano.
+- Per ogni versione la finestra mostra date, numero di cue e le differenze dalla versione attiva
+  (cue in più, in meno, diverse).
+- Con più versioni il nome della versione attiva compare nel titolo della finestra e nella barra di stato
+  (clic per aprire le versioni).
+- Cambiare versione, crearla, eliminarla o modificarne le annotazioni si annulla con Ctrl+Z.
+- Le istanze secondarie ricevono tutte le versioni, con i loro file multimediali.
+- Un CueStage precedente alla 1.0.6 apre la versione attiva e ignora le altre; se salva, le altre versioni
+  si perdono.
+
 ## Schede audio e matrice
 
 Tutta la gestione dell'audio di una cue audio o video sta nella scheda **Tempi, loop e audio**

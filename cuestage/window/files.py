@@ -130,6 +130,7 @@ class FilesMixin:
         self._apply_collapse()
         self._select_row(0)
         self._update_standby()
+        self._history_reset()
         self._update_title()
 
     def open_dialog(self):
@@ -160,10 +161,12 @@ class FilesMixin:
             return self.save_as()
         try:
             self._corners_changed()
+            self._history_flush()
             self.show_data.save(self.show_data.path)
         except Exception as e:
             QMessageBox.critical(self, tr("Errore"), tr("Salvataggio fallito:\n{0}", e))
             return False
+        self._history_saved()
         self._remove_autosave()        # salvato davvero: l'autosave non serve più
         self._remember_last(self.show_data.path)
         self.status(tr("Salvato {0}", self.show_data.path))

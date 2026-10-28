@@ -295,6 +295,136 @@ def t_grid_solo_blind_groups(w):
     assert sh.main.cues[1].group == sh.main.cues[0].id
 
 
+def t_history_versions(w):
+    """Annulla / ripeti, ritorno a un punto della cronologia, versioni dello show con annotazioni."""
+    from PySide6.QtWidgets import QInputDialog
+    from cuestage.history import MAX_STEPS
+    from cuestage.i18n import tr
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    w._set_show(sh)
+    run(0.1)
+    h = w.history
+    assert not w.act_undo.isEnabled() and len(h.steps) == 1
+    w.add_cue("memo")
+    w._history_flush()
+    c = sh.main.cues[0]
+    c.name = "Prima"
+    sh.dirty = True
+    run(0.7)                                                # la modifica si fissa da sola dopo una pausa
+    assert len(h.steps) == 3, [s.desc for s in h.steps]
+    assert "Prima" in h.steps[-1].desc, h.steps[-1].desc
+    a = Cue("audio", number="9", file=tone("hist.wav", sec=6))
+    sh.main.cues.append(a)
+    w.model.set_show(sh)
+    sh.dirty = True
+    w._history_flush()
+    w.ctrl.start_cue(a)
+    run(0.3)
+    playing = a.id in w.ctrl.instances
+    sh.settings["master_db"] = -6.0                         # comandi dal vivo: non entrano nella cronologia
+    sh.dirty = True
+    w._history_flush()
+    n = len(h.steps)
+    w.act_undo.trigger()
+    assert [x.id for x in sh.main.cues] == [c.id], [x.name for x in sh.main.cues]
+    assert sh.settings["master_db"] == -6.0
+    if playing:
+        assert a.id in w.ctrl.instances                     # annullare non ferma le cue in corso
+    w.act_undo.trigger()
+    assert sh.main.cues[0].name == "", sh.main.cues[0].name
+    assert w.inspector.cue is None or w.inspector.cue in sh.main.cues
+    w.act_redo.trigger()
+    w.act_redo.trigger()
+    assert [x.name for x in sh.main.cues] == ["Prima", ""] and len(h.steps) == n
+    w.history_go(0)                                         # torna al punto di partenza
+    assert sh.main.cues == [] and h.can_redo()
+    w.history_go(n - 1)
+    assert len(sh.main.cues) == 2
+    # una nuova modifica dopo un annulla cancella i passi «ripeti»
+    w.act_undo.trigger()
+    sh.main.cues[0].notes = "nota"
+    sh.dirty = True
+    w._history_flush()
+    assert not h.can_redo() and len(h.steps) == n
+    w.ctrl.stop_all(0)
+    run(0.2)
+    # PANEL creato e annullato: sparisce anche il tab
+    w.add_panel()
+    w._history_flush()
+    assert len(sh.lists) == 2
+    w.undo()
+    assert len(sh.lists) == 1 and sh.view == 0
+    # versioni
+    orig_text = QInputDialog.getText
+    QInputDialog.getText = staticmethod(lambda *a, **k: ("Tournée", True))
+    try:
+        v = w.new_version()                                 # copia della versione attiva e passa a quella
+    finally:
+        QInputDialog.getText = orig_text
+    assert v is not None and sh.active_version == v.id and len(sh.versions) == 2
+    assert "Tournée" in w.windowTitle() and "Tournée" in w.version_btn.text()
+    first = sh.versions[0]
+    sh.main.cues[0].name = "Solo in tournée"
+    sh.active.notes = "Teatro piccolo: niente video"
+    sh.dirty = True
+    w._history_flush()
+    assert first.lists[0].cues[0].name == "Prima"           # l'altra versione non cambia
+    w.versions_dialog()
+    run(0.1)
+    d = w._ver_dialog
+    d.list.setCurrentRow(0)
+    run(0.05)
+    assert tr("{0} cue diverse", 1) in d.meta.text(), d.meta.text()
+    d.notes.setPlainText("Versione per i teatri grandi")
+    w._history_flush()
+    assert first.notes == "Versione per i teatri grandi"
+    w.switch_version(first.id)
+    assert sh.main.cues[0].name == "Prima" and sh.active is first
+    w.undo()                                                # il cambio di versione si annulla
+    assert sh.active.name == "Tournée" and sh.main.cues[0].name == "Solo in tournée"
+    w.redo()
+    assert sh.active is first
+    d.close()
+    # salvataggio e riapertura con le versioni e le annotazioni
+    path = os.path.join(TMP, "versioni.cueshow")
+    sh.path = path
+    assert w.save()
+    QSettings("CueStage", "CueStage").remove("last_show")   # le finestre aperte dopo non devono riaprirlo
+    assert not sh.dirty
+    data = json.load(open(path, encoding="utf-8"))
+    assert data["active_version"] == first.id and len(data["versions"]) == 2
+    assert [x.get("name") for x in data["cues"]] == ["Prima"]          # i CueStage precedenti aprono l'attiva
+    back = Show.load(path)
+    tour = next(x for x in back.versions if x.name == "Tournée")
+    assert tour.notes == "Teatro piccolo: niente video" and tour.lists[0].cues[0].name == "Solo in tournée"
+    assert back.active.notes == "Versione per i teatri grandi"
+    # dopo il salvataggio: annulla → modificato, ripeti → di nuovo come il file salvato
+    w.undo()
+    assert sh.dirty
+    w.redo()
+    assert not sh.dirty
+    # cronologia dalla finestra e versione creata da un passo vecchio
+    w.history_dialog()
+    run(0.1)
+    hd = w._hist_dialog
+    assert hd.list.count() == len(h.steps)
+    QInputDialog.getText = staticmethod(lambda *a, **k: ("Dal passo 1", True))
+    try:
+        w.history_to_version(1)
+    finally:
+        QInputDialog.getText = orig_text
+    newv = sh.versions[-1]
+    assert newv.name == "Dal passo 1" and sh.active is first
+    assert [x.name for x in newv.lists[0].cues] == [""], [x.name for x in newv.lists[0].cues]
+    hd.close()
+    # show di una versione precedente (senza versioni): una sola versione
+    old = Show.from_data({"cues": [Cue("memo", name="x").to_dict()]}, None)
+    assert len(old.versions) == 1 and old.main.cues[0].name == "x"
+    # i passi più vecchi si perdono oltre il limite
+    assert len(h.steps) <= MAX_STEPS
+
+
 def t_languages():
     """File di lingua: completi, con gli stessi segnaposto {0}… dell'italiano; cambio di lingua e ritorno."""
     import importlib.util
@@ -832,6 +962,7 @@ if __name__ == "__main__":
     check("lettura dei controlli ALSA", t_alsa_parser)
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
+    check("annulla / ripeti, cronologia e versioni dello show", lambda: t_history_versions(w))
     w.show_data.dirty = False
     w.close()
     check("master + ridondanza: comandi, modifiche, heartbeat", t_cluster_redundancy)

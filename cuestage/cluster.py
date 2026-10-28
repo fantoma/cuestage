@@ -92,7 +92,7 @@ def fingerprint(path):
 def media_files(show):
     """{percorso assoluto: [id cue]} dei file usati dallo show."""
     out = {}
-    for c in show.all_cues():
+    for c in show.every_cue():          # anche le cue delle altre versioni
         if getattr(c, "file", "") and os.path.isfile(c.file):
             out.setdefault(os.path.abspath(c.file), []).append(c.id)
     return out
@@ -757,6 +757,10 @@ class ClusterHub(QObject):
             cues = list(data.get("cues") or [])
             for p in data.get("panels") or []:
                 cues += p.get("cues") or []
+            for v in data.get("versions") or []:        # cue delle altre versioni
+                cues += v.get("cues") or []
+                for p in v.get("panels") or []:
+                    cues += p.get("cues") or []
             for d in cues:
                 f = d.get("file") or ""
                 d.pop("file_rel", None)

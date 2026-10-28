@@ -27,6 +27,7 @@ from .window.editing import EditingMixin
 from .window.files import FilesMixin
 from .window.grid import GridMixin
 from .window.groups import GroupsMixin
+from .window.history import HistoryMixin
 from .window.hardware import HardwareMixin
 from .window.lists import ListsMixin
 from .window.playback import PlaybackMixin
@@ -86,7 +87,7 @@ class MasterSlider(QSlider):
 
 
 class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, GroupsMixin, GridMixin, ListsMixin,
-                 RemoteMixin, WebMixin, VideoMixin, FilesMixin, QMainWindow):
+                 RemoteMixin, WebMixin, VideoMixin, FilesMixin, HistoryMixin, QMainWindow):
     def __init__(self, path=None):
         super().__init__()
         self.show_data = Show()
@@ -139,9 +140,11 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self._edit_on = False
         self.qs = QSettings("CueStage", "CueStage")
 
+        self._history_init()
         self._build_ui()
         self._build_menus()
         self._build_shortcuts()
+        self._history_reset()
 
         self.ctrl.changed.connect(self._ctrl_changed)
         self.ctrl.message.connect(self.status)
@@ -474,6 +477,12 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.cluster_btn.clicked.connect(self._cluster_clicked)
         self.cluster_btn.setVisible(False)
         self.statusBar().addPermanentWidget(self.cluster_btn)
+        self.version_btn = QPushButton("")
+        self.version_btn.setFlat(True)
+        self.version_btn.setFocusPolicy(Qt.NoFocus)
+        self.version_btn.clicked.connect(lambda: self.versions_dialog())
+        self.version_btn.setVisible(False)
+        self.statusBar().addPermanentWidget(self.version_btn)
 
     def _build_menus(self):
         mb = self.menuBar()
@@ -492,7 +501,19 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         add(m, tr("Salva"), self.save, "Ctrl+S")
         add(m, tr("Salva con nome…"), self.save_as, "Ctrl+Shift+S")
         m.addSeparator()
+        add(m, tr("Versioni dello show…"), self.versions_dialog, "Ctrl+Alt+V")
+        m.addSeparator()
         add(m, tr("Esci"), self.close, "Ctrl+Q")
+
+        m = mb.addMenu(tr("&Modifica"))
+        self.act_undo = add(m, tr("Annulla"), self.undo, "Ctrl+Z")
+        self.act_redo = add(m, tr("Ripeti"), self.redo, "Ctrl+Shift+Z")
+        sc = QShortcut(QKeySequence("Ctrl+Y"), self)
+        sc.setContext(Qt.WindowShortcut)
+        sc.activated.connect(self.redo)
+        m.addSeparator()
+        add(m, tr("Cronologia…"), self.history_dialog, "Ctrl+H")
+        self._history_changed()
 
         m = mb.addMenu(tr("&Cue"))
         for t in CUE_TYPES:
@@ -743,6 +764,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
 
     def _update_title(self):
         name = os.path.basename(self.show_data.path) if self.show_data.path else tr("Senza titolo")
+        if len(self.show_data.versions) > 1:
+            name += f" [{self.show_data.active.name}]"
         self.setWindowTitle(tr("{0}{1} — CueStage", '● ' if self.show_data.dirty else '', name))
 
     def _update_edit_overlay(self):
@@ -777,6 +800,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
             self._edit_on = False
 
     def _ui_tick(self):
+        if self._hist_bg:
+            self._hist_bg = False
+            self._history_touch()
         self._update_edit_overlay()
         self._apply_view_kind()
         self._grid_tick()
