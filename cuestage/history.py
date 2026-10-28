@@ -6,7 +6,6 @@ passo e l'altro restano lo stesso oggetto, quindi anche centinaia di passi occup
 
 Non entrano nella cronologia i comandi «dal vivo»: volume master, Duck, DIM, volume del
 preascolto, blind, gruppi aperti o chiusi nella lista."""
-import copy
 import json
 import time
 
