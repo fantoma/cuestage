@@ -1,6 +1,7 @@
 """Comandi remoti: OSC in ingresso e in uscita, MIDI, controlli continui, crossfade (parte di MainWindow)."""
 
 
+from ..i18n import tr
 from ..model import (
     MIN_DB, db_to_lin, )
 from ..remote import osc_send, spec_matches
@@ -48,7 +49,7 @@ class RemoteMixin:
             # /list/<nome>  = mostra la lista · /list/<nome>/go = GO su quella lista
             lst = next((l for l in self.show_data.lists if l.name.lower() == parts[1].lower()), None)
             if lst is None:
-                self.status(f"OSC: lista «{parts[1]}» non trovata")
+                self.status(tr("OSC: lista «{0}» non trovata", parts[1]))
                 return
             if len(parts) == 3 and parts[2].lower() == "go":
                 ctrl.go(lst)
@@ -60,7 +61,7 @@ class RemoteMixin:
             c = self.show_data.by_number(parts[1])
             cmd = parts[2].lower()
             if c is None:
-                self.status(f"OSC: cue «{parts[1]}» non trovata")
+                self.status(tr("OSC: cue «{0}» non trovata", parts[1]))
                 return
             if cmd in ("start", "go"):
                 ctrl.trigger(c, cascade=True)
@@ -87,9 +88,9 @@ class RemoteMixin:
                     ctrl.group_tap(c.id)
                     hit = True
             if not hit:
-                self.status(f"OSC ignorato: {addr} {args}")
+                self.status(tr("OSC ignorato: {0} {1}", addr, args))
                 return
-        self.status(f"OSC ← {addr} {' '.join(map(str, args))}")
+        self.status(tr("OSC ← {0} {1}", addr, ' '.join(map(str, args))))
 
     def _send_osc_now(self, cid):
         c = self.show_data.by_id(cid)
@@ -97,9 +98,9 @@ class RemoteMixin:
             from ..engine import osc_target
             host, port, address, args = osc_target(c, self.show_data.settings)
             osc_send(host, port, address, args)
-            self.status(f"OSC inviato a {host}:{port}: {address} {args}")
+            self.status(tr("OSC inviato a {0}:{1}: {2} {3}", host, port, address, args))
         except Exception as e:
-            self.status(f"Invio OSC fallito: {e}")
+            self.status(tr("Invio OSC fallito: {0}", e))
 
     @staticmethod
     def fader_db(v):
@@ -112,7 +113,7 @@ class RemoteMixin:
     def text_step(self, d):
         """Frase successiva/precedente della cue di testo in sequenza attiva (lista di GO)."""
         if not self.ctrl.text_step(d):
-            self.status("Nessun testo in sequenza attivo")
+            self.status(tr("Nessun testo in sequenza attivo"))
             return
         self._update_standby()
 
@@ -121,7 +122,7 @@ class RemoteMixin:
             return
         t = float(self.show_data.settings.get("xfade_time", 3.0))
         if not self.ctrl.crossfade(t):
-            self.status("Crossfade: nessuna cue in attesa")
+            self.status(tr("Crossfade: nessuna cue in attesa"))
 
     def _apply_cue_control(self, cue, what, v):
         """Volume ("vol") o trasparenza ("op") di una cue da un controllo MIDI: dal vivo se la cue è in
@@ -135,8 +136,8 @@ class RemoteMixin:
                 self.show_data.dirty = True
                 if self.inspector.cue is cue:
                     self.inspector.refresh_fields()
-                return f"{cue.label()}: livello {'-∞' if db <= MIN_DB else f'{db:+.1f}'} dB"
-            return f"{cue.label()}: volume dal vivo {'-∞' if db <= MIN_DB else f'{db:+.1f}'} dB"
+                return tr("{0}: livello {1} dB", cue.label(), '-∞' if db <= MIN_DB else f'{db:+.1f}')
+            return tr("{0}: volume dal vivo {1} dB", cue.label(), '-∞' if db <= MIN_DB else f'{db:+.1f}')
         if cue.type not in ("video", "image"):
             return None
         op = round(v, 3)
@@ -145,8 +146,8 @@ class RemoteMixin:
             self.show_data.dirty = True
             if self.inspector.cue is cue:
                 self.inspector.refresh_fields()
-            return f"{cue.label()}: opacità {op * 100:.0f}%"
-        return f"{cue.label()}: opacità dal vivo {op * 100:.0f}%"
+            return tr("{0}: opacità {1:.0f}%", cue.label(), op * 100)
+        return tr("{0}: opacità dal vivo {1:.0f}%", cue.label(), op * 100)
 
     def _midi_control(self, spec, v, port=""):
         from ..remote import control_matches
@@ -158,7 +159,7 @@ class RemoteMixin:
         msgs = []
         if mc.get("xfade") and control_matches(mc["xfade"], spec, port):
             self.ctrl.set_crossfader(v)
-            msgs.append(f"crossfader {v * 100:.0f}%")
+            msgs.append(tr("crossfader {0:.0f}%", v * 100))
         cue = self._current_cue()
         if cue is not None:
             for key, what in (("vol_selected", "vol"), ("op_selected", "op")):
@@ -178,7 +179,7 @@ class RemoteMixin:
             now = _t.monotonic()
             if now - self._ctl_status_t > 0.1:       # barra di stato: al massimo 10 aggiornamenti/s
                 self._ctl_status_t = now
-                self.status("MIDI ← " + " · ".join(msgs))
+                self.status(tr("MIDI ← ") + " · ".join(msgs))
 
     def _midi_ports(self):
         s = self.show_data.settings
@@ -194,11 +195,11 @@ class RemoteMixin:
         if temp:
             self.midi.open(listen)
         if self.midi.ports:
-            info = "In ascolto su: " + ", ".join(self.midi.ports)
+            info = tr("In ascolto su: ") + ", ".join(self.midi.ports)
         elif not listen:
-            info = "⚠ Nessuna scheda MIDI selezionata: spuntala nelle impostazioni."
+            info = tr("⚠ Nessuna scheda MIDI selezionata: spuntala nelle impostazioni.")
         else:
-            info = f"⚠ Impossibile aprire «{', '.join(listen)}» (vedi barra di stato)."
+            info = tr("⚠ Impossibile aprire «{0}» (vedi barra di stato).", ', '.join(listen))
         d = MidiLearnDialog(self, info, mode)
         self.learn_dialog = d
         self.midi.learning = True
@@ -233,7 +234,7 @@ class RemoteMixin:
         for key, fn in actions.items():
             if mm.get(key) and spec_matches(mm[key], spec, port):
                 fn()
-                self.status(f"MIDI ← {spec} ({port}): {key}" if port else f"MIDI ← {spec}: {key}")
+                self.status(tr("MIDI ← {0} ({1}): {2}", spec, port, key) if port else tr("MIDI ← {0}: {1}", spec, key))
                 return
         for c in self.show_data.all_cues():
             if c.type == "group" and c.group_tap_midi and spec_matches(c.group_tap_midi, spec, port):
@@ -242,4 +243,4 @@ class RemoteMixin:
         for c in self.show_data.all_cues():
             if c.midi and spec_matches(c.midi, spec, port):
                 self.ctrl.trigger(c, cascade=True)
-                self.status(f"MIDI ← {spec}: cue {c.label()}")
+                self.status(tr("MIDI ← {0}: cue {1}", spec, c.label()))

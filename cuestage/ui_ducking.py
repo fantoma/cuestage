@@ -1,4 +1,5 @@
 """Finestra Impostazioni › Ducking: ingresso, canale, vumeter, gate, attacco/rilascio e Master ducking."""
+from .i18n import tr
 import copy
 
 from PySide6.QtCore import QRectF, QSize, Qt, QTimer
@@ -60,7 +61,7 @@ class DuckMeter(QWidget):
         p.setBrush(QColor(200, 50, 40) if (listening and d.gate) else QColor(60, 62, 70))
         p.drawRoundedRect(led, 4, 4)
         p.setPen(QColor(255, 255, 255))
-        p.drawText(led, Qt.AlignCenter, "GATE APERTO" if (listening and d.gate) else "gate chiuso")
+        p.drawText(led, Qt.AlignCenter, tr("GATE APERTO") if (listening and d.gate) else tr("gate chiuso"))
         # riduzione applicata ora (0–100 %)
         rb = QRectF(4, 40, self.width() - 96, 10)
         p.setPen(Qt.NoPen)
@@ -71,7 +72,7 @@ class DuckMeter(QWidget):
             p.drawRoundedRect(QRectF(rb.left(), rb.top(), rb.width() * d.env, rb.height()), 2, 2)
         p.setPen(txt)
         p.drawText(QRectF(self.width() - 86, 36, 82, 18), Qt.AlignCenter,
-                   f"riduzione {d.env * 100:.0f}%" if listening else "non in ascolto")
+                   tr("riduzione {0:.0f}%", d.env * 100) if listening else tr("non in ascolto"))
         p.end()
 
 
@@ -82,39 +83,39 @@ class DuckingDialog(QDialog):
         super().__init__(mw)
         self.mw = mw
         self.duck = mw.audio.duck
-        self.setWindowTitle("Ducking")
+        self.setWindowTitle(tr("Ducking"))
         self.setModal(False)
         self._loading = False
         self.orig = {}
         v = QVBoxLayout(self)
-        intro = QLabel("Quando l'ingresso scelto (es. il microfono dello speaker) supera la soglia del gate, le cue "
+        intro = QLabel(tr("Quando l'ingresso scelto (es. il microfono dello speaker) supera la soglia del gate, le cue "
                        "con un valore di <b>Ducking</b> (ispettore della cue audio/video o del gruppo) si abbassano "
                        "di quei dB; il <b>Master ducking</b> abbassa l'uscita master quando il tasto «Duck» accanto "
-                       "al volume master è acceso.")
+                       "al volume master è acceso."))
         intro.setWordWrap(True)
         v.addWidget(intro)
-        self.on = QCheckBox("Attiva il ducking delle cue")
+        self.on = QCheckBox(tr("Attiva il ducking delle cue"))
         v.addWidget(self.on)
 
-        gi = QGroupBox("Ingresso")
+        gi = QGroupBox(tr("Ingresso"))
         gv = QVBoxLayout(gi)
         fi = QFormLayout()
         gv.addLayout(fi)
         self.dev = QComboBox()
-        fi.addRow("Scheda in ingresso", self.dev)
+        fi.addRow(tr("Scheda in ingresso"), self.dev)
         self.ch = QSpinBox()
         self.ch.setRange(1, 64)
-        fi.addRow("Canale", self.ch)
+        fi.addRow(tr("Canale"), self.ch)
         self.meter = DuckMeter(self.duck, lambda: self.thr.value())
         gv.addWidget(self.meter)
         self.err = QLabel()
         self.err.setWordWrap(True)
         self.err.setStyleSheet("color:#e0b040;")
         gv.addWidget(self.err)
-        self.to_pv = QCheckBox("Manda l'ingresso, dopo il gate, al preascolto (cuffia)")
-        self.to_pv.setToolTip("Si sente in cuffia il canale d'ingresso solo quando supera la soglia (e durante "
+        self.to_pv = QCheckBox(tr("Manda l'ingresso, dopo il gate, al preascolto (cuffia)"))
+        self.to_pv.setToolTip(tr("Si sente in cuffia il canale d'ingresso solo quando supera la soglia (e durante "
                               "l'hold): utile per controllare il microfono e regolare la soglia. Usa la scheda, i "
-                              "canali e il volume del preascolto.")
+                              "canali e il volume del preascolto."))
         gv.addWidget(self.to_pv)
         self.to_pv_note = QLabel()
         self.to_pv_note.setStyleSheet("color:#999;")
@@ -122,48 +123,48 @@ class DuckingDialog(QDialog):
         gv.addWidget(self.to_pv_note)
         v.addWidget(gi)
 
-        gg = QGroupBox("Gate e tempi")
+        gg = QGroupBox(tr("Gate e tempi"))
         fg = QFormLayout(gg)
         self.thr = QDoubleSpinBox()
         self.thr.setRange(-90, 0)
         self.thr.setDecimals(1)
         self.thr.setSingleStep(1)
         self.thr.setSuffix(" dBFS")
-        self.thr.setToolTip("Il ducking interviene quando il livello dell'ingresso supera questa soglia "
-                            "(la linea bianca sul vumeter)")
-        fg.addRow("Soglia del gate", self.thr)
+        self.thr.setToolTip(tr("Il ducking interviene quando il livello dell'ingresso supera questa soglia "
+                            "(la linea bianca sul vumeter)"))
+        fg.addRow(tr("Soglia del gate"), self.thr)
         self.att = QSpinBox()
         self.att.setRange(0, 1000)
         self.att.setSingleStep(10)
         self.att.setSuffix(" ms")
-        self.att.setToolTip("Tempo per arrivare alla riduzione piena dopo che il segnale ha superato la soglia")
-        fg.addRow("Attacco", self.att)
+        self.att.setToolTip(tr("Tempo per arrivare alla riduzione piena dopo che il segnale ha superato la soglia"))
+        fg.addRow(tr("Attacco"), self.att)
         self.hold = QSpinBox()
         self.hold.setRange(0, 5000)
         self.hold.setSingleStep(100)
         self.hold.setSuffix(" ms")
-        self.hold.setToolTip("Quanto resta abbassato dopo che il segnale è sceso sotto la soglia, prima del "
-                             "rilascio (evita che il volume risalga tra una parola e l'altra)")
-        fg.addRow("Hold", self.hold)
+        self.hold.setToolTip(tr("Quanto resta abbassato dopo che il segnale è sceso sotto la soglia, prima del "
+                             "rilascio (evita che il volume risalga tra una parola e l'altra)"))
+        fg.addRow(tr("Hold"), self.hold)
         self.rel = QSpinBox()
         self.rel.setRange(0, 5000)
         self.rel.setSingleStep(50)
         self.rel.setSuffix(" ms")
-        self.rel.setToolTip("Tempo per tornare al volume pieno, dopo l'hold")
-        fg.addRow("Rilascio", self.rel)
+        self.rel.setToolTip(tr("Tempo per tornare al volume pieno, dopo l'hold"))
+        fg.addRow(tr("Rilascio"), self.rel)
         v.addWidget(gg)
 
-        gm = QGroupBox("Master ducking")
+        gm = QGroupBox(tr("Master ducking"))
         fm = QFormLayout(gm)
         self.mdb = QDoubleSpinBox()
         self.mdb.setRange(0, 60)
         self.mdb.setDecimals(1)
         self.mdb.setSingleStep(1)
         self.mdb.setSuffix(" dB")
-        self.mdb.setSpecialValueText("0 dB (nessuna riduzione)")
-        self.mdb.setToolTip("Riduzione dell'uscita master: quando il ducking interviene con il tasto «Duck» acceso, "
-                            "e sempre con il tasto «DIM» acceso")
-        fm.addRow("Riduzione del master", self.mdb)
+        self.mdb.setSpecialValueText(tr("0 dB (nessuna riduzione)"))
+        self.mdb.setToolTip(tr("Riduzione dell'uscita master: quando il ducking interviene con il tasto «Duck» acceso, "
+                            "e sempre con il tasto «DIM» acceso"))
+        fm.addRow(tr("Riduzione del master"), self.mdb)
         self.mstate = QLabel()
         self.mstate.setStyleSheet("color:#999;")
         fm.addRow(self.mstate)
@@ -191,12 +192,12 @@ class DuckingDialog(QDialog):
         self.orig = copy.deepcopy(cfg)
         self.on.setChecked(bool(cfg["enabled"]))
         self.dev.clear()
-        self.dev.addItem("Predefinita di sistema", "")
+        self.dev.addItem(tr("Predefinita di sistema"), "")
         for d in list_input_devices():
-            self.dev.addItem(f"{d['name']}  [{d['hostapi']}] — {d['max_ch']} canali", d["id"])
+            self.dev.addItem(tr("{0}  [{1}] — {2} canali", d['name'], d['hostapi'], d['max_ch']), d["id"])
         i = self.dev.findData(cfg["device"])
         if i < 0:
-            self.dev.addItem(f"{cfg['device'].split('|', 1)[-1]} (non collegata)", cfg["device"])
+            self.dev.addItem(tr("{0} (non collegata)", cfg['device'].split('|', 1)[-1]), cfg["device"])
             i = self.dev.count() - 1
         self.dev.setCurrentIndex(i)
         self._fit_channels()
@@ -209,7 +210,7 @@ class DuckingDialog(QDialog):
         self.to_pv.setChecked(bool(cfg["to_preview"]))
         pv = self.mw.audio.preview
         self.to_pv_note.setText("" if pv.get("enabled") else
-                                "Il preascolto non è configurato: Impostazioni › Audio, OSC e MIDI › Preascolto.")
+                                tr("Il preascolto non è configurato: Impostazioni › Audio, OSC e MIDI › Preascolto."))
         self._loading = False
         self.duck.configure(cfg, monitor=True)        # in ascolto per il vumeter anche se è spento
         self._tick()
@@ -249,9 +250,9 @@ class DuckingDialog(QDialog):
             self.err.setText(d.error)         # la riga resta sempre: la finestra non cambia altezza
         on = bool(d.cfg.get("master_on"))
         dim = bool(d.cfg.get("dim_on"))
-        self.mstate.setText("Tasto «Duck»: " + ("acceso" if on else "spento") + " · tasto «DIM»: " +
-                            ("acceso" if dim else "spento") +
-                            ("" if self.mdb.value() > 0 or not (on or dim) else " — con 0 dB non riduce nulla"))
+        self.mstate.setText(tr("Tasto «Duck»: ") + ("acceso" if on else "spento") + tr(" · tasto «DIM»: ") +
+                            (tr("acceso") if dim else tr("spento")) +
+                            ("" if self.mdb.value() > 0 or not (on or dim) else tr(" — con 0 dB non riduce nulla")))
         self.meter.update()
 
     def showEvent(self, e):

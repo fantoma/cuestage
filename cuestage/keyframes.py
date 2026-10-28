@@ -5,11 +5,12 @@ Il nome BASE indica i valori propri della cue. Tra due keyframe consecutivi dell
 passano in modo lineare dal primo al secondo (le posizioni sono inizio e fine della dissolvenza);
 prima del primo e dopo l'ultimo restano fermi.
 """
+from .i18n import tr
 
 BASE = "__base__"
-BASE_LABEL = "Valori base della cue"
+BASE_LABEL = tr("Valori base della cue")
 KINDS = ("visual", "audio")
-KIND_LABELS = {"visual": "Immagine", "audio": "Audio"}
+KIND_LABELS = {"visual": tr("Immagine"), "audio": tr("Audio")}
 VIS_NUM = ("crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y", "scale", "opacity")
 MIN_DB = -60.0
 
@@ -82,11 +83,11 @@ def names_at(cue, kind, T):
 def describe(state):
     """Testo del preset in uso: «nome» oppure dissolvenza «a» → «b» (xx%)."""
     if state is None:
-        return "nessun keyframe (valori della cue)"
+        return tr("nessun keyframe (valori della cue)")
     na, nb, f = state
     if na == nb or f <= 0:
         return f"«{label(na)}»"
-    return f"dissolvenza «{label(na)}» → «{label(nb)}» ({f * 100:.0f}%)"
+    return tr("dissolvenza «{0}» → «{1}» ({2:.0f}%)", label(na), label(nb), f * 100)
 
 
 def _lerp(a, b, f):

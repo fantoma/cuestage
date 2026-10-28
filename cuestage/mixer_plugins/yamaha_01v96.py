@@ -14,6 +14,7 @@ i valori intermedi sono approssimati, ma rileggere e reinviare un livello lo rip
 02R96: stessi messaggi e stessi elementi di base della famiglia, ma la tabella dei parametri del 02R96
 NON è stata verificata: provare prima e, se necessario, correggere ELEMENTS e MODEL_BYTE qui sotto.
 """
+from cuestage.i18n import tr
 import queue
 
 from cuestage.mixers import MixerDriver, MixerError, interp, resolve_midi_port
@@ -39,16 +40,16 @@ def db_to_ya(db):
 
 class Yamaha01V96(MixerDriver):
     ID = "yamaha_01v96"
-    NAME = "Yamaha 01V96 / 01V96i / VCM (MIDI)"
+    NAME = tr("Yamaha 01V96 / 01V96i / VCM (MIDI)")
     DEFAULT_PORT = 0
     FIELDS = ("midi_out", "midi_in", "device")
     MODEL_BYTE = 0x7F                       # 0x7F = famiglia (0x0D = solo 01V96)
     ELEMENTS = {"ch": (28, 26), "aux": (57, 54), "grp": (43, 41), "main": (79, 77)}   # (fader, ON)
     SECTIONS = [("ch", 32, {"mute", "fader"}), ("aux", 8, {"mute", "fader"}), ("grp", 8, {"mute", "fader"}),
                 ("main", 1, {"mute", "fader"})]
-    NOTES = ("Via MIDI: scegli l'uscita MIDI collegata al mixer e, per leggere i livelli, l'ingresso MIDI che "
+    NOTES = (tr("Via MIDI: scegli l'uscita MIDI collegata al mixer e, per leggere i livelli, l'ingresso MIDI che "
              "riceve dal mixer. Sul mixer: Parameter Change Rx/Tx ON, stesso numero di dispositivo. "
-             "Gruppi = bus 1–8. Mute = tasto ON del canale.")
+             "Gruppi = bus 1–8. Mute = tasto ON del canale."))
 
     def __init__(self, conf):
         super().__init__(conf)
@@ -62,28 +63,28 @@ class Yamaha01V96(MixerDriver):
 
     def _out(self):
         if mido is None:
-            raise MixerError("mido/python-rtmidi non installati")
+            raise MixerError(tr("mido/python-rtmidi non installati"))
         if self.out is None:
             name = resolve_midi_port(self.conf.get("midi_out"), mido.get_output_names())
             if name is None:
-                raise MixerError(f"uscita MIDI «{self.conf.get('midi_out') or '—'}» non trovata")
+                raise MixerError(tr("uscita MIDI «{0}» non trovata", self.conf.get('midi_out') or '—'))
             try:
                 self.out = mido.open_output(name)
             except Exception as e:
-                raise MixerError(f"impossibile aprire l'uscita MIDI ({e})")
+                raise MixerError(tr("impossibile aprire l'uscita MIDI ({0})", e))
         return self.out
 
     def _in(self):
         if mido is None:
-            raise MixerError("mido/python-rtmidi non installati")
+            raise MixerError(tr("mido/python-rtmidi non installati"))
         if self.inp is None:
             name = resolve_midi_port(self.conf.get("midi_in"), mido.get_input_names())
             if name is None:
-                raise MixerError("per leggere i livelli serve l'ingresso MIDI collegato al MIDI OUT del mixer")
+                raise MixerError(tr("per leggere i livelli serve l'ingresso MIDI collegato al MIDI OUT del mixer"))
             try:
                 self.inp = mido.open_input(name, callback=lambda m: m.type == "sysex" and self.q.put(list(m.data)))
             except Exception as e:
-                raise MixerError(f"impossibile aprire l'ingresso MIDI ({e})")
+                raise MixerError(tr("impossibile aprire l'ingresso MIDI ({0})", e))
         return self.inp
 
     def _send(self, data):
@@ -105,7 +106,7 @@ class Yamaha01V96(MixerDriver):
                         and d[7] == int(n) - 1:
                     return d[8:12]
         except queue.Empty:
-            raise MixerError("nessuna risposta dal mixer (Parameter Change Tx attivo? ingresso MIDI giusto?)")
+            raise MixerError(tr("nessuna risposta dal mixer (Parameter Change Tx attivo? ingresso MIDI giusto?)"))
 
     def set_mute(self, kind, n, muted):
         self.check(kind, n, "mute")
@@ -148,8 +149,8 @@ class Yamaha01V96(MixerDriver):
 
 class Yamaha02R96(Yamaha01V96):
     ID = "yamaha_02r96"
-    NAME = "Yamaha 02R96 (MIDI, da verificare)"
+    NAME = tr("Yamaha 02R96 (MIDI, da verificare)")
     SECTIONS = [("ch", 56, {"mute", "fader"}), ("aux", 8, {"mute", "fader"}), ("grp", 8, {"mute", "fader"}),
                 ("main", 1, {"mute", "fader"})]
-    NOTES = ("⚠ Stessi messaggi SysEx della famiglia 01V96, ma la tabella dei parametri del 02R96 non è stata "
-             "verificata: prova un mute e un fader prima dello spettacolo. Sul mixer: Parameter Change Rx/Tx ON.")
+    NOTES = (tr("⚠ Stessi messaggi SysEx della famiglia 01V96, ma la tabella dei parametri del 02R96 non è stata "
+             "verificata: prova un mute e un fader prima dello spettacolo. Sul mixer: Parameter Change Rx/Tx ON."))

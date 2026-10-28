@@ -3,6 +3,8 @@ import sys
 
 
 def main():
+    from . import i18n                  # prima di tutto: i testi dei moduli si traducono all'importazione
+    i18n.set_language(os.environ.get("CUESTAGE_LANG") or i18n.saved_language())
     from .system import IS_LINUX, IS_WIN
     # backend FFmpeg di Qt Multimedia (su tutti i sistemi)
     os.environ.setdefault("QT_MEDIA_BACKEND", "ffmpeg")

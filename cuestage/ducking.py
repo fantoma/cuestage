@@ -4,6 +4,7 @@ Il segnale di un canale della scheda in ingresso passa per un gate (solo soglia)
 riduzione entra con il tempo di attacco; quando scende sotto la soglia resta piena per il tempo di hold, poi
 esce con il tempo di rilascio.
 La riduzione in dB è un'impostazione di ogni cue audio/video (o del gruppo, per tutte le sue cue)."""
+from .i18n import tr
 import math
 import threading
 
@@ -181,12 +182,12 @@ class Ducker:
         self.close()
         self.error = ""
         if sd is None:
-            self.error = "PortAudio non installato"
+            self.error = tr("PortAudio non installato")
             return False
         dev_id = self.cfg.get("device") or ""
         dev = find_input(dev_id) if dev_id else None
         if dev_id and dev is None:
-            self.error = f"Scheda in ingresso «{dev_id.split('|', 1)[-1]}» non trovata"
+            self.error = tr("Scheda in ingresso «{0}» non trovata", dev_id.split('|', 1)[-1])
             return False
         try:
             if dev is None:
@@ -198,7 +199,7 @@ class Ducker:
                 self.name = dev["name"]
             ch = int(self.cfg.get("channel") or 1)
             if ch > max_ch:
-                self.error = f"«{self.name}» ha {max_ch} canali in ingresso: il canale {ch} non esiste"
+                self.error = tr("«{0}» ha {1} canali in ingresso: il canale {2} non esiste", self.name, max_ch, ch)
                 return False
             self.n_ch = max_ch
             err = None
@@ -215,7 +216,7 @@ class Ducker:
             raise err
         except Exception as e:
             self.stream = None
-            self.error = f"Impossibile aprire l'ingresso «{self.name}»: {e}"
+            self.error = tr("Impossibile aprire l'ingresso «{0}»: {1}", self.name, e)
             return False
 
     def close(self):

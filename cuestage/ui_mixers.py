@@ -1,4 +1,5 @@
 """Mixer: dialogo di configurazione con ricerca in rete, e pannello a scomparsa dei mute."""
+from .i18n import tr
 import copy
 import os
 import uuid
@@ -13,9 +14,9 @@ from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QFormLayout
 
 from .mixers import KIND_LABELS, USER_MIXER_DIR
 
-FIELD_LABELS = {"host": "Indirizzo IP", "port": "Porta", "midi_ch": "Canale MIDI del mixer", "model": "Modello",
-                "fader_law": "Legge fader NRPN", "midi_out": "Uscita MIDI → mixer", "midi_in": "Ingresso MIDI ← mixer",
-                "device": "N. dispositivo MIDI", "card": "Scheda audio (ALSA)"}
+FIELD_LABELS = {"host": tr("Indirizzo IP"), "port": tr("Porta"), "midi_ch": tr("Canale MIDI del mixer"), "model": tr("Modello"),
+                "fader_law": tr("Legge fader NRPN"), "midi_out": tr("Uscita MIDI → mixer"), "midi_in": tr("Ingresso MIDI ← mixer"),
+                "device": tr("N. dispositivo MIDI"), "card": tr("Scheda audio (ALSA)")}
 
 
 class _Relay(QObject):
@@ -35,7 +36,7 @@ def _midi_names(output):
 class MixersDialog(QDialog):
     def __init__(self, mixers, manager, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Mixer")
+        self.setWindowTitle(tr("Mixer"))
         self.mm = manager
         self.items = copy.deepcopy(mixers or [])
         self.cur = None
@@ -49,7 +50,7 @@ class MixersDialog(QDialog):
         self.list.currentRowChanged.connect(self._select)
         left.addWidget(self.list, 1)
         bl = QHBoxLayout()
-        for text, fn in (("Aggiungi", self._add), ("Duplica", self._dup), ("Elimina", self._del)):
+        for text, fn in ((tr("Aggiungi"), self._add), (tr("Duplica"), self._dup), (tr("Elimina"), self._del)):
             b = QPushButton(text)
             b.clicked.connect(fn)
             bl.addWidget(b)
@@ -61,10 +62,10 @@ class MixersDialog(QDialog):
         f = QFormLayout(self.form_w)
         self.name = QLineEdit()
         self.name.textEdited.connect(self._store)
-        f.addRow("Nome", self.name)
+        f.addRow(tr("Nome"), self.name)
         self.driver = QComboBox()
         self.driver.currentIndexChanged.connect(self._driver_changed)
-        f.addRow("Driver", self.driver)
+        f.addRow(tr("Driver"), self.driver)
         self.fields = {}
         for key in ("host", "port", "midi_ch", "model", "fader_law", "midi_out", "midi_in", "device", "card"):
             if key in ("port", "midi_ch", "device"):
@@ -80,13 +81,13 @@ class MixersDialog(QDialog):
                     w.editTextChanged.connect(self._store)
             else:
                 w = QLineEdit()
-                w.setPlaceholderText("es. 192.168.1.10")
+                w.setPlaceholderText(tr("es. 192.168.1.10"))
                 w.textEdited.connect(self._store)
             lab = QLabel(FIELD_LABELS[key])
             f.addRow(lab, w)
             self.fields[key] = (lab, w)
-        self.fields["fader_law"][1].addItem("Lineare (consigliata, esatta)", "linear")
-        self.fields["fader_law"][1].addItem("Audio (approssimata)", "audio")
+        self.fields["fader_law"][1].addItem(tr("Lineare (consigliata, esatta)"), "linear")
+        self.fields["fader_law"][1].addItem(tr("Audio (approssimata)"), "audio")
         right.addWidget(self.form_w)
         self.notes = QLabel()
         self.notes.setWordWrap(True)
@@ -94,7 +95,7 @@ class MixersDialog(QDialog):
         self.notes.setMinimumHeight(self.fontMetrics().height() * 3)
         right.addWidget(self.notes)
         tb = QHBoxLayout()
-        self.test_btn = QPushButton("Prova connessione")
+        self.test_btn = QPushButton(tr("Prova connessione"))
         self.test_btn.clicked.connect(self._test)
         tb.addWidget(self.test_btn)
         tb.addStretch(1)
@@ -102,21 +103,21 @@ class MixersDialog(QDialog):
         self.result = QPlainTextEdit()
         self.result.setReadOnly(True)
         self.result.setMaximumHeight(70)
-        self.result.setPlaceholderText("Risultato della prova…")
+        self.result.setPlaceholderText(tr("Risultato della prova…"))
         right.addWidget(self.result)
         right.addStretch(1)
         h.addLayout(right, 2)
         v.addLayout(h, 1)
 
         # ricerca in rete
-        gs = QGroupBox("Ricerca in rete")
+        gs = QGroupBox(tr("Ricerca in rete"))
         gl = QVBoxLayout(gs)
         row = QHBoxLayout()
-        self.scan_btn = QPushButton("🔍 Cerca mixer in rete")
-        self.scan_btn.setToolTip("X32 / M32 (OSC 10023), WING (2222), Allen & Heath Qu e SQ (TCP 51325)")
+        self.scan_btn = QPushButton(tr("🔍 Cerca mixer in rete"))
+        self.scan_btn.setToolTip(tr("X32 / M32 (OSC 10023), WING (2222), Allen & Heath Qu e SQ (TCP 51325)"))
         self.scan_btn.clicked.connect(self._scan)
         row.addWidget(self.scan_btn)
-        self.scan_lab = QLabel("I mixer Yamaha via MIDI non si trovano in rete: aggiungili a mano.")
+        self.scan_lab = QLabel(tr("I mixer Yamaha via MIDI non si trovano in rete: aggiungili a mano."))
         self.scan_lab.setStyleSheet("color:#888;")
         self.scan_lab.setWordWrap(True)
         row.addWidget(self.scan_lab, 1)
@@ -126,7 +127,7 @@ class MixersDialog(QDialog):
         self.found_list.setMaximumHeight(130)
         self.found_list.itemDoubleClicked.connect(lambda _it: self._add_found())
         gl.addWidget(self.found_list)
-        ab = QPushButton("Aggiungi il mixer trovato selezionato")
+        ab = QPushButton(tr("Aggiungi il mixer trovato selezionato"))
         ab.clicked.connect(self._add_found)
         gl.addWidget(ab)
         v.addWidget(gs)
@@ -135,9 +136,9 @@ class MixersDialog(QDialog):
         self.plug_lab = QLabel()
         self.plug_lab.setWordWrap(True)
         pl.addWidget(self.plug_lab, 1)
-        rb = QPushButton("Ricarica plugin")
+        rb = QPushButton(tr("Ricarica plugin"))
         rb.clicked.connect(self._reload)
-        ob = QPushButton("Apri cartella plugin")
+        ob = QPushButton(tr("Apri cartella plugin"))
         ob.clicked.connect(self._open_dir)
         pl.addWidget(rb)
         pl.addWidget(ob)
@@ -160,7 +161,7 @@ class MixersDialog(QDialog):
         self.driver.setCurrentIndex(max(0, self.driver.findData(cur)))
         self.driver.blockSignals(False)
         errs = self.mm.registry.errors
-        txt = f"Driver mixer: {len(self.mm.registry.drivers)}. Plugin utente in {USER_MIXER_DIR}"
+        txt = tr("Driver mixer: {0}. Plugin utente in {1}", len(self.mm.registry.drivers), USER_MIXER_DIR)
         if errs:
             txt += "\n⚠ " + "\n⚠ ".join(errs)
         self.plug_lab.setText(txt)
@@ -169,7 +170,7 @@ class MixersDialog(QDialog):
     def _label(self, m):
         cls = self.mm.registry.get(m.get("driver"))
         where = m.get("host") or m.get("midi_out") or m.get("card_name") or m.get("card") or "—"
-        return f"{m.get('name') or '(senza nome)'}\n   {where} · {cls.NAME if cls else m.get('driver')}"
+        return f"{m.get('name') or tr('(senza nome)')}\n   {where} · {cls.NAME if cls else m.get('driver')}"
 
     def _fill_list(self, select=0):
         self.list.blockSignals(True)
@@ -188,14 +189,14 @@ class MixersDialog(QDialog):
         self.test_btn.setEnabled(self.cur is not None)
         self.result.clear()
         if self.cur is None:
-            self.notes.setText("Aggiungi un mixer con «Aggiungi» oppure con la ricerca in rete.")
+            self.notes.setText(tr("Aggiungi un mixer con «Aggiungi» oppure con la ricerca in rete."))
             return
         m = self.cur
         self.name.setText(m.get("name", ""))
         self.driver.blockSignals(True)
         i = self.driver.findData(m.get("driver"))
         if i < 0:
-            self.driver.addItem(f"{m.get('driver')} (mancante)", m.get("driver"))
+            self.driver.addItem(tr("{0} (mancante)", m.get('driver')), m.get("driver"))
             i = self.driver.count() - 1
         self.driver.setCurrentIndex(i)
         self.driver.blockSignals(False)
@@ -233,7 +234,7 @@ class MixersDialog(QDialog):
                 cur = m.get("card") or ""
                 j = w.findData(cur)
                 if j < 0 and cur:
-                    w.addItem(f"{cur} — {m.get('card_name') or 'non collegata'}", cur)
+                    w.addItem(f"{cur} — {m.get('card_name') or tr('non collegata')}", cur)
                     j = w.count() - 1
                 w.setCurrentIndex(max(0, j))
             elif key == "fader_law":
@@ -244,7 +245,7 @@ class MixersDialog(QDialog):
             else:
                 w.setText(str(m.get(key) or ""))
             w.blockSignals(False)
-        self.notes.setText(cls.NOTES if cls else "Driver non disponibile: controlla i plugin.")
+        self.notes.setText(cls.NOTES if cls else tr("Driver non disponibile: controlla i plugin."))
 
     def _driver_changed(self, _i):
         if self.cur is None:
@@ -284,7 +285,7 @@ class MixersDialog(QDialog):
 
     def _new(self, did, **kw):
         cls = self.mm.registry.get(did)
-        m = {"id": uuid.uuid4().hex[:8], "name": f"Mixer {len(self.items) + 1}", "driver": did, "host": "",
+        m = {"id": uuid.uuid4().hex[:8], "name": tr("Mixer {0}", len(self.items) + 1), "driver": did, "host": "",
              "port": cls.DEFAULT_PORT if cls else 0, "midi_ch": 1}
         if cls and cls.MODELS:
             m["model"] = cls.MODELS[0][0]
@@ -300,7 +301,7 @@ class MixersDialog(QDialog):
             return
         m = copy.deepcopy(self.cur)
         m["id"] = uuid.uuid4().hex[:8]
-        m["name"] = (m.get("name") or "") + " (copia)"
+        m["name"] = (m.get("name") or "") + tr(" (copia)")
         self.items.append(m)
         self._fill_list(len(self.items) - 1)
 
@@ -314,7 +315,7 @@ class MixersDialog(QDialog):
     def _scan(self):
         self.scan_btn.setEnabled(False)
         self.found_list.clear()
-        self.scan_lab.setText("Ricerca in corso… (qualche secondo)")
+        self.scan_lab.setText(tr("Ricerca in corso… (qualche secondo)"))
         self.scan_lab.setStyleSheet("color:#ccc;")
         self.mm.discover(lambda res, ips: self.relay.found.emit(res, ips))
 
@@ -326,18 +327,18 @@ class MixersDialog(QDialog):
             cls = self.mm.registry.get(r.get("driver"))
             known = any(m.get("host") == r.get("host") and m.get("card") == r.get("card")
                         and m.get("driver") == r.get("driver") for m in self.items)
-            where = f"{r.get('host')}:{r.get('port')}" if r.get("host") else f"scheda «{r.get('card')}»"
+            where = f"{r.get('host')}:{r.get('port')}" if r.get("host") else tr("scheda «{0}»", r.get('card'))
             txt = (f"{r.get('model') or (cls.NAME if cls else r.get('driver'))}  «{r.get('name') or '—'}»  ·  "
-                   f"{where}" + (f"  ·  canale MIDI {r['midi_ch']}" if r.get("midi_ch") else "")
-                   + (f"  ·  {r['info']}" if r.get("info") else "") + ("  ✔ già configurato" if known else ""))
+                   f"{where}" + (tr("  ·  canale MIDI {0}", r['midi_ch']) if r.get("midi_ch") else "")
+                   + (f"  ·  {r['info']}" if r.get("info") else "") + (tr("  ✔ già configurato") if known else ""))
             it = QListWidgetItem(txt, self.found_list)
             it.setData(Qt.UserRole, r)
         errs = [r["error"] for r in res if "error" in r]
-        msg = (f"Trovati {len(good)} mixer / schede" if good else "Nessun mixer trovato") + f" sulle reti {', '.join(ips)}/24."
+        msg = (tr("Trovati {0} mixer / schede", len(good)) if good else tr("Nessun mixer trovato")) + tr(" sulle reti {0}/24.", ', '.join(ips))
         if errs:
             msg += " ⚠ " + "; ".join(errs)
         if not good:
-            msg += " Controlla che computer e mixer siano sulla stessa rete (e il firewall)."
+            msg += tr(" Controlla che computer e mixer siano sulla stessa rete (e il firewall).")
         self.scan_lab.setText(msg)
         self.scan_lab.setStyleSheet("color:#6c6;" if good else "color:#e0b040;")
         if good:
@@ -348,7 +349,7 @@ class MixersDialog(QDialog):
         if it is None:
             return
         r = it.data(Qt.UserRole)
-        name = r.get("name") or r.get("model") or "Mixer"
+        name = r.get("name") or r.get("model") or tr("Mixer")
         extra = {k: r[k] for k in ("model", "card", "card_name") if r.get(k)}
         self.items.append(self._new(r.get("driver"), name=name, host=r.get("host") or "", port=r.get("port"),
                                     midi_ch=r.get("midi_ch"), **extra))
@@ -358,13 +359,13 @@ class MixersDialog(QDialog):
     def _test(self):
         if self.cur is None:
             return
-        self.result.setPlainText("Connessione in corso…")
+        self.result.setPlainText(tr("Connessione in corso…"))
         self.test_btn.setEnabled(False)
         self.mm.test(dict(self.cur), lambda ok, txt: self.relay.result.emit(ok, txt))
 
     def _test_done(self, ok, txt):
         self.test_btn.setEnabled(True)
-        self.result.setPlainText(("✔ Collegato\n" if ok else "✘ ") + txt)
+        self.result.setPlainText((tr("✔ Collegato\n") if ok else "✘ ") + txt)
 
     def _reload(self):
         self.mm.reload_plugins()
@@ -401,19 +402,19 @@ class ControlsBox(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 6, 0, 0)
         head = QHBoxLayout()
-        t = QLabel("<b>Controlli della scheda</b>")
+        t = QLabel(tr("<b>Controlli della scheda</b>"))
         head.addWidget(t)
         head.addStretch(1)
-        rd = QPushButton("⟲ Leggi")
-        rd.setToolTip("Rilegge tutti i controlli dalla scheda")
+        rd = QPushButton(tr("⟲ Leggi"))
+        rd.setToolTip(tr("Rilegge tutti i controlli dalla scheda"))
         rd.setFocusPolicy(Qt.NoFocus)
         rd.clicked.connect(lambda: self.mm.read_controls(self.mid))
         head.addWidget(rd)
         v.addLayout(head)
         ctls = self.mm.controls.get(mid) or []
         if not ctls:
-            lab = QLabel("… lettura dei controlli dalla scheda (se non compare nulla: scheda scollegata o "
-                         "«amixer» mancante)")
+            lab = QLabel(tr("… lettura dei controlli dalla scheda (se non compare nulla: scheda scollegata o "
+                         "«amixer» mancante)"))
             lab.setStyleSheet("color:#999;")
             lab.setWordWrap(True)
             v.addWidget(lab)
@@ -422,18 +423,17 @@ class ControlsBox(QWidget):
         hw = [c for c in ctls if re.match(r"Line Out \d+ Volume Control", c["name"]) and c.get("value") == 1
               and c["type"] == "enum" and (c.get("items") or [""])[1:2] == ["HW"]]
         if hw:
-            note = QLabel(f"⚠ {len(hw)} uscite hanno il volume sulla manopola della scheda (HW): volume e mute di "
-                          "quelle uscite non si possono comandare da CueStage.")
+            note = QLabel(tr("⚠ {0} uscite hanno il volume sulla manopola della scheda (HW): volume e mute di quelle uscite non si possono comandare da CueStage.", len(hw)))
             note.setWordWrap(True)
             note.setStyleSheet("color:#e0b040;")
             v.addWidget(note)
-            sw = QPushButton("Volume e mute delle uscite da CueStage (SW)…")
+            sw = QPushButton(tr("Volume e mute delle uscite da CueStage (SW)…"))
             sw.setFocusPolicy(Qt.NoFocus)
             sw.clicked.connect(lambda: self._to_sw(hw))
             v.addWidget(sw, 0, Qt.AlignLeft)
         groups = {}
         for c in ctls:
-            groups.setdefault(c.get("group") or "Altro", []).append(c)
+            groups.setdefault(c.get("group") or tr("Altro"), []).append(c)
         for gname in sorted(groups, key=group_rank):
             items = groups[gname]
             tb = QToolButton()
@@ -463,7 +463,7 @@ class ControlsBox(QWidget):
         if m:                                       # sorgente dell'ingresso del mixer (dal routing)
             src = self.by_name.get(f"Mixer Input {m.group(2)} Capture Enum")
             if src and src.get("items") and src.get("value") is not None:
-                return f"Mix {m.group(1)} ← in {m.group(2)}: {src['items'][int(src['value'])]}"
+                return tr("Mix {0} ← in {1}: {2}", m.group(1), m.group(2), src['items'][int(src['value'])])
         return name
 
     def _fill(self, body, items):
@@ -474,7 +474,7 @@ class ControlsBox(QWidget):
         g.setVerticalSpacing(2)
         for row, c in enumerate(items):
             lab = QLabel(self._label(c))
-            lab.setToolTip(f"Controllo ALSA: {c['key']}")
+            lab.setToolTip(tr("Controllo ALSA: {0}", c['key']))
             lab.setMinimumWidth(250)
             g.addWidget(lab, row, 0)
             ed = self._editor(c)
@@ -486,10 +486,10 @@ class ControlsBox(QWidget):
 
     def _to_sw(self, hw):
         from PySide6.QtWidgets import QMessageBox
-        if QMessageBox.question(self, "Volume delle uscite", "Mettere le uscite su controllo software (SW)?\n\n"
+        if QMessageBox.question(self, tr("Volume delle uscite"), tr("Mettere le uscite su controllo software (SW)?\n\n"
                                 "Volume e mute di quelle uscite si comandano da CueStage (pannello e cue mute/fader); "
                                 "la manopola Monitor della scheda non agisce più su di esse finché non le rimetti "
-                                "su HW.") != QMessageBox.Yes:
+                                "su HW.")) != QMessageBox.Yes:
             return
         for c in hw:
             self.mm.set_control(self.mid, c["key"], 0, report=False)
@@ -506,7 +506,7 @@ class ControlsBox(QWidget):
             b.setFocusPolicy(Qt.NoFocus)
 
             def paint(on, b=b):
-                b.setText("acceso" if on else "spento")
+                b.setText(tr("acceso") if on else tr("spento"))
                 b.setStyleSheet("QPushButton{background:#2e7d46;color:white;font-weight:bold;border-radius:4px;}"
                                 if on else "QPushButton{background:#3a3c46;color:#bbb;border-radius:4px;}")
             paint(b.isChecked())
@@ -514,8 +514,7 @@ class ControlsBox(QWidget):
             def toggled(on, key=key, b=b, name=c["name"]):
                 if on and "phantom" in name.lower():
                     from PySide6.QtWidgets import QMessageBox
-                    if QMessageBox.question(self, "Phantom 48V", f"Accendere l'alimentazione phantom 48V?\n({name})\n\n"
-                                            "Attenzione ai microfoni a nastro e alle sorgenti di linea.") \
+                    if QMessageBox.question(self, tr("Phantom 48V"), tr("Accendere l'alimentazione phantom 48V?\n({0})\n\nAttenzione ai microfoni a nastro e alle sorgenti di linea.", name)) \
                             != QMessageBox.Yes:
                         b.blockSignals(True)
                         b.setChecked(False)
@@ -573,7 +572,7 @@ def _ctl_text(c, raw):
     if raw is None:
         return "?"
     if c["type"] == "bool":
-        return "acceso" if raw else "spento"
+        return tr("acceso") if raw else tr("spento")
     if c["type"] == "enum":
         items = c.get("items") or []
         return items[raw] if 0 <= raw < len(items) else str(raw)
@@ -610,13 +609,13 @@ class MixerPanel(QFrame):
         v = QVBoxLayout(self)
         v.setContentsMargins(8, 6, 8, 8)
         head = QHBoxLayout()
-        t = QLabel("Mixer · mute")
+        t = QLabel(tr("Mixer · mute"))
         t.setStyleSheet("font-weight:bold;font-size:14px;")
         head.addWidget(t)
         head.addStretch(1)
-        rb = QPushButton("Leggi tutto")
+        rb = QPushButton(tr("Leggi tutto"))
         rb.setFocusPolicy(Qt.NoFocus)
-        rb.setToolTip("Legge dal mixer lo stato di tutti i mute")
+        rb.setToolTip(tr("Legge dal mixer lo stato di tutti i mute"))
         rb.clicked.connect(self.read_all)
         head.addWidget(rb)
         close = QPushButton("✕")
@@ -641,7 +640,7 @@ class MixerPanel(QFrame):
             page = QWidget()
             pv = QVBoxLayout(page)
             if cls is None:
-                pv.addWidget(QLabel(f"Driver «{conf.get('driver')}» non disponibile"))
+                pv.addWidget(QLabel(tr("Driver «{0}» non disponibile", conf.get('driver'))))
             else:
                 for kind, count, caps in cls.sections(conf):
                     if "mute" not in caps:
@@ -655,9 +654,9 @@ class MixerPanel(QFrame):
                     tl.setStyleSheet("font-weight:bold;")
                     hr.addWidget(tl)
                     hr.addStretch(1)
-                    rd = QPushButton("Leggi")
+                    rd = QPushButton(tr("Leggi"))
                     rd.setFocusPolicy(Qt.NoFocus)
-                    rd.setToolTip("Legge dal mixer lo stato di questi mute")
+                    rd.setToolTip(tr("Legge dal mixer lo stato di questi mute"))
                     rd.clicked.connect(lambda _=False, mid=conf.get("id"), k=kind: self.read(mid, k))
                     hr.addWidget(rd)
                     bl.addLayout(hr)
@@ -677,7 +676,7 @@ class MixerPanel(QFrame):
                         b.setCheckable(True)
                         b.setFocusPolicy(Qt.NoFocus)
                         b.setToolTip(f"{KIND_LABELS.get(kind, kind)} {n}" + (f" · {nm}" if nm else "")
-                                     + ": clic = mute / riattiva")
+                                     + tr(": clic = mute / riattiva"))
                         b.setStyleSheet(self._style(None))
                         b.clicked.connect(lambda on, mid=conf.get("id"), k=kind, n=n: self._toggle(mid, k, n, on))
                         g.addWidget(b, (n - 1) // cols, (n - 1) % cols)
@@ -692,7 +691,7 @@ class MixerPanel(QFrame):
             sa.setWidgetResizable(True)
             sa.setFrameShape(QFrame.NoFrame)
             sa.setWidget(page)
-            self.tabs.addTab(sa, conf.get("name") or conf.get("host") or "Mixer")
+            self.tabs.addTab(sa, conf.get("name") or conf.get("host") or tr("Mixer"))
         if 0 <= cur < self.tabs.count():
             self.tabs.setCurrentIndex(cur)
         for key, muted in list(self.states.items()):       # dopo un rebuild (es. nomi letti)
@@ -725,7 +724,7 @@ class MixerPanel(QFrame):
         self.mm.mute(mid, kind, [n], on)
 
     def read(self, mid, kind):
-        self.result.setText(f"… lettura {KIND_LABELS.get(kind, kind).lower()}")
+        self.result.setText(tr("… lettura {0}", KIND_LABELS.get(kind, kind).lower()))
         self.mm.read_mutes(mid, kind, lambda ok, r, mid=mid, kind=kind: self.relay.mutes.emit(mid, kind, ok, r))
 
     def read_all(self):
@@ -741,12 +740,12 @@ class MixerPanel(QFrame):
 
     def _mutes_read(self, mid, kind, ok, res):
         if not ok:
-            self.result.setText(f"✘ {self.mm.name(mid)} – lettura {KIND_LABELS.get(kind, kind).lower()}: {res}")
+            self.result.setText(tr("✘ {0} – lettura {1}: {2}", self.mm.name(mid), KIND_LABELS.get(kind, kind).lower(), res))
             self.result.setStyleSheet("color:#e66;")
             return
         for i, m in enumerate(res or [], start=1):
             self._set((mid, kind, i), m)
-        self.result.setText(f"✔ {self.mm.name(mid)} – {KIND_LABELS.get(kind, kind)} letti")
+        self.result.setText(tr("✔ {0} – {1} letti", self.mm.name(mid), KIND_LABELS.get(kind, kind)))
         self.result.setStyleSheet("color:#6c6;")
 
     def _done(self, name, action, ok, msg):

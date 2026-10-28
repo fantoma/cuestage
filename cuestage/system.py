@@ -1,4 +1,5 @@
 """Differenze fra sistemi operativi (Linux, Windows, macOS) raccolte in un solo posto."""
+from .i18n import tr
 import os
 import subprocess
 import sys
@@ -6,7 +7,7 @@ import sys
 IS_WIN = sys.platform.startswith("win")
 IS_MAC = sys.platform == "darwin"
 IS_LINUX = sys.platform.startswith("linux")
-OS_NAME = "Windows" if IS_WIN else "macOS" if IS_MAC else "Linux"
+OS_NAME = tr("Windows") if IS_WIN else "macOS" if IS_MAC else tr("Linux")
 
 
 def data_dir(*sub):
@@ -81,7 +82,7 @@ def find_tool(name):
 def install_hint(package):
     """Come installare un programma mancante su questo sistema."""
     if IS_WIN:
-        return f"scarica {package} e aggiungilo al PATH (oppure usa il pacchetto di CueStage, che lo include)"
+        return tr("scarica {0} e aggiungilo al PATH (oppure usa il pacchetto di CueStage, che lo include)", package)
     if IS_MAC:
-        return f"installalo con 'brew install {package}' (oppure usa CueStage.app, che lo include)"
-    return f"installalo con 'sudo apt install {package}'"
+        return tr("installalo con 'brew install {0}' (oppure usa CueStage.app, che lo include)", package)
+    return tr("installalo con 'sudo apt install {0}'", package)

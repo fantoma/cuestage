@@ -1,5 +1,6 @@
 """Ispettore: modifica delle proprietà della cue selezionata."""
 
+from .i18n import tr
 from PySide6.QtCore import Signal, QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
@@ -47,7 +48,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         self.duck_dialog_fn = None  # apre Impostazioni › Ducking
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
-        self.header = QLabel("Nessuna cue selezionata")
+        self.header = QLabel(tr("Nessuna cue selezionata"))
         self.header.setStyleSheet("font-weight:bold; font-size:13px; padding:4px;")
         lay.addWidget(self.header)
         self.tabs = QTabWidget()
@@ -227,9 +228,9 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         self.audio_kbar = None
         cue = self.cue
         if cue is None:
-            self.header.setText("Nessuna cue selezionata")
+            self.header.setText(tr("Nessuna cue selezionata"))
             return
-        self.header.setText(f"Cue {cue.number or '·'} — {TYPE_LABELS[cue.type]}")
+        self.header.setText(tr("Cue {0} — {1}", cue.number or '·', TYPE_LABELS[cue.type]))
 
         def add(widget, title, scroll=True):
             # ogni scheda scorre se il pannello è basso: nessun campo resta nascosto
@@ -237,36 +238,36 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
                 widget = self._scrolled(widget)
             self.tabs.addTab(widget, title)
 
-        add(self._tab_base(), "Base")
+        add(self._tab_base(), tr("Base"))
         t = cue.type
         if t in ("audio", "video"):
-            add(self._tab_media_time(), "Tempi, loop e audio")
+            add(self._tab_media_time(), tr("Tempi, loop e audio"))
         if t in ("video", "image"):
-            add(self._tab_visual(), "Video / immagine · crop", scroll=False)
+            add(self._tab_visual(), tr("Video / immagine · crop"), scroll=False)
         if t == "fade":
-            add(self._tab_fade(), "Fade")
+            add(self._tab_fade(), tr("Fade"))
         if t == "preset":
-            add(self._tab_preset(), "Cambia preset")
+            add(self._tab_preset(), tr("Cambia preset"))
         if t == "control":
-            add(self._tab_control(), "Comando")
+            add(self._tab_control(), tr("Comando"))
         if t == "osc":
             add(self._tab_osc(), "OSC")
         if t == "projector":
-            add(self._tab_projector(), "Proiettore")
+            add(self._tab_projector(), tr("Proiettore"))
         if t == "mixer":
-            add(self._tab_mixer(), "Mixer")
+            add(self._tab_mixer(), tr("Mixer"))
         if t == "text":
-            add(self._tab_text(), "Testo")
+            add(self._tab_text(), tr("Testo"))
         if t == "midiout":
-            add(self._tab_midiout(), "MIDI out")
+            add(self._tab_midiout(), tr("MIDI out"))
         if t == "group":
-            add(self._tab_group(), "Gruppo")
+            add(self._tab_group(), tr("Gruppo"))
         if t == "groupexit":
-            add(self._tab_groupexit(), "Esci dal gruppo")
+            add(self._tab_groupexit(), tr("Esci dal gruppo"))
         if t == "stoppanel":
-            add(self._tab_stoppanel(), "Stop panel")
+            add(self._tab_stoppanel(), tr("Stop panel"))
         if t == "wait":
-            add(self._tab_wait(), "Attesa")
+            add(self._tab_wait(), tr("Attesa"))
         if 0 <= cur_tab < self.tabs.count():
             self.tabs.setCurrentIndex(cur_tab)
         elif self.tabs.count() > 1:
@@ -278,17 +279,17 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         h = QHBoxLayout(w)
         h.setContentsMargins(0, 0, 0, 0)
         txt = QKeySequence.fromString(cue.hotkey, QKeySequence.PortableText).toString(QKeySequence.NativeText) \
-            if cue.hotkey else "— nessuna —"
+            if cue.hotkey else tr("— nessuna —")
         lab = QLabel(txt)
         lab.setMinimumWidth(90)
         h.addWidget(lab)
-        b = QPushButton("Impara…")
-        b.setToolTip("Premi un tasto (o una combinazione) che avvierà questa cue")
+        b = QPushButton(tr("Impara…"))
+        b.setToolTip(tr("Premi un tasto (o una combinazione) che avvierà questa cue"))
         b.clicked.connect(lambda: self.hotkey_fn and self.hotkey_fn(cue))
         h.addWidget(b)
         x = QPushButton("✕")
         x.setFixedWidth(28)
-        x.setToolTip("Togli la scorciatoia")
+        x.setToolTip(tr("Togli la scorciatoia"))
         x.setEnabled(bool(cue.hotkey))
         x.clicked.connect(lambda: self.set_hotkey_fn and self.set_hotkey_fn(cue, ""))
         h.addWidget(x)
@@ -313,15 +314,15 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
 
         def other():
             from PySide6.QtGui import QColor
-            c = QColorDialog.getColor(QColor(cue.color or "#2f3440"), self, "Colore della cue")
+            c = QColorDialog.getColor(QColor(cue.color or "#2f3440"), self, tr("Colore della cue"))
             if c.isValid() and self.color_fn:
                 self.color_fn(cue, c.name())
-        o = QPushButton("Altro…")
+        o = QPushButton(tr("Altro…"))
         o.clicked.connect(other)
         h.addWidget(o)
         x = QPushButton("✕")
         x.setFixedWidth(28)
-        x.setToolTip("Nessun colore")
+        x.setToolTip(tr("Nessun colore"))
         x.clicked.connect(lambda: self.color_fn and self.color_fn(cue, ""))
         h.addWidget(x)
         h.addStretch(1)
@@ -337,10 +338,10 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
 
     def _test_buttons(self):
         row = QHBoxLayout()
-        b1 = QPushButton("▶ Prova questa cue")
-        b1.setToolTip("Avvia solo questa cue (senza catena e senza spostare il playhead)")
+        b1 = QPushButton(tr("▶ Prova questa cue"))
+        b1.setToolTip(tr("Avvia solo questa cue (senza catena e senza spostare il playhead)"))
         b1.clicked.connect(lambda: self.testRequested.emit(self.cue.id))
-        b2 = QPushButton("■ Stop")
+        b2 = QPushButton(tr("■ Stop"))
         b2.clicked.connect(lambda: self.stopRequested.emit(self.cue.id))
         row.addWidget(b1)
         row.addWidget(b2)
@@ -350,18 +351,18 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
     def _tab_base(self):
         w = QWidget()
         f = QFormLayout(w)
-        f.addRow("Numero", self._line("number"))
-        f.addRow("Nome", self._line("name"))
+        f.addRow(tr("Numero"), self._line("number"))
+        f.addRow(tr("Nome"), self._line("name"))
         trig = self._combo("trigger", TRIGGERS, TRIGGER_LABELS)
-        trig.setToolTip("Manuale: parte con GO.\nInsieme alla precedente: parte quando parte la cue "
+        trig.setToolTip(tr("Manuale: parte con GO.\nInsieme alla precedente: parte quando parte la cue "
                         "sopra, dopo il ritardo.\nAlla fine della precedente: parte quando la cue sopra "
-                        "termina, dopo il ritardo.")
-        f.addRow("Avvio", trig)
-        f.addRow("Ritardo (pre-wait)", self._dspin("delay", 0, 36000, 0.1, 2))
+                        "termina, dopo il ritardo."))
+        f.addRow(tr("Avvio"), trig)
+        f.addRow(tr("Ritardo (pre-wait)"), self._dspin("delay", 0, 36000, 0.1, 2))
         midi_row = QHBoxLayout()
-        ml = self._line("midi", "es. note 1 60  /  cc 1 20  /  pc 1 5  (canale 0 = tutti)")
+        ml = self._line("midi", tr("es. note 1 60  /  cc 1 20  /  pc 1 5  (canale 0 = tutti)"))
         midi_row.addWidget(ml)
-        lb = QPushButton("Impara")
+        lb = QPushButton(tr("Impara"))
         cue = self.cue
 
         def learned(spec):
@@ -370,16 +371,16 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
             self._emit()
         lb.clicked.connect(lambda: self.learnMidi.emit(learned))
         midi_row.addWidget(lb)
-        f.addRow("Trigger MIDI", midi_row)
-        for field, label, types in (("midi_vol", "Fader MIDI volume", ("audio", "video")),
-                                    ("midi_op", "Fader MIDI trasparenza", ("video", "image"))):
+        f.addRow(tr("Trigger MIDI"), midi_row)
+        for field, label, types in (("midi_vol", tr("Fader MIDI volume"), ("audio", "video")),
+                                    ("midi_op", tr("Fader MIDI trasparenza"), ("video", "image"))):
             if cue.type not in types:
                 continue
             row = QHBoxLayout()
             le = QLineEdit(getattr(cue, field, ""))
-            le.setPlaceholderText("es. cc 1 7  /  pb 1  /  pc 1 *  (canale 0 = tutti)")
-            le.setToolTip("Controllo continuo (fader/potenziometro) per questa cue: dal vivo se è in "
-                          "riproduzione, altrimenti modifica il valore programmato")
+            le.setPlaceholderText(tr("es. cc 1 7  /  pb 1  /  pc 1 *  (canale 0 = tutti)"))
+            le.setToolTip(tr("Controllo continuo (fader/potenziometro) per questa cue: dal vivo se è in "
+                          "riproduzione, altrimenti modifica il valore programmato"))
 
             def typed(le=le, field=field):
                 from .remote import normalize_control
@@ -392,7 +393,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
                 self._emit()
             le.editingFinished.connect(typed)
             row.addWidget(le)
-            b = QPushButton("Impara")
+            b = QPushButton(tr("Impara"))
 
             def learned_ctl(spec, le=le, field=field):
                 setattr(cue, field, spec)
@@ -403,17 +404,17 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
             row.addWidget(b)
             clr = QPushButton("✕")
             clr.setFixedWidth(28)
-            clr.setToolTip("Togli il controllo")
+            clr.setToolTip(tr("Togli il controllo"))
             clr.clicked.connect(lambda _=False, le=le, field=field: (le.clear(), setattr(cue, field, ""), self._emit()))
             row.addWidget(clr)
             f.addRow(label, row)
-        f.addRow("Trigger OSC", self._line("osc_trigger", "es. /scena/1  (oltre a /cue/<numero>/start)"))
-        f.addRow("Scorciatoia", self._hotkey_row(cue))
-        f.addRow("Colore", self._color_row(cue))
+        f.addRow(tr("Trigger OSC"), self._line("osc_trigger", tr("es. /scena/1  (oltre a /cue/<numero>/start)")))
+        f.addRow(tr("Scorciatoia"), self._hotkey_row(cue))
+        f.addRow(tr("Colore"), self._color_row(cue))
         notes = QPlainTextEdit(cue.notes)
         notes.setMaximumHeight(70)
         notes.textChanged.connect(lambda: (setattr(cue, "notes", notes.toPlainText()), self._emit()))
-        f.addRow("Note", notes)
+        f.addRow(tr("Note"), notes)
         f.addRow(self._test_buttons())
         return w
 

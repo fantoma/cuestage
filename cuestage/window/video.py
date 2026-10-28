@@ -1,5 +1,6 @@
 """Uscita video: finestra, schermi, geometria a 4 angoli (parte di MainWindow)."""
 
+from ..i18n import tr
 from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import (
     QApplication, )
@@ -52,12 +53,12 @@ class VideoMixin:
             full = False
         self.output.place_on_screen(scr if scr >= 0 else None, full)
         self.activateWindow()
-        self.act_out_show.setText("Nascondi finestra di uscita")
+        self.act_out_show.setText(tr("Nascondi finestra di uscita"))
 
     def toggle_output(self):
         if self.output is not None and self.output.isVisible():
             self.output.hide()
-            self.act_out_show.setText("Mostra finestra di uscita")
+            self.act_out_show.setText(tr("Mostra finestra di uscita"))
         else:
             self.show_output()
 
@@ -72,8 +73,8 @@ class VideoMixin:
         grp = QActionGroup(self.screens_menu)
         cur = self.show_data.settings.get("output_screen", -1)
         screens = QApplication.screens()
-        opts = [(-1, "Automatico (ultimo schermo)")] + [
-            (i, f"{i + 1}: {s.name()} {s.geometry().width()}×{s.geometry().height()}")
+        opts = [(-1, tr("Automatico (ultimo schermo)"))] + [
+            (i, tr("{0}: {1} {2}×{3}", i + 1, s.name(), s.geometry().width(), s.geometry().height()))
             for i, s in enumerate(screens)]
         for i, label in opts:
             a = QAction(label, self.screens_menu)

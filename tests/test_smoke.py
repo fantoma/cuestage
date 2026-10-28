@@ -295,6 +295,33 @@ def t_grid_solo_blind_groups(w):
     assert sh.main.cues[1].group == sh.main.cues[0].id
 
 
+def t_languages():
+    """File di lingua: completi, con gli stessi segnaposto {0}… dell'italiano; cambio di lingua e ritorno."""
+    import importlib.util
+    import cuestage.i18n as i18n
+    spec = importlib.util.spec_from_file_location("lang_update", os.path.join(ROOT, "tools", "lang_update.py"))
+    lu = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(lu)
+    src = lu.source_strings()
+    langs = i18n.available()
+    assert {"it", "en", "sl"} <= set(langs), langs
+    for code in ("en", "sl"):
+        cat = i18n.load(code)
+        missing = [k for k in src if k not in cat]
+        assert not missing, (code, len(missing), missing[:5])
+        wrong = [k for k in src if lu.placeholders(k) != lu.placeholders(cat[k])]
+        assert not wrong, (code, wrong[:5])
+    try:
+        assert i18n.set_language("en") == "en"
+        assert i18n.tr("Pagina {0}", 2) == "Page 2"
+        assert i18n.tr("testo che non esiste") == "testo che non esiste"
+        assert i18n.set_language("sl") == "sl" and i18n.tr("Salva") == "Shrani"
+        assert i18n.set_language("xx") == "it"
+    finally:
+        i18n.set_language("it")
+    assert i18n.tr("Pagina {0}", 2) == "Pagina 2"
+
+
 def t_wav_without_ffmpeg():
     """I WAV si leggono anche se ffprobe/ffmpeg non rispondono (lettura diretta del file)."""
     import cuestage.media as media
@@ -712,12 +739,13 @@ def t_mixer_x32(w):
     assert abs(sent["/ch/05/mix/fader"][0] - 0.5) < 0.01, sent
     # azione «Ducking»: il livello normale si legge dal mixer come per l'azione Fader
     from PySide6.QtWidgets import QDoubleSpinBox, QPushButton
+    from cuestage.i18n import tr
     d = Cue("mixer", number="3", name="Duck", mix_target="m", mix_action="duck", mix_kind="ch",
             mix_channels="5", mix_level=0.0, mix_duck_db=12.0)
     sh.cues.append(d)
     w.inspector.set_cue(d)
     run(0.2)
-    rb = next(b for b in w.inspector.findChildren(QPushButton) if "Leggi dal mixer" in b.text() and b.isVisible())
+    rb = next(b for b in w.inspector.findChildren(QPushButton) if tr("⟲ Leggi dal mixer") == b.text() and b.isVisible())
     rb.click()
     wait_until(lambda: abs(d.mix_level + 10.0) < 0.2)
     assert abs(d.mix_level + 10.0) < 0.2, d.mix_level
@@ -803,6 +831,7 @@ if __name__ == "__main__":
     check("profilo OSC ChamSys MagicQ", t_osc_profile)
     check("lettura dei controlli ALSA", t_alsa_parser)
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
+    check("lingue: italiano, inglese, sloveno", t_languages)
     w.show_data.dirty = False
     w.close()
     check("master + ridondanza: comandi, modifiche, heartbeat", t_cluster_redundancy)

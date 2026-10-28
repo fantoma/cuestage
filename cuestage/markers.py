@@ -5,6 +5,7 @@ Due sistemi di riferimento:
 - tempo della CUE (barre di avanzamento): 0 = avvio, il loop è «srotolato» con le sue ripetizioni.
 Le viste chiedono qui i marcatori e li disegnano con paint_bar() o con il proprio stile.
 """
+from .i18n import tr
 from dataclasses import dataclass, field
 
 from PySide6.QtCore import QPointF, QRectF, Qt
@@ -15,8 +16,8 @@ COLORS = {
     "fade": QColor(235, 235, 240), "visual": QColor(255, 170, 40), "audio": QColor(80, 200, 255),
     "curve": QColor(255, 140, 220),
 }
-KIND_LABELS = {"in": "IN", "out": "OUT", "loop": "loop", "fade": "fade", "visual": "keyframe immagine",
-               "audio": "keyframe audio", "curve": "punto curva volume"}
+KIND_LABELS = {"in": "IN", "out": "OUT", "loop": "loop", "fade": "fade", "visual": tr("keyframe immagine"),
+               "audio": tr("keyframe audio"), "curve": tr("punto curva volume")}
 
 
 @dataclass
@@ -147,15 +148,15 @@ def cue_marks(cue, ax):
     from . import keyframes as kf
     out = []
     if ax.fade_in > 0:
-        out.append(Mark(min(ax.fade_in, ax.length), "fade", f"fine fade in ({ax.fade_in:.1f} s)"))
+        out.append(Mark(min(ax.fade_in, ax.length), "fade", tr("fine fade in ({0:.1f} s)", ax.fade_in)))
     if ax.fade_out > 0 and ax.total:
-        out.append(Mark(max(0.0, ax.total - ax.fade_out), "fade", f"inizio fade out ({ax.fade_out:.1f} s)"))
+        out.append(Mark(max(0.0, ax.total - ax.fade_out), "fade", tr("inizio fade out ({0:.1f} s)", ax.fade_out)))
     for i, (a, b) in enumerate(ax.regions):
-        out.append(Mark(a, "loop", "inizio loop" + (f" (ripetizione {i})" if i else "")))
-        out.append(Mark(b, "loop", "fine loop"))
+        out.append(Mark(a, "loop", tr("inizio loop") + (tr(" (ripetizione {0})", i) if i else "")))
+        out.append(Mark(b, "loop", tr("fine loop")))
     for ft, db in (cue.curve or []) if cue.type in ("audio", "video") else []:
         for t in file_to_cue_times(ax, float(ft)):
-            out.append(Mark(t, "curve", f"curva {float(db):+.1f} dB"))
+            out.append(Mark(t, "curve", tr("curva {0:+.1f} dB", float(db))))
     for p in (cue.preset_points or []):
         try:
             t = float(p.get("t", 0))

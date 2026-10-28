@@ -1,6 +1,7 @@
 """Riproduzione: GO, stop, pausa, GO/STOP locali dei PANEL, cue in attesa (parte di MainWindow)."""
 
 
+from ..i18n import tr
 from ..model import (
     TYPE_ICONS, )
 
@@ -16,7 +17,7 @@ class PlaybackMixin:
 
     def stop_all(self):
         if self.ctrl.exit_captured_groups():      # ESC esce prima dai random loop col GO e dai testi
-            self.status("Uscita dal gruppo / dal testo (ESC di nuovo = STOP TUTTO)")
+            self.status(tr("Uscita dal gruppo / dal testo (ESC di nuovo = STOP TUTTO)"))
             self._update_standby()
             return
         self.ctrl.stop_all(float(self.show_data.settings.get("stop_fade", 0.3)))
@@ -60,7 +61,7 @@ class PlaybackMixin:
     def stop_list(self, lst):
         fade = float(lst.grid_fade) if lst.is_grid else float(self.show_data.settings.get("stop_fade", 0.3))
         self.ctrl.stop_list(lst, fade)
-        self.status(f"STOP «{lst.name}»")
+        self.status(tr("STOP «{0}»", lst.name))
 
     def _update_local_go(self):
         if not hasattr(self, "local_go"):
@@ -77,10 +78,10 @@ class PlaybackMixin:
         self.local_stop_btn.setEnabled(bool(self.ctrl.list_active(lst)))
         if 0 <= i < len(lst.cues):
             c = lst.cues[i]
-            self.local_standby.setText(f"In attesa in «{lst.name}»:  {TYPE_ICONS.get(c.type, '')}  {c.label()}")
+            self.local_standby.setText(tr("In attesa in «{0}»:  {1}  {2}", lst.name, TYPE_ICONS.get(c.type, ''), c.label()))
             self.local_go_btn.setEnabled(True)
         else:
-            self.local_standby.setText(f"«{lst.name}»: — fine della lista —")
+            self.local_standby.setText(tr("«{0}»: — fine della lista —", lst.name))
             self.local_go_btn.setEnabled(False)
 
     def _update_standby(self):
@@ -95,13 +96,13 @@ class PlaybackMixin:
         cap = self.ctrl.captured_group(lst)
         if cap is not None and hasattr(cap, "phrases"):
             nxt = cap.phrases[cap.idx + 1].replace("\n", " / ")
-            self.standby.setText(f"{where}T {cap.idx + 2}/{len(cap.phrases)}: {nxt[:60]}")
-            self.standby_notes.setText("GO = frase successiva · Alt+← precedente · ESC = esci dal testo")
+            self.standby.setText(tr("{0}T {1}/{2}: {3}", where, cap.idx + 2, len(cap.phrases), nxt[:60]))
+            self.standby_notes.setText(tr("GO = frase successiva · Alt+← precedente · ESC = esci dal testo"))
             self.go_btn.setEnabled(True)
             return
         if cap is not None:
-            self.standby.setText(f"{where}◫ {cap.cue.label()}: GO = cue a caso successiva")
-            self.standby_notes.setText("ESC = esci dal gruppo (poi ESC = STOP TUTTO)")
+            self.standby.setText(tr("{0}◫ {1}: GO = cue a caso successiva", where, cap.cue.label()))
+            self.standby_notes.setText(tr("ESC = esci dal gruppo (poi ESC = STOP TUTTO)"))
             self.go_btn.setEnabled(True)
             return
         if 0 <= i < len(cues):
@@ -110,7 +111,7 @@ class PlaybackMixin:
             self.standby_notes.setText(c.notes.splitlines()[0] if c.notes else "")
             self.go_btn.setEnabled(True)
         else:
-            self.standby.setText(f"{where}— fine della lista —")
+            self.standby.setText(tr("{0}— fine della lista —", where))
             self.standby_notes.setText("")
             self.go_btn.setEnabled(False)
 

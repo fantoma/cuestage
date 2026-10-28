@@ -12,6 +12,7 @@ Per Scarlett Gen 2/3 con kernel tra 5.14 e 6.6 serve l'opzione del modulo:
     echo "options snd_usb_audio device_setup=1" | sudo tee /etc/modprobe.d/scarlett.conf   (poi riavvio)
 Richiede «amixer» (pacchetto alsa-utils).
 """
+from cuestage.i18n import tr
 import re
 
 from cuestage.mixers import MixerDriver, MixerError
@@ -32,12 +33,12 @@ def _is_focusrite(*names):
 class SchedaAudioAlsa(MixerDriver):
     ID = "alsa_card"
     PLATFORMS = ("linux",)
-    NAME = "Scheda audio (controlli ALSA, qualsiasi modello)"
+    NAME = tr("Scheda audio (controlli ALSA, qualsiasi modello)")
     DEFAULT_PORT = 0
     FIELDS = ("card",)
     CONTROLS = True
-    NOTES = ("Controlli della scheda audio dal mixer ALSA (amixer): interruttori, menu e volumi compaiono nel "
-             "pannello mixer (F10) e si possono impostare con una cue Mixer › «Imposta un controllo».")
+    NOTES = (tr("Controlli della scheda audio dal mixer ALSA (amixer): interruttori, menu e volumi compaiono nel "
+             "pannello mixer (F10) e si possono impostare con una cue Mixer › «Imposta un controllo»."))
 
     def __init__(self, conf):
         super().__init__(conf)
@@ -67,7 +68,7 @@ class SchedaAudioAlsa(MixerDriver):
             self._load()
             c = self.ctls.get(key)
         if c is None:
-            raise MixerError(f"controllo «{key}» non presente sulla scheda")
+            raise MixerError(tr("controllo «{0}» non presente sulla scheda", key))
         return c
 
     def list_controls(self):
@@ -87,7 +88,7 @@ class SchedaAudioAlsa(MixerDriver):
     def set_control(self, key, value):
         c = self._ctl(key)
         if not c.writable:
-            raise MixerError(f"«{key}» è di sola lettura")
+            raise MixerError(tr("«{0}» è di sola lettura", key))
         self._write(c, value)
         return c.text(int(value))
 
@@ -103,18 +104,18 @@ class SchedaAudioAlsa(MixerDriver):
             if _is_focusrite(short, long):         # le Focusrite le trova il loro driver
                 continue
             out.append({"driver": cls.ID, "card": cid, "card_name": short, "name": short,
-                        "model": "", "info": f"scheda ALSA {idx} · {long[:60]}"})
+                        "model": "", "info": tr("scheda ALSA {0} · {1}", idx, long[:60])})
         return out
 
 
 class FocusriteScarlett(SchedaAudioAlsa):
     ID = "focusrite_scarlett"
-    NAME = "Focusrite Scarlett / Clarett (driver scarlett2)"
+    NAME = tr("Focusrite Scarlett / Clarett (driver scarlett2)")
     NAMES = True
-    NOTES = ("Funzioni della scheda dal driver «scarlett2» del kernel (come Focusrite Control): ingressi (Inst, Pad, "
+    NOTES = (tr("Funzioni della scheda dal driver «scarlett2» del kernel (come Focusrite Control): ingressi (Inst, Pad, "
              "Air, 48V), uscite con volume e mute (sezione «Uscite», anche nelle cue mute/fader), master, direct "
              "monitor, matrice di mix e routing nel pannello mixer (F10). Kernel 6.7 o successivo; per Gen 2/3 con "
-             "kernel precedenti: opzione «device_setup=1» del modulo snd_usb_audio. Serve alsa-utils.")
+             "kernel precedenti: opzione «device_setup=1» del modulo snd_usb_audio. Serve alsa-utils."))
 
     @classmethod
     def _outputs(cls, conf):
@@ -166,15 +167,13 @@ class FocusriteScarlett(SchedaAudioAlsa):
         else:
             c = (outs.get(int(n)) or [None, None])[0 if which == "vol" else 1]
         if c is None:
-            raise MixerError(f"{'volume' if which == 'vol' else 'mute'} dell'uscita {n} non disponibile")
+            raise MixerError(tr("{0} dell'uscita {1} non disponibile", 'volume' if which == 'vol' else 'mute', n))
         c = self._ctl(c.key)
         if not c.writable:
             self._load()                       # forse è appena passata a SW
             c = self._ctl(c.key)
         if not c.writable:
-            raise MixerError(f"uscita {n}: volume e mute sono sulla manopola della scheda (HW). Nel pannello "
-                             "mixer (F10): «Volume e mute delle uscite da CueStage (SW)», oppure «Line Out "
-                             f"{int(n):02d} Volume Control» su SW")
+            raise MixerError(tr("uscita {0}: volume e mute sono sulla manopola della scheda (HW). Nel pannello mixer (F10): «Volume e mute delle uscite da CueStage (SW)», oppure «Line Out {1:02d} Volume Control» su SW", n, int(n)))
         return c
 
     def set_mute(self, kind, n, muted):
@@ -200,7 +199,7 @@ class FocusriteScarlett(SchedaAudioAlsa):
         c = self._out(kind, n, "vol")
         raw = c.value()
         if raw is None:
-            raise MixerError("valore non letto")
+            raise MixerError(tr("valore non letto"))
         if c.db:
             return max(-90.0, c.to_db(raw))
         return -90.0 + 90.0 * (raw - c.min) / max(1, c.max - c.min)
@@ -219,5 +218,5 @@ class FocusriteScarlett(SchedaAudioAlsa):
         for idx, cid, short, long in alsa_cards():
             if _is_focusrite(short, long):
                 out.append({"driver": cls.ID, "card": cid, "card_name": short, "name": short,
-                            "model": "", "info": f"scheda ALSA {idx} · {long[:60]}"})
+                            "model": "", "info": tr("scheda ALSA {0} · {1}", idx, long[:60])})
         return out

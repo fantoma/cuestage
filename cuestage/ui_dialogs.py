@@ -1,4 +1,5 @@
 """Dialoghi: impostazioni, geometria a 4 angoli, apprendimento MIDI, guida OSC."""
+from .i18n import tr
 import copy
 
 from PySide6.QtCore import Qt
@@ -11,33 +12,33 @@ from .remote import MidiInput, normalize_control, normalize_spec
 from .system import IS_MAC, IS_WIN, OS_NAME, data_dir_label
 
 if IS_WIN:
-    AUTO_CH_NOTE = ("«auto»: tutti i canali della scheda. Su Windows CueStage usa WASAPI (o ASIO, se il driver "
-                    "della scheda lo offre): per la latenza più bassa preferisci ASIO.")
+    AUTO_CH_NOTE = (tr("«auto»: tutti i canali della scheda. Su Windows CueStage usa WASAPI (o ASIO, se il driver "
+                    "della scheda lo offre): per la latenza più bassa preferisci ASIO."))
 elif IS_MAC:
-    AUTO_CH_NOTE = "«auto»: tutti i canali della scheda (Core Audio)."
+    AUTO_CH_NOTE = tr("«auto»: tutti i canali della scheda (Core Audio).")
 else:
-    AUTO_CH_NOTE = ("«auto»: 2 canali per i dispositivi virtuali (default, pipewire, pulse…), tutti per le "
+    AUTO_CH_NOTE = (tr("«auto»: 2 canali per i dispositivi virtuali (default, pipewire, pulse…), tutti per le "
                     "schede hardware (hw:). Per più canali attraverso PipeWire, impostali sul dispositivo "
-                    "«pipewire» o «default».")
+                    "«pipewire» o «default»."))
 from .video_output import MappingEditor
 
 MIDI_ACTIONS = [
-    ("go", "GO"), ("stop_all", "Stop tutto"), ("pause_all", "Pausa tutto"),
-    ("resume_all", "Riprendi tutto"), ("next", "Playhead avanti"), ("prev", "Playhead indietro"),
-    ("xfade_go", "Crossfade alla successiva"),
-    ("dim", "DIM acceso / spento"), ("duck", "Duck acceso / spento"),
+    ("go", "GO"), ("stop_all", tr("Stop tutto")), ("pause_all", tr("Pausa tutto")),
+    ("resume_all", tr("Riprendi tutto")), ("next", tr("Playhead avanti")), ("prev", tr("Playhead indietro")),
+    ("xfade_go", tr("Crossfade alla successiva")),
+    ("dim", tr("DIM acceso / spento")), ("duck", tr("Duck acceso / spento")),
 ]
 MIDI_CONTROLS = [
-    ("vol_selected", "Volume della cue selezionata"),
-    ("op_selected", "Trasparenza della cue selezionata"),
-    ("xfade", "Crossfader (corrente ↔ successiva)"),
+    ("vol_selected", tr("Volume della cue selezionata")),
+    ("op_selected", tr("Trasparenza della cue selezionata")),
+    ("xfade", tr("Crossfader (corrente ↔ successiva)")),
 ]
 
 
 class SettingsDialog(QDialog):
     def __init__(self, settings, learn_fn, parent=None, rescan_fn=None):
         super().__init__(parent)
-        self.setWindowTitle("Impostazioni")
+        self.setWindowTitle(tr("Impostazioni"))
         self.s = copy.deepcopy(settings)
         self.learn_fn = learn_fn
         self.rescan_fn = rescan_fn
@@ -46,7 +47,7 @@ class SettingsDialog(QDialog):
         self.tabs = QTabWidget()
         v.addWidget(self.tabs, 1)
         pages = []
-        for title in ("Audio", "OSC", "MIDI", "Interfaccia web", "Istanze"):
+        for title in (tr("Audio"), "OSC", "MIDI", tr("Interfaccia web"), tr("Istanze")):
             w = QWidget()
             pages.append(QVBoxLayout(w))
             sa = QScrollArea()                 # ogni scheda scorre: i controlli non vengono mai schiacciati
@@ -55,11 +56,11 @@ class SettingsDialog(QDialog):
             sa.setWidget(w)
             self.tabs.addTab(sa, title)
 
-        ga = QGroupBox("Audio")
+        ga = QGroupBox(tr("Audio"))
         fa = QFormLayout(ga)
         self.dev = QComboBox()
-        fa.addRow("Scheda predefinita", self.dev)
-        chbox = QGroupBox("Canali usati per ogni scheda")
+        fa.addRow(tr("Scheda predefinita"), self.dev)
+        chbox = QGroupBox(tr("Canali usati per ogni scheda"))
         cbl = QVBoxLayout(chbox)
         inner = QWidget()
         self.ch_grid = QGridLayout(inner)
@@ -75,8 +76,8 @@ class SettingsDialog(QDialog):
         note.setStyleSheet("color:#888; font-size:10px;")
         cbl.addWidget(note)
         fa.addRow(chbox)
-        rescan = QPushButton("Rileggi le schede collegate")
-        rescan.setToolTip("Per una scheda USB collegata dopo l'avvio di CueStage")
+        rescan = QPushButton(tr("Rileggi le schede collegate"))
+        rescan.setToolTip(tr("Per una scheda USB collegata dopo l'avvio di CueStage"))
         rescan.clicked.connect(self._rescan)
         fa.addRow(rescan)
         self._fill_devices()
@@ -85,67 +86,67 @@ class SettingsDialog(QDialog):
         for k, t in BUFFER_LABELS.items():
             self.abuf.addItem(t, k)
         self.abuf.setCurrentIndex(max(0, self.abuf.findData(self.s.get("audio_buffer") or "normale")))
-        self.abuf.setToolTip("Se compaiono buchi nell'audio («underrun» nella barra di stato o nel terminale), "
-                             "scegli un buffer più grande: le cue partono qualche millisecondo più tardi.")
-        fa.addRow("Buffer audio", self.abuf)
+        self.abuf.setToolTip(tr("Se compaiono buchi nell'audio («underrun» nella barra di stato o nel terminale), "
+                             "scegli un buffer più grande: le cue partono qualche millisecondo più tardi."))
+        fa.addRow(tr("Buffer audio"), self.abuf)
         self.master = QDoubleSpinBox()
         self.master.setRange(-60, 12)
         self.master.setSuffix(" dB")
         self.master.setValue(float(self.s.get("master_db", 0)))
-        fa.addRow("Volume master", self.master)
+        fa.addRow(tr("Volume master"), self.master)
         self.stopfade = QDoubleSpinBox()
         self.stopfade.setRange(0, 10)
         self.stopfade.setSuffix(" s")
         self.stopfade.setValue(float(self.s.get("stop_fade", 0.3)))
-        fa.addRow("Fade di «Stop tutto»", self.stopfade)
+        fa.addRow(tr("Fade di «Stop tutto»"), self.stopfade)
         self.xftime = QDoubleSpinBox()
         self.xftime.setRange(0, 120)
         self.xftime.setDecimals(1)
         self.xftime.setSingleStep(0.5)
         self.xftime.setSuffix(" s")
         self.xftime.setValue(float(self.s.get("xfade_time", 3.0)))
-        self.xftime.setToolTip("Durata del crossfade automatico (Riproduzione › Crossfade alla successiva, F6)")
-        fa.addRow("Durata crossfade", self.xftime)
+        self.xftime.setToolTip(tr("Durata del crossfade automatico (Riproduzione › Crossfade alla successiva, F6)"))
+        fa.addRow(tr("Durata crossfade"), self.xftime)
         pages[0].addWidget(ga)
 
         from .audio_engine import preview_settings
         pvs = preview_settings(self.s)
-        gp = QGroupBox("Preascolto (cuffia)")
+        gp = QGroupBox(tr("Preascolto (cuffia)"))
         fp = QFormLayout(gp)
-        self.pv_on = QCheckBox("Attiva il preascolto")
+        self.pv_on = QCheckBox(tr("Attiva il preascolto"))
         self.pv_on.setChecked(pvs["enabled"])
-        self.pv_on.setToolTip("Le cue con «Preascolto» (ispettore) suonano solo qui, non sulle uscite dello "
-                              "spettacolo. Accanto al volume master compare il volume del preascolto.")
+        self.pv_on.setToolTip(tr("Le cue con «Preascolto» (ispettore) suonano solo qui, non sulle uscite dello "
+                              "spettacolo. Accanto al volume master compare il volume del preascolto."))
         fp.addRow(self.pv_on)
         self.pv_dev = QComboBox()
-        fp.addRow("Scheda", self.pv_dev)
+        fp.addRow(tr("Scheda"), self.pv_dev)
         pr = QHBoxLayout()
         self.pv_l = QSpinBox()
         self.pv_r = QSpinBox()
-        for sp, val, lab in ((self.pv_l, pvs["ch_l"], "Sinistro"), (self.pv_r, pvs["ch_r"], "Destro")):
+        for sp, val, lab in ((self.pv_l, pvs["ch_l"], tr("Sinistro")), (self.pv_r, pvs["ch_r"], tr("Destro"))):
             sp.setRange(1, 64)
             sp.setValue(val)
             pr.addWidget(QLabel(lab))
             pr.addWidget(sp)
         pr.addStretch(1)
-        fp.addRow("Canali", pr)
+        fp.addRow(tr("Canali"), pr)
         self._pv_cur = pvs
         self._fill_preview_devices()
         self.pv_dev.currentIndexChanged.connect(lambda *_: self._fit_preview_channels())
         pages[0].addWidget(gp)
 
-        go = QGroupBox("OSC in ingresso")
+        go = QGroupBox(tr("OSC in ingresso"))
         fo = QFormLayout(go)
-        self.osc_on = QCheckBox("Abilita ricezione OSC")
+        self.osc_on = QCheckBox(tr("Abilita ricezione OSC"))
         self.osc_on.setChecked(bool(self.s.get("osc_in_enabled", True)))
         fo.addRow(self.osc_on)
         self.osc_port = QSpinBox()
         self.osc_port.setRange(1, 65535)
         self.osc_port.setValue(int(self.s.get("osc_in_port", 53000)))
-        fo.addRow("Porta UDP", self.osc_port)
+        fo.addRow(tr("Porta UDP"), self.osc_port)
         pages[1].addWidget(go)
 
-        gd = QGroupBox("Dispositivi OSC (profili: console luci, software…)")
+        gd = QGroupBox(tr("Dispositivi OSC (profili: console luci, software…)"))
         gdl = QVBoxLayout(gd)
         from PySide6.QtWidgets import QListWidget
         self.osc_devs = [dict(d) for d in self.s.get("osc_devices") or []]
@@ -154,53 +155,50 @@ class SettingsDialog(QDialog):
         self.dev_list.itemDoubleClicked.connect(lambda *_: self._edit_osc_dev())
         gdl.addWidget(self.dev_list)
         br = QHBoxLayout()
-        for text, fn in (("Aggiungi da profilo…", self._add_osc_dev), ("Modifica…", self._edit_osc_dev),
-                         ("Rimuovi", self._del_osc_dev)):
+        for text, fn in ((tr("Aggiungi da profilo…"), self._add_osc_dev), (tr("Modifica…"), self._edit_osc_dev),
+                         (tr("Rimuovi"), self._del_osc_dev)):
             b = QPushButton(text)
             b.clicked.connect(fn)
             br.addWidget(b)
         br.addStretch(1)
         gdl.addLayout(br)
-        nd = QLabel("Un dispositivo nasce da un profilo (es. ChamSys MagicQ) con il suo indirizzo IP, scritto o "
-                    "trovato con la ricerca in rete. Nelle cue OSC si sceglie poi il dispositivo e il comando "
-                    "(GO di un playback, GOTO CUE, exec, DBO…). Profili aggiuntivi: file .json in "
-                    f"{data_dir_label('osc_profiles')}.")
+        nd = QLabel(tr("Un dispositivo nasce da un profilo (es. ChamSys MagicQ) con il suo indirizzo IP, scritto o trovato con la ricerca in rete. Nelle cue OSC si sceglie poi il dispositivo e il comando (GO di un playback, GOTO CUE, exec, DBO…). Profili aggiuntivi: file .json in {0}.", data_dir_label('osc_profiles')))
         nd.setWordWrap(True)
         nd.setStyleSheet("color:#888;")
         gdl.addWidget(nd)
         pages[1].addWidget(gd)
         self._fill_osc_devs()
 
-        gw = QGroupBox("Interfaccia web (telefono / tablet)")
+        gw = QGroupBox(tr("Interfaccia web (telefono / tablet)"))
         fw = QFormLayout(gw)
-        self.web_on = QCheckBox("Abilita interfaccia web")
+        self.web_on = QCheckBox(tr("Abilita interfaccia web"))
         self.web_on.setChecked(bool(self.s.get("web_enabled", False)))
         fw.addRow(self.web_on)
         self.web_port = QSpinBox()
         self.web_port.setRange(1, 65535)
         self.web_port.setValue(int(self.s.get("web_port", 8080)))
-        fw.addRow("Porta TCP", self.web_port)
+        fw.addRow(tr("Porta TCP"), self.web_port)
         self.web_pin = QLineEdit(str(self.s.get("web_pin", "")))
-        self.web_pin.setPlaceholderText("vuoto = nessun PIN")
-        self.web_pin.setToolTip("Se impostato, il browser lo chiede una volta (consigliato su reti condivise)")
+        self.web_pin.setPlaceholderText(tr("vuoto = nessun PIN"))
+        self.web_pin.setToolTip(tr("Se impostato, il browser lo chiede una volta (consigliato su reti condivise)"))
         fw.addRow("PIN", self.web_pin)
-        self.web_proj = QCheckBox("Mostra il controllo dei proiettori nell'interfaccia web")
+        self.web_proj = QCheckBox(tr("Mostra il controllo dei proiettori nell'interfaccia web"))
         self.web_proj.setChecked(bool(self.s.get("web_projectors", True)))
         fw.addRow(self.web_proj)
         from .webserver import local_addresses
         self.web_ip = QComboBox()
         for ip in local_addresses():
             self.web_ip.addItem(ip)
-        self.web_ip.setToolTip("Indirizzo della rete a cui è collegato il telefono")
-        fw.addRow("Indirizzo", self.web_ip)
-        self.web_qr_pin = QCheckBox("Includi il PIN nel QR code (accesso diretto senza digitarlo)")
+        self.web_ip.setToolTip(tr("Indirizzo della rete a cui è collegato il telefono"))
+        fw.addRow(tr("Indirizzo"), self.web_ip)
+        self.web_qr_pin = QCheckBox(tr("Includi il PIN nel QR code (accesso diretto senza digitarlo)"))
         self.web_qr_pin.setChecked(True)
         fw.addRow(self.web_qr_pin)
         qrow = QHBoxLayout()
         self.web_qr = QLabel()
         self.web_qr.setFixedSize(180, 180)
         self.web_qr.setAlignment(Qt.AlignCenter)
-        self.web_qr.setToolTip("Inquadra con la fotocamera del telefono per aprire l'interfaccia web")
+        self.web_qr.setToolTip(tr("Inquadra con la fotocamera del telefono per aprire l'interfaccia web"))
         qrow.addWidget(self.web_qr)
         self.web_url = QLabel()
         self.web_url.setWordWrap(True)
@@ -215,14 +213,14 @@ class SettingsDialog(QDialog):
         self._update_qr()
         pages[3].addWidget(gw)
 
-        gm = QGroupBox("Comandi MIDI")
+        gm = QGroupBox(tr("Comandi MIDI"))
         gl = QGridLayout(gm)
         from PySide6.QtWidgets import QListWidget, QListWidgetItem
         from .remote import port_key, port_label, port_short
         self.midi_ports = QListWidget()
         self.midi_ports.setMinimumHeight(7 * self.fontMetrics().height() + 12)
         self.midi_ports.setMinimumWidth(220)
-        self.midi_ports.setToolTip("Spunta tutte le schede MIDI da usare: vengono aperte insieme")
+        self.midi_ports.setToolTip(tr("Spunta tutte le schede MIDI da usare: vengono aperte insieme"))
         cur = list(self.s.get("midi_in_ports") or ([self.s["midi_in_port"]] if self.s.get("midi_in_port") else []))
         avail = MidiInput.list_ports()
         seen = set()
@@ -237,19 +235,19 @@ class SettingsDialog(QDialog):
             seen.add(port_key(n))
         for c in cur:
             if port_key(c) not in seen:
-                it = QListWidgetItem(f"{port_short(c)}  (non collegata)")
+                it = QListWidgetItem(tr("{0}  (non collegata)", port_short(c)))
                 it.setData(Qt.UserRole, port_label(c))
                 it.setToolTip(port_label(c))
                 it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
                 it.setCheckState(Qt.Checked)
                 self.midi_ports.addItem(it)
         if self.midi_ports.count() == 0:
-            it = QListWidgetItem("(nessuna scheda MIDI collegata)")
+            it = QListWidgetItem(tr("(nessuna scheda MIDI collegata)"))
             it.setFlags(Qt.NoItemFlags)
             self.midi_ports.addItem(it)
-        gs = QGroupBox("Schede MIDI in ingresso e filtri")
+        gs = QGroupBox(tr("Schede MIDI in ingresso e filtri"))
         gsl = QGridLayout(gs)
-        hint = QLabel("Spunta le schede da usare · seleziona una scheda per vederne i filtri")
+        hint = QLabel(tr("Spunta le schede da usare · seleziona una scheda per vederne i filtri"))
         hint.setStyleSheet("color:#888;")
         gsl.addWidget(hint, 0, 0, 1, 2)
         gsl.addWidget(self.midi_ports, 1, 0)
@@ -260,8 +258,8 @@ class SettingsDialog(QDialog):
         self.midi_ports.currentItemChanged.connect(lambda *_: self._show_filter())
         if self.midi_ports.count():
             self.midi_ports.setCurrentRow(0)
-        pn = QLabel("Ogni comando può indicare la scheda da cui deve arrivare, dopo «@» "
-                    "(es. «cc 1 7 @ nanoKONTROL2»); «Impara» la aggiunge da sé. Senza «@» vale da tutte.")
+        pn = QLabel(tr("Ogni comando può indicare la scheda da cui deve arrivare, dopo «@» "
+                    "(es. «cc 1 7 @ nanoKONTROL2»); «Impara» la aggiunge da sé. Senza «@» vale da tutte."))
         pn.setWordWrap(True)
         pn.setStyleSheet("color:#888;")
         gl.addWidget(pn, 99, 0, 1, 3)
@@ -270,18 +268,18 @@ class SettingsDialog(QDialog):
         for r, (key, label) in enumerate(MIDI_ACTIONS, start=1):
             gl.addWidget(QLabel(label), r, 0)
             le = QLineEdit(mm.get(key, ""))
-            le.setPlaceholderText("es. note 1 60 · cc 1 64 · pc 1 0 (canale 0 = tutti)")
+            le.setPlaceholderText(tr("es. note 1 60 · cc 1 64 · pc 1 0 (canale 0 = tutti)"))
             gl.addWidget(le, r, 1)
-            b = QPushButton("Impara")
+            b = QPushButton(tr("Impara"))
             b.clicked.connect(lambda _=False, le=le: self._learn(le, "trigger"))
             gl.addWidget(b, r, 2)
             self.map_edits[key] = le
-        note = QLabel("Ogni cue può avere anche un proprio trigger MIDI (scheda «Base»).")
+        note = QLabel(tr("Ogni cue può avere anche un proprio trigger MIDI (scheda «Base»)."))
         note.setStyleSheet("color:#888;")
         gl.addWidget(note, len(MIDI_ACTIONS) + 1, 0, 1, 3)
         pages[2].addWidget(gm)
 
-        go_ = QGroupBox("MIDI in uscita")
+        go_ = QGroupBox(tr("MIDI in uscita"))
         gol = QFormLayout(go_)
         self.midi_out = QComboBox()
         self.midi_out.setEditable(True)
@@ -295,52 +293,52 @@ class SettingsDialog(QDialog):
             self.midi_out.addItem(cur_out, cur_out)
             k = self.midi_out.count() - 1
         self.midi_out.setCurrentIndex(max(0, k))
-        gol.addRow("Uscita predefinita delle cue «MIDI out»", self.midi_out)
+        gol.addRow(tr("Uscita predefinita delle cue «MIDI out»"), self.midi_out)
         pages[2].addWidget(go_)
 
-        gc = QGroupBox("MIDI in ingresso · controlli continui (fader, potenziometri)")
+        gc = QGroupBox(tr("MIDI in ingresso · controlli continui (fader, potenziometri)"))
         gcl = QGridLayout(gc)
         self.ctl_edits = {}
         mc = self.s.get("midi_controls", {})
         for r, (key, label) in enumerate(MIDI_CONTROLS):
             gcl.addWidget(QLabel(label), r, 0)
             le = QLineEdit(mc.get(key, ""))
-            le.setPlaceholderText("es. cc 1 7 · pb 1 (pitch bend) · pc 1 * (canale 0 = tutti)")
+            le.setPlaceholderText(tr("es. cc 1 7 · pb 1 (pitch bend) · pc 1 * (canale 0 = tutti)"))
             gcl.addWidget(le, r, 1)
-            b = QPushButton("Impara")
+            b = QPushButton(tr("Impara"))
             b.clicked.connect(lambda _=False, le=le: self._learn(le, "control"))
             gcl.addWidget(b, r, 2)
             self.ctl_edits[key] = le
-        cn = QLabel("Volume e trasparenza agiscono sulla cue selezionata nella lista: dal vivo se è in "
+        cn = QLabel(tr("Volume e trasparenza agiscono sulla cue selezionata nella lista: dal vivo se è in "
                     "riproduzione, altrimenti sul valore programmato. Il crossfader porta dalla cue corrente "
-                    "a quella in attesa; arrivato in fondo il lato di partenza si inverte.")
+                    "a quella in attesa; arrivato in fondo il lato di partenza si inverte."))
         cn.setWordWrap(True)
         cn.setStyleSheet("color:#888;")
         gcl.addWidget(cn, len(MIDI_CONTROLS), 0, 1, 3)
         pages[2].addWidget(gc)
 
-        gi = QGroupBox("Istanze secondarie (master / slave / ridondanza)")
+        gi = QGroupBox(tr("Istanze secondarie (master / slave / ridondanza)"))
         fi = QFormLayout(gi)
-        self.cl_on = QCheckBox("Abilita istanze secondarie (questa istanza fa da master)")
+        self.cl_on = QCheckBox(tr("Abilita istanze secondarie (questa istanza fa da master)"))
         self.cl_on.setChecked(bool(self.s.get("cluster_enabled")))
         fi.addRow(self.cl_on)
         self.cl_port = QSpinBox()
         self.cl_port.setRange(1, 65534)
         self.cl_port.setValue(int(self.s.get("cluster_port") or 53900))
-        fi.addRow("Porta TCP", self.cl_port)
+        fi.addRow(tr("Porta TCP"), self.cl_port)
         import socket as _s
         self.cl_name = QLineEdit(self.s.get("cluster_name") or "")
         self.cl_name.setPlaceholderText(_s.gethostname())
-        fi.addRow("Nome di questa istanza", self.cl_name)
-        self.cl_edit = QCheckBox("Le istanze secondarie possono aggiornare il progetto")
-        self.cl_edit.setToolTip("Le modifiche fatte su uno slave (cue, liste, file nuovi) arrivano al master e da lì "
-                                "a tutte le altre secondarie. Senza: l'editor delle secondarie è bloccato.")
+        fi.addRow(tr("Nome di questa istanza"), self.cl_name)
+        self.cl_edit = QCheckBox(tr("Le istanze secondarie possono aggiornare il progetto"))
+        self.cl_edit.setToolTip(tr("Le modifiche fatte su uno slave (cue, liste, file nuovi) arrivano al master e da lì "
+                                "a tutte le altre secondarie. Senza: l'editor delle secondarie è bloccato."))
         self.cl_edit.setChecked(bool(self.s.get("cluster_slave_edit")))
         fi.addRow(self.cl_edit)
-        ni = QLabel("Con l'opzione attiva la porta TCP accetta istanze remote (la porta successiva, UDP, serve alla "
+        ni = QLabel(tr("Con l'opzione attiva la porta TCP accetta istanze remote (la porta successiva, UDP, serve alla "
                     "ricerca). Ogni richiesta va confermata qui. Sull'altro computer: Impostazioni › Diventa "
                     "slave… Il master invia un heartbeat ogni 100 ms, lo show, i file e ogni modifica; in "
-                    "ridondanza anche ogni comando (GO, stop, playhead, crossfade, livelli…).")
+                    "ridondanza anche ogni comando (GO, stop, playhead, crossfade, livelli…)."))
         ni.setWordWrap(True)
         ni.setStyleSheet("color:#888;")
         fi.addRow(ni)
@@ -396,12 +394,12 @@ class SettingsDialog(QDialog):
         cur = self.pv_dev.currentData() if self.pv_dev.count() else self._pv_cur["device"]
         self.pv_dev.blockSignals(True)
         self.pv_dev.clear()
-        self.pv_dev.addItem("Scheda predefinita del progetto", "")
+        self.pv_dev.addItem(tr("Scheda predefinita del progetto"), "")
         for dv in list_devices():
-            self.pv_dev.addItem(f"{dv['name']}  [{dv['hostapi']}] — {dv['max_ch']} canali", dv["id"])
+            self.pv_dev.addItem(tr("{0}  [{1}] — {2} canali", dv['name'], dv['hostapi'], dv['max_ch']), dv["id"])
         i = self.pv_dev.findData(cur or "")
         if i < 0:
-            self.pv_dev.addItem(f"{cur.split('|', 1)[-1]} (non collegata)", cur)
+            self.pv_dev.addItem(tr("{0} (non collegata)", cur.split('|', 1)[-1]), cur)
             i = self.pv_dev.count() - 1
         self.pv_dev.setCurrentIndex(i)
         self.pv_dev.blockSignals(False)
@@ -420,7 +418,7 @@ class SettingsDialog(QDialog):
         if isinstance(cur, int):      # show di versioni precedenti: indice numerico
             cur = None
         self.dev.clear()
-        self.dev.addItem(f"Predefinita di sistema (quella scelta nelle impostazioni audio di {OS_NAME})", None)
+        self.dev.addItem(tr("Predefinita di sistema (quella scelta nelle impostazioni audio di {0})", OS_NAME), None)
         devs = list_devices()
         for dv in devs:
             self.dev.addItem(device_label(dv), dv["id"])
@@ -428,19 +426,19 @@ class SettingsDialog(QDialog):
         i = self.dev.findData(cur)
         cur_name = cur.split('|', 1)[-1] if cur else ""
         if i < 0 and cur:
-            why = next((f"occupata da {b['owner']}" for b in busy if b["name"] == cur_name), "non collegata")
+            why = next((tr("occupata da {0}", b['owner']) for b in busy if b["name"] == cur_name), tr("non collegata"))
             self.dev.addItem(f"{cur_name} — {why}", cur)
             i = self.dev.count() - 1
         # schede che un altro programma (di solito PipeWire/PulseAudio) tiene aperte: visibili ma non sceglibili
         for b in busy:
             if b["name"] == cur_name:
                 continue
-            self.dev.addItem(f"{b['name']} — occupata da {b['owner']}", None)
+            self.dev.addItem(tr("{0} — occupata da {1}", b['name'], b['owner']), None)
             it = self.dev.model().item(self.dev.count() - 1)
             if it is not None:
                 it.setEnabled(False)
-                it.setToolTip("Un altro programma usa l'uscita di questa scheda. Chiudilo, oppure in PipeWire/"
-                              "PulseAudio (pavucontrol › Configurazione) metti il profilo della scheda su «Spento»")
+                it.setToolTip(tr("Un altro programma usa l'uscita di questa scheda. Chiudilo, oppure in PipeWire/"
+                              "PulseAudio (pavucontrol › Configurazione) metti il profilo della scheda su «Spento»"))
         self.dev.setCurrentIndex(max(0, i))
         # canali per scheda (0 = automatico)
         while self.ch_grid.count():
@@ -449,31 +447,31 @@ class SettingsDialog(QDialog):
                 it.widget().deleteLater()
         ov = self.s.setdefault("device_channels", {})
         self.ch_spins = {}
-        rows = [(SYSTEM, "Predefinita di sistema", 2, 2)] + \
+        rows = [(SYSTEM, tr("Predefinita di sistema"), 2, 2)] + \
                [(dv["id"], device_label(dv), 2 if dv["virtual"] else min(dv["max_ch"], 64), dv["max_ch"])
                 for dv in devs]
         for r, (key, label, auto, mx) in enumerate(rows):
             lab = QLabel(label)
-            lab.setToolTip(f"La scheda dichiara fino a {mx} canali")
+            lab.setToolTip(tr("La scheda dichiara fino a {0} canali", mx))
             sp = QSpinBox()
             sp.setRange(0, 64)
-            sp.setSpecialValueText(f"auto ({auto})")
+            sp.setSpecialValueText(tr("auto ({0})", auto))
             sp.setValue(int(ov.get(key) or 0))
             self.ch_grid.addWidget(lab, r, 0)
             self.ch_grid.addWidget(sp, r, 1)
             self.ch_spins[key] = sp
 
     # ---- filtri MIDI per scheda
-    FILTER_TYPES = (("note", "Note"), ("cc", "Control change (CC)"), ("pc", "Program change"),
-                    ("pb", "Pitch bend"))
+    FILTER_TYPES = (("note", tr("Note")), ("cc", tr("Control change (CC)")), ("pc", tr("Program change")),
+                    ("pb", tr("Pitch bend")))
 
     def _midi_filter_box(self):
         self.filters = copy.deepcopy(self.s.get("midi_filters") or {})
         self._filter_port = None
-        box = QGroupBox("Filtri della scheda selezionata")
+        box = QGroupBox(tr("Filtri della scheda selezionata"))
         self.filter_box = box
         g = QGridLayout(box)
-        g.addWidget(QLabel("Accetta"), 0, 0)
+        g.addWidget(QLabel(tr("Accetta")), 0, 0)
         self.f_types = {}
         row = QGridLayout()
         for i, (k, lab) in enumerate(self.FILTER_TYPES):
@@ -482,23 +480,23 @@ class SettingsDialog(QDialog):
             self.f_types[k] = cb
             row.addWidget(cb, i // 2, i % 2)
         g.addLayout(row, 0, 1)
-        g.addWidget(QLabel("Canali"), 1, 0)
+        g.addWidget(QLabel(tr("Canali")), 1, 0)
         self.f_channels = QLineEdit()
-        self.f_channels.setPlaceholderText("tutti  ·  oppure es. 1, 10, 13-16")
+        self.f_channels.setPlaceholderText(tr("tutti  ·  oppure es. 1, 10, 13-16"))
         self.f_channels.editingFinished.connect(self._store_filter)
         g.addWidget(self.f_channels, 1, 1)
-        g.addWidget(QLabel("Ignora CC"), 2, 0)
+        g.addWidget(QLabel(tr("Ignora CC")), 2, 0)
         self.f_cc = QLineEdit()
-        self.f_cc.setPlaceholderText("nessuno  ·  es. 1, 64, 120-127")
-        self.f_cc.setToolTip("Numeri di controller da scartare (es. 1 = modulazione, 64 = sustain)")
+        self.f_cc.setPlaceholderText(tr("nessuno  ·  es. 1, 64, 120-127"))
+        self.f_cc.setToolTip(tr("Numeri di controller da scartare (es. 1 = modulazione, 64 = sustain)"))
         self.f_cc.editingFinished.connect(self._store_filter)
         g.addWidget(self.f_cc, 2, 1)
-        g.addWidget(QLabel("Ignora note"), 3, 0)
+        g.addWidget(QLabel(tr("Ignora note")), 3, 0)
         self.f_notes = QLineEdit()
-        self.f_notes.setPlaceholderText("nessuna  ·  es. 0-35, 96-127")
+        self.f_notes.setPlaceholderText(tr("nessuna  ·  es. 0-35, 96-127"))
         self.f_notes.editingFinished.connect(self._store_filter)
         g.addWidget(self.f_notes, 3, 1)
-        self.f_nolearn = QCheckBox("Escludi da «Impara» (i comandi continuano a funzionare)")
+        self.f_nolearn = QCheckBox(tr("Escludi da «Impara» (i comandi continuano a funzionare)"))
         self.f_nolearn.toggled.connect(self._store_filter)
         g.addWidget(self.f_nolearn, 4, 0, 1, 2)
         self.f_info = QLabel()
@@ -515,7 +513,7 @@ class SettingsDialog(QDialog):
         self._filter_port = None
         if not port:
             self.filter_box.setEnabled(False)
-            self.filter_box.setTitle("Filtri della scheda selezionata")
+            self.filter_box.setTitle(tr("Filtri della scheda selezionata"))
             return
         f = dict(default_filter())
         for k, v in self.filters.items():
@@ -523,7 +521,7 @@ class SettingsDialog(QDialog):
                 f.update(v)
         self.filter_box.setEnabled(True)
         from .remote import port_short
-        self.filter_box.setTitle(f"Filtri di «{port_short(port)}»")
+        self.filter_box.setTitle(tr("Filtri di «{0}»", port_short(port)))
         for k, cb in self.f_types.items():
             cb.blockSignals(True)
             cb.setChecked(k in f["types"])
@@ -553,14 +551,14 @@ class SettingsDialog(QDialog):
 
     def _filter_info(self):
         from .remote import parse_ranges
-        bad = [n for n, w in (("Canali", self.f_channels), ("Ignora CC", self.f_cc), ("Ignora note", self.f_notes))
+        bad = [n for n, w in ((tr("Canali"), self.f_channels), (tr("Ignora CC"), self.f_cc), (tr("Ignora note"), self.f_notes))
                if w.text().strip() and parse_ranges(w.text()) is None]
         if bad:
-            self.f_info.setText("⚠ Non valido: " + ", ".join(bad) + " (usa numeri, virgole e intervalli «a-b»)")
+            self.f_info.setText(tr("⚠ Non valido: ") + ", ".join(bad) + tr(" (usa numeri, virgole e intervalli «a-b»)"))
             self.f_info.setStyleSheet("color:#e0b040;")
         else:
-            self.f_info.setText("I messaggi scartati non arrivano né ai comandi né a «Impara». "
-                                "Le schede senza filtri accettano tutto.")
+            self.f_info.setText(tr("I messaggi scartati non arrivano né ai comandi né a «Impara». "
+                                "Le schede senza filtri accettano tutto."))
             self.f_info.setStyleSheet("color:#888;")
 
     def _learn(self, edit, mode):
@@ -594,13 +592,13 @@ class SettingsDialog(QDialog):
             pm = QPixmap.fromImage(qr_image(url, scale=6, border=3))
             self.web_qr.setPixmap(pm.scaled(176, 176, Qt.KeepAspectRatio, Qt.FastTransformation))
         except ValueError:
-            self.web_qr.setText("QR non disponibile")
+            self.web_qr.setText(tr("QR non disponibile"))
         on = self.web_on.isChecked()
         self.web_qr.setEnabled(on)
-        txt = f"<b>{self.web_address(False)}</b>"
+        txt = tr("<b>{0}</b>", self.web_address(False))
         if self.web_pin.text().strip():
-            txt += ("<br>Il QR contiene anche il PIN: chi lo inquadra entra direttamente."
-                    if self.web_qr_pin.isChecked() else "<br>Il browser chiederà il PIN.")
+            txt += (tr("<br>Il QR contiene anche il PIN: chi lo inquadra entra direttamente.")
+                    if self.web_qr_pin.isChecked() else tr("<br>Il browser chiederà il PIN."))
         if not on:
             txt += "<br><span style='color:#c90'>Abilita l'interfaccia web e conferma con OK.</span>"
         else:
@@ -651,15 +649,15 @@ class GeometryDialog(QDialog):
 
     def __init__(self, comp, output, on_change, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Geometria uscita – 4 angoli")
+        self.setWindowTitle(tr("Geometria uscita – 4 angoli"))
         self.comp = comp
         self.output = output
         self.on_change = on_change
         self.saved = copy.deepcopy(comp.corners)
         v = QVBoxLayout(self)
-        info = QLabel("Trascina gli angoli (qui o direttamente sulla finestra di uscita) finché l'immagine "
+        info = QLabel(tr("Trascina gli angoli (qui o direttamente sulla finestra di uscita) finché l'immagine "
                       "combacia con lo schermo/la superficie. Tasti 1-4 selezionano un angolo, frecce = "
-                      "spostamento fine (Maiusc = ×10).")
+                      "spostamento fine (Maiusc = ×10)."))
         info.setWordWrap(True)
         v.addWidget(info)
         self.editor = MappingEditor(comp, self._aspect)
@@ -667,7 +665,7 @@ class GeometryDialog(QDialog):
         v.addWidget(self.editor, 1)
         g = QGridLayout()
         self.spins = []
-        names = ["1 · alto sx", "2 · alto dx", "3 · basso dx", "4 · basso sx"]
+        names = [tr("1 · alto sx"), tr("2 · alto dx"), tr("3 · basso dx"), tr("4 · basso sx")]
         for i, n in enumerate(names):
             g.addWidget(QLabel(n), i // 2, (i % 2) * 3)
             sx, sy = QDoubleSpinBox(), QDoubleSpinBox()
@@ -682,12 +680,12 @@ class GeometryDialog(QDialog):
             self.spins.append((sx, sy))
         v.addLayout(g)
         row = QHBoxLayout()
-        self.grid = QCheckBox("Griglia di test sull'uscita")
+        self.grid = QCheckBox(tr("Griglia di test sull'uscita"))
         self.grid.setChecked(comp.grid)
         self.grid.toggled.connect(self._grid)
-        self.direct = QCheckBox("Modifica sulla finestra di uscita")
+        self.direct = QCheckBox(tr("Modifica sulla finestra di uscita"))
         self.direct.toggled.connect(lambda on: self.output.set_edit_mode(on))
-        reset = QPushButton("Reimposta")
+        reset = QPushButton(tr("Reimposta"))
         reset.clicked.connect(self._reset)
         row.addWidget(self.grid)
         row.addWidget(self.direct)
@@ -765,14 +763,14 @@ class MidiLearnDialog(QDialog):
     def __init__(self, parent=None, info="", mode="trigger"):
         super().__init__(parent)
         self.mode = mode
-        self.setWindowTitle("Impara MIDI" if mode == "trigger" else "Impara controllo MIDI")
+        self.setWindowTitle(tr("Impara MIDI") if mode == "trigger" else tr("Impara controllo MIDI"))
         v = QVBoxLayout(self)
         if mode == "control":
-            self.lab = QLabel("Muovi il fader / potenziometro sul dispositivo MIDI…\n"
-                              "(oppure scrivi: «cc 1 7», «pb 1» per il pitch bend, «pc 1 *» per il program change)")
+            self.lab = QLabel(tr("Muovi il fader / potenziometro sul dispositivo MIDI…\n"
+                              "(oppure scrivi: «cc 1 7», «pb 1» per il pitch bend, «pc 1 *» per il program change)"))
         else:
-            self.lab = QLabel("Premi un tasto / muovi un controllo sul dispositivo MIDI…\n"
-                              "(oppure scrivi la sequenza: «note 1 60», «cc 1 20», «pc 1 3»)")
+            self.lab = QLabel(tr("Premi un tasto / muovi un controllo sul dispositivo MIDI…\n"
+                              "(oppure scrivi la sequenza: «note 1 60», «cc 1 20», «pc 1 3»)"))
         v.addWidget(self.lab)
         if info:
             il = QLabel(info)
@@ -781,7 +779,7 @@ class MidiLearnDialog(QDialog):
             v.addWidget(il)
         self.edit = QLineEdit()
         v.addWidget(self.edit)
-        self.only_port = QCheckBox("Solo dalla scheda da cui arriva (aggiunge «@ scheda»)")
+        self.only_port = QCheckBox(tr("Solo dalla scheda da cui arriva (aggiunge «@ scheda»)"))
         self.only_port.setChecked(True)
         v.addWidget(self.only_port)
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
@@ -803,7 +801,7 @@ class MidiLearnDialog(QDialog):
         return normalize_spec(self.edit.text())
 
 
-OSC_HELP = """
+OSC_HELP = tr("""
 <h3>Comandi OSC ricevuti (UDP, porta configurabile – predefinita 53000)</h3>
 <table cellpadding=3>
 <tr><td><b>/go</b></td><td>GO sulla cue al playhead</td></tr>
@@ -834,13 +832,13 @@ con valore 0 vengono ignorati.</p>
 <h3>Tastiera</h3>
 <p><b>Spazio</b> GO · <b>Esc</b> Stop tutto · <b>F7</b> Pausa tutto · <b>F8</b> Riprendi ·
 <b>Ctrl+S</b> Salva · <b>Canc</b> elimina cue · <b>Ctrl+D</b> duplica · <b>Ctrl+T</b> prova la cue selezionata</p>
-"""
+""")
 
 
 class HelpDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Guida comandi")
+        self.setWindowTitle(tr("Guida comandi"))
         v = QVBoxLayout(self)
         t = QTextBrowser()
         t.setHtml(OSC_HELP)

@@ -1,4 +1,5 @@
 """Uscita video: composizione dei layer e correzione geometrica a 4 angoli (corner pin)."""
+from .i18n import tr
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF, QTransform, QBrush
 from PySide6.QtWidgets import QWidget
@@ -209,7 +210,7 @@ class _OutputMixin:
         self.comp = comp
         self.edit_mode = False
         self.drag = -1
-        self.setWindowTitle("CueStage – Uscita video")
+        self.setWindowTitle(tr("CueStage – Uscita video"))
         self.setMouseTracking(True)
         self.resize(960, 540)
         pal = self.palette()

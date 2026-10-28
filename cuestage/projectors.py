@@ -3,6 +3,7 @@
 Un plugin è un file .py (nella cartella «plugins» di CueStage o in ~/.local/share/cuestage/plugins/)
 che definisce una o più sottoclassi di ProjectorDriver. Vedi plugins/LEGGIMI_PLUGIN.md.
 """
+from .i18n import tr
 import hashlib
 import importlib.util
 import os
@@ -19,25 +20,25 @@ from .system import data_dir
 # ------------------------------------------------------------------ azioni comuni
 
 ACTIONS = {
-    "power_on": "Accendi",
-    "power_off": "Spegni (standby)",
-    "shutter_close": "Otturatore: chiudi",
-    "shutter_open": "Otturatore: apri",
-    "input": "Seleziona ingresso",
-    "freeze_on": "Freeze: attiva",
-    "freeze_off": "Freeze: disattiva",
-    "zoom": "Zoom",
-    "focus": "Fuoco",
-    "shift_h": "Shift orizzontale",
-    "shift_v": "Shift verticale",
-    "lens_memory": "Richiama lens memory",
-    "corners": "Correzione 4 angoli: imposta",
-    "corners_off": "Correzione 4 angoli: disattiva",
-    "raw": "Comando libero",
+    "power_on": tr("Accendi"),
+    "power_off": tr("Spegni (standby)"),
+    "shutter_close": tr("Otturatore: chiudi"),
+    "shutter_open": tr("Otturatore: apri"),
+    "input": tr("Seleziona ingresso"),
+    "freeze_on": tr("Freeze: attiva"),
+    "freeze_off": tr("Freeze: disattiva"),
+    "zoom": tr("Zoom"),
+    "focus": tr("Fuoco"),
+    "shift_h": tr("Shift orizzontale"),
+    "shift_v": tr("Shift verticale"),
+    "lens_memory": tr("Richiama lens memory"),
+    "corners": tr("Correzione 4 angoli: imposta"),
+    "corners_off": tr("Correzione 4 angoli: disattiva"),
+    "raw": tr("Comando libero"),
 }
 LENS_ACTIONS = ("zoom", "focus", "shift_h", "shift_v")
 CORNER_KEYS = ("tl", "tr", "bl", "br")
-CORNER_LABELS = {"tl": "Alto sinistra", "tr": "Alto destra", "bl": "Basso sinistra", "br": "Basso destra"}
+CORNER_LABELS = {"tl": tr("Alto sinistra"), "tr": tr("Alto destra"), "bl": tr("Basso sinistra"), "br": tr("Basso destra")}
 
 
 def parse_corners(text):
@@ -55,7 +56,7 @@ def format_corners(c):
     return " ".join(f"{int(c[k][0])} {int(c[k][1])}" for k in CORNER_KEYS)
 
 
-SPEEDS = {"slow": "Lento (passo fine)", "normal": "Normale", "fast": "Veloce"}
+SPEEDS = {"slow": tr("Lento (passo fine)"), "normal": tr("Normale"), "fast": tr("Veloce")}
 
 USER_PLUGIN_DIR = data_dir("plugins")
 BUILTIN_PLUGIN_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "plugins")
@@ -108,11 +109,11 @@ class ProjectorDriver:
     # ---- utilità di rete per i plugin
     def connect(self, port=None):
         if not self.host:
-            raise ProjectorError("indirizzo IP non impostato")
+            raise ProjectorError(tr("indirizzo IP non impostato"))
         try:
             s = socket.create_connection((self.host, port or self.port), timeout=self.TIMEOUT)
         except OSError as e:
-            raise ProjectorError(f"connessione a {self.host}:{port or self.port} non riuscita ({e})")
+            raise ProjectorError(tr("connessione a {0}:{1} non riuscita ({2})", self.host, port or self.port, e))
         s.settimeout(self.TIMEOUT)
         return s
 
@@ -128,7 +129,7 @@ class ProjectorDriver:
             except socket.timeout:
                 if buf:
                     break
-                raise ProjectorError("nessuna risposta dal proiettore")
+                raise ProjectorError(tr("nessuna risposta dal proiettore"))
             if not ch:
                 break
             if ch == term:
@@ -140,26 +141,26 @@ class ProjectorDriver:
 
     # ---- azioni comuni (i plugin implementano quelle in CAPS)
     def power(self, on):
-        raise ProjectorError("non supportato")
+        raise ProjectorError(tr("non supportato"))
 
     def shutter(self, closed):
-        raise ProjectorError("non supportato")
+        raise ProjectorError(tr("non supportato"))
 
     def select_input(self, code):
-        raise ProjectorError("non supportato")
+        raise ProjectorError(tr("non supportato"))
 
     def freeze(self, on):
-        raise ProjectorError("non supportato")
+        raise ProjectorError(tr("non supportato"))
 
     def lens(self, axis, direction, steps=1, speed="normal"):
         """axis: zoom|focus|shift_h|shift_v · direction: +1/-1 · steps: ripetizioni."""
-        raise ProjectorError("non supportato")
+        raise ProjectorError(tr("non supportato"))
 
     def lens_memory(self, n):
-        raise ProjectorError("non supportato")
+        raise ProjectorError(tr("non supportato"))
 
     def raw(self, text):
-        raise ProjectorError("non supportato")
+        raise ProjectorError(tr("non supportato"))
 
     # ---- correzione geometrica a 4 angoli (facoltativa)
     def corners_enable(self, on):
@@ -167,11 +168,11 @@ class ProjectorDriver:
         return None
 
     def corner_set(self, corner, axis, value):
-        raise ProjectorError("correzione a 4 angoli non supportata")
+        raise ProjectorError(tr("correzione a 4 angoli non supportata"))
 
     def corners_get(self):
         """{"tl": [x, y], …} letti dal proiettore."""
-        raise ProjectorError("lettura della correzione angoli non supportata")
+        raise ProjectorError(tr("lettura della correzione angoli non supportata"))
 
     def corners_apply(self, corners):
         self.corners_enable(True)
@@ -182,18 +183,18 @@ class ProjectorDriver:
         return format_corners(corners)
 
     def extra(self, action, param):
-        raise ProjectorError("non supportato")
+        raise ProjectorError(tr("non supportato"))
 
     def status(self):
         """Dizionario con lo stato (almeno «power» se possibile). Usato da «Prova connessione»."""
-        raise ProjectorError("non supportato")
+        raise ProjectorError(tr("non supportato"))
 
     # ---- esecuzione di una cue
     def run(self, action, value="", direction=1, steps=1, speed="normal"):
         if action in ("corner_one", "corner_live") and "corners" in self.CAPS:
             pass
         elif action not in self.CAPS and action not in self.EXTRA_ACTIONS:
-            raise ProjectorError(f"«{ACTIONS.get(action, action)}» non è disponibile su {self.NAME}")
+            raise ProjectorError(tr("«{0}» non è disponibile su {1}", ACTIONS.get(action, action), self.NAME))
         if action == "power_on":
             return self.power(True)
         if action == "power_off":
@@ -217,7 +218,7 @@ class ProjectorDriver:
         if action == "corners":
             c = parse_corners(value)
             if c is None:
-                raise ProjectorError("valori della correzione angoli non validi (servono 8 numeri)")
+                raise ProjectorError(tr("valori della correzione angoli non validi (servono 8 numeri)"))
             return self.corners_apply(c)
         if action == "corners_off":
             return self.corners_enable(False)
@@ -233,7 +234,7 @@ class ProjectorDriver:
             return res
         if action in self.EXTRA_ACTIONS:
             return self.extra(action, value)
-        raise ProjectorError(f"azione «{action}» non supportata da {self.NAME}")
+        raise ProjectorError(tr("azione «{0}» non supportata da {1}", action, self.NAME))
 
     @classmethod
     def actions(cls):
@@ -248,39 +249,39 @@ class PJLinkDriver(ProjectorDriver):
     """PJLink classe 1: standard comune a quasi tutti i proiettori (porta 4352).
     Accensione, ingresso, otturatore (AV mute) e stato. Non prevede comandi per l'ottica."""
     ID = "pjlink"
-    NAME = "PJLink (qualsiasi marca)"
+    NAME = tr("PJLink (qualsiasi marca)")
     DEFAULT_PORT = 4352
     FIELDS = ("host", "port", "password")
     CAPS = {"power_on", "power_off", "shutter_close", "shutter_open", "input", "raw"}
-    INPUTS = [("11", "RGB 1"), ("12", "RGB 2"), ("21", "Video 1"), ("31", "Digitale 1 (es. HDMI 1)"),
-              ("32", "Digitale 2 (es. HDMI 2)"), ("33", "Digitale 3"), ("41", "Memoria (USB)"),
-              ("51", "Rete")]
-    NOTES = ("Codici ingresso PJLink: 1x RGB, 2x video, 3x digitale, 4x memoria, 5x rete. Gli ingressi "
+    INPUTS = [("11", tr("RGB 1")), ("12", tr("RGB 2")), ("21", tr("Video 1")), ("31", tr("Digitale 1 (es. HDMI 1)")),
+              ("32", tr("Digitale 2 (es. HDMI 2)")), ("33", tr("Digitale 3")), ("41", tr("Memoria (USB)")),
+              ("51", tr("Rete"))]
+    NOTES = (tr("Codici ingresso PJLink: 1x RGB, 2x video, 3x digitale, 4x memoria, 5x rete. Gli ingressi "
              "disponibili si leggono con «Prova connessione». Otturatore = AV mute (AVMT 31/30). "
-             "Zoom, fuoco e shift non fanno parte di PJLink.")
-    ERRORS = {"ERR1": "comando non riconosciuto", "ERR2": "parametro non valido",
-              "ERR3": "non disponibile in questo momento", "ERR4": "guasto del proiettore"}
+             "Zoom, fuoco e shift non fanno parte di PJLink."))
+    ERRORS = {"ERR1": tr("comando non riconosciuto"), "ERR2": tr("parametro non valido"),
+              "ERR3": tr("non disponibile in questo momento"), "ERR4": tr("guasto del proiettore")}
 
     def _cmd(self, body):
         s = self.connect()
         try:
             greet = self.read_line(s)
             if not greet.startswith("PJLINK"):
-                raise ProjectorError(f"risposta inattesa: {greet!r}")
+                raise ProjectorError(tr("risposta inattesa: {0!r}", greet))
             prefix = ""
             parts = greet.split()
             if len(parts) >= 3 and parts[1] == "1":
                 if not self.password:
-                    raise ProjectorError("il proiettore richiede la password PJLink")
+                    raise ProjectorError(tr("il proiettore richiede la password PJLink"))
                 prefix = hashlib.md5((parts[2] + self.password).encode()).hexdigest()
             elif len(parts) >= 2 and parts[1] == "ERRA":
-                raise ProjectorError("autenticazione PJLink rifiutata")
+                raise ProjectorError(tr("autenticazione PJLink rifiutata"))
             s.sendall((prefix + "%1" + body + "\r").encode("ascii"))
             resp = self.read_line(s)
         finally:
             s.close()
         if "ERRA" in resp:
-            raise ProjectorError("password PJLink errata")
+            raise ProjectorError(tr("password PJLink errata"))
         val = resp.split("=", 1)[1] if "=" in resp else resp
         if val in self.ERRORS:
             raise ProjectorError(f"{body.split()[0]}: {self.ERRORS[val]}")
@@ -302,7 +303,7 @@ class PJLinkDriver(ProjectorDriver):
         return self._cmd(text)
 
     def status(self):
-        p = {"0": "spento", "1": "acceso", "2": "in raffreddamento", "3": "in riscaldamento"}
+        p = {"0": tr("spento"), "1": tr("acceso"), "2": tr("in raffreddamento"), "3": tr("in riscaldamento")}
         st = {"power": p.get(self._cmd("POWR ?"), "?")}
         for key, cmd in (("nome", "NAME ?"), ("ingresso", "INPT ?"), ("av_mute", "AVMT ?"),
                          ("ingressi_disponibili", "INST ?")):
@@ -349,16 +350,15 @@ class PluginRegistry:
             if isinstance(obj, type) and issubclass(obj, ProjectorDriver) and obj is not ProjectorDriver \
                     and obj.ID and obj.__module__ == name:
                 if obj.ID in self.drivers and self.sources.get(obj.ID) != path:
-                    self.errors.append(f"{os.path.basename(path)}: ID «{obj.ID}» già usato da "
-                                       f"{self.sources.get(obj.ID)} (il plugin utente lo sostituisce)")
+                    self.errors.append(tr("{0}: ID «{1}» già usato da {2} (il plugin utente lo sostituisce)", os.path.basename(path), obj.ID, self.sources.get(obj.ID)))
                 bad = set(obj.CAPS) - set(ACTIONS)
                 if bad:
-                    raise ProjectorError(f"azioni sconosciute in CAPS: {', '.join(sorted(bad))}")
+                    raise ProjectorError(tr("azioni sconosciute in CAPS: {0}", ', '.join(sorted(bad))))
                 self.drivers[obj.ID] = obj
                 self.sources[obj.ID] = path
                 found += 1
         if not found:
-            raise ProjectorError("nessuna classe ProjectorDriver con ID trovata")
+            raise ProjectorError(tr("nessuna classe ProjectorDriver con ID trovata"))
 
     def get(self, driver_id):
         return self.drivers.get(driver_id)
@@ -390,7 +390,7 @@ class ProjectorManager(QObject):
     def driver_for(self, conf):
         cls = self.registry.get(conf.get("driver"))
         if cls is None:
-            raise ProjectorError(f"driver «{conf.get('driver')}» non disponibile (plugin mancante?)")
+            raise ProjectorError(tr("driver «{0}» non disponibile (plugin mancante?)", conf.get('driver')))
         return cls(conf)
 
     def _pool(self, pid):
@@ -403,7 +403,7 @@ class ProjectorManager(QObject):
     def run(self, pid, action, value="", direction=1, steps=1, speed="normal", label=None):
         conf = self.find(pid)
         if conf is None:
-            self.finished.emit("?", label or action, False, "proiettore non configurato")
+            self.finished.emit("?", label or action, False, tr("proiettore non configurato"))
             return
         name = conf.get("name") or conf.get("host") or pid
         lab = label or ACTIONS.get(action) or action
@@ -412,20 +412,20 @@ class ProjectorManager(QObject):
             t0 = time.monotonic()
             try:
                 res = self.driver_for(conf).run(action, value, direction, steps, speed)
-                msg = f"ok ({time.monotonic() - t0:.1f} s)" + (f": {res}" if res not in (None, "", "OK") else "")
+                msg = tr("ok ({0:.1f} s)", time.monotonic() - t0) + (f": {res}" if res not in (None, "", "OK") else "")
                 self.finished.emit(name, lab, True, msg)
             except ProjectorError as e:
                 self.finished.emit(name, lab, False, str(e))
             except Exception as e:      # errore nel plugin: non deve fermare CueStage
                 traceback.print_exc()
-                self.finished.emit(name, lab, False, f"errore nel driver: {e}")
+                self.finished.emit(name, lab, False, tr("errore nel driver: {0}", e))
         return self._pool(pid).submit(job)
 
     def query_status(self, pid, callback):
         """Stato di un proiettore configurato, nella sua coda comandi; callback(ok, dict|testo) dal thread."""
         conf = self.find(pid)
         if conf is None:
-            callback(False, "proiettore non configurato")
+            callback(False, tr("proiettore non configurato"))
             return None
 
         def job():
@@ -439,7 +439,7 @@ class ProjectorManager(QObject):
         """Legge la correzione angoli (nella coda del proiettore); callback(ok, dict|testo) dal thread."""
         conf = self.find(pid)
         if conf is None:
-            callback(False, "proiettore non configurato")
+            callback(False, tr("proiettore non configurato"))
             return None
 
         def job():

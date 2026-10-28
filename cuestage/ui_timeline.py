@@ -1,4 +1,5 @@
 """Editor grafico: forma d'onda, punti di inizio/fine, loop e curva di volume."""
+from .i18n import tr
 import numpy as np
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QBrush, QAction
@@ -127,7 +128,7 @@ class TimelineEditor(QWidget):
             p.drawLine(QPointF(0, y), QPointF(W, y))
         p.setPen(QColor(110, 110, 125))
         for db in (6, 0, -12, -24, -40):
-            p.drawText(QPointF(3, self.db2y(db) - 2), f"{db:+d} dB" if db else "0 dB")
+            p.drawText(QPointF(3, self.db2y(db) - 2), f"{db:+d} dB" if db else tr("0 dB"))
         # forma d'onda
         if self.peaks is not None and len(self.peaks):
             mid = r.center().y()
@@ -148,7 +149,7 @@ class TimelineEditor(QWidget):
                 p.drawLine(QPointF(x, mid - hi * amp), QPointF(x, mid - lo * amp))
         elif self.duration <= 0:
             p.setPen(QColor(140, 140, 150))
-            p.drawText(r, Qt.AlignCenter, "Caricamento media…" if self.cue.file else "Nessun file")
+            p.drawText(r, Qt.AlignCenter, tr("Caricamento media…") if self.cue.file else tr("Nessun file"))
         # zone escluse
         if xs > 0:
             p.fillRect(QRectF(0, r.top(), xs, r.height()), shade)
@@ -209,9 +210,9 @@ class TimelineEditor(QWidget):
                 kind = pt.get("kind", "visual")
                 y = r.bottom() - (17 if kind == "visual" else 7)
                 diamond(p, x, y, 5, MCOL[kind], hollow=pt.get("preset") == "__base__")
-                tip = f"{KL.get(kind, kind)}: {kf_label(pt.get('preset', ''))} — cue {fmt_time(float(pt['t']))}"
+                tip = tr("{0}: {1} — cue {2}", KL.get(kind, kind), kf_label(pt.get('preset', '')), fmt_time(float(pt['t'])))
                 if rep:
-                    tip += f" (ripetizione {rep} del loop)"
+                    tip += tr(" (ripetizione {0} del loop)", rep)
                 self._kf_hits.append((x, y, tip))
         # cursore dei keyframe
         if self.cursor_t is not None:
@@ -371,15 +372,15 @@ class TimelineEditor(QWidget):
             a.triggered.connect(lambda: (fn(), self.changed.emit(), self.update()))
             m.addAction(a)
 
-        act(f"Imposta IN a {fmt_time(t)}", lambda: setattr(c, "start", t))
-        act(f"Imposta OUT a {fmt_time(t)}", lambda: setattr(c, "end", t))
+        act(tr("Imposta IN a {0}", fmt_time(t)), lambda: setattr(c, "start", t))
+        act(tr("Imposta OUT a {0}", fmt_time(t)), lambda: setattr(c, "end", t))
         m.addSeparator()
-        act("Inizio loop qui", lambda: (setattr(c, "loop", True), setattr(c, "loop_start", t)))
-        act("Fine loop qui", lambda: (setattr(c, "loop", True), setattr(c, "loop_end", t)))
+        act(tr("Inizio loop qui"), lambda: (setattr(c, "loop", True), setattr(c, "loop_start", t)))
+        act(tr("Fine loop qui"), lambda: (setattr(c, "loop", True), setattr(c, "loop_end", t)))
         m.addSeparator()
-        act("Aggiungi punto curva", lambda: self._add_point(pos))
-        act("Cancella curva di volume", lambda: c.curve.clear())
-        act("Reimposta IN/OUT", lambda: (setattr(c, "start", 0.0), setattr(c, "end", 0.0)))
+        act(tr("Aggiungi punto curva"), lambda: self._add_point(pos))
+        act(tr("Cancella curva di volume"), lambda: c.curve.clear())
+        act(tr("Reimposta IN/OUT"), lambda: (setattr(c, "start", 0.0), setattr(c, "end", 0.0)))
         m.addSeparator()
-        act("Mostra tutto", self.zoom_all)
+        act(tr("Mostra tutto"), self.zoom_all)
         m.exec(e.globalPosition().toPoint())

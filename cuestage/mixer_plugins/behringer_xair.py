@@ -12,6 +12,7 @@ il protocollo non è documentato ufficialmente):
 Numero di canali per modello (dalle specifiche; i numeri in più non rispondono, non fanno danni):
 XR18/MR18 16 canali + aux in, XR16 14, XR12 10.
 """
+from cuestage.i18n import tr
 from cuestage.mixers import MixerDriver, MixerError, OscLink, db_to_x32, x32_to_db, osc_decode, osc_encode, udp_discover
 
 
@@ -29,14 +30,14 @@ def _model_code(text):
 
 class BehringerXAir(MixerDriver):
     ID = "behringer_xair"
-    NAME = "Behringer X Air (XR12 / XR16 / XR18, Midas MR18)"
+    NAME = tr("Behringer X Air (XR12 / XR16 / XR18, Midas MR18)")
     DEFAULT_PORT = PORT
     FIELDS = ("host", "port", "model")
-    MODELS = [("xr18", "XR18 / X18 / Midas MR18"), ("xr16", "XR16"), ("xr12", "XR12")]
+    MODELS = [("xr18", tr("XR18 / X18 / Midas MR18")), ("xr16", "XR16"), ("xr12", "XR12")]
     NAMES = True
-    NOTES = ("OSC su UDP 10024, nessuna impostazione sul mixer (stessa rete). Aux = bus 1–6; Aux in = ritorno "
+    NOTES = (tr("OSC su UDP 10024, nessuna impostazione sul mixer (stessa rete). Aux = bus 1–6; Aux in = ritorno "
              "aux stereo; Ritorni effetti = FX 1–4; Mandate effetti = FX send 1–4; 4 DCA e 4 mute group. "
-             "Indirizzi dalla documentazione della comunità: prova mute e fader prima dello spettacolo.")
+             "Indirizzi dalla documentazione della comunità: prova mute e fader prima dello spettacolo."))
 
     @classmethod
     def sections(cls, conf=None):
@@ -55,7 +56,7 @@ class BehringerXAir(MixerDriver):
 
     def _link(self):
         if not self.host:
-            raise MixerError("indirizzo IP non impostato")
+            raise MixerError(tr("indirizzo IP non impostato"))
         if self.link is None:
             self.link = OscLink(self.host, self.port or PORT)
         return self.link
@@ -85,7 +86,7 @@ class BehringerXAir(MixerDriver):
             return bool(a and int(a[0]))
         a = self._link().query(self._leaf(kind, n, "on"))
         if not a:
-            raise MixerError("risposta vuota")
+            raise MixerError(tr("risposta vuota"))
         return not int(a[0])
 
     def set_fader(self, kind, n, db):
@@ -96,7 +97,7 @@ class BehringerXAir(MixerDriver):
         self.check(kind, n, "fader")
         a = self._link().query(self._leaf(kind, n, "fader"))
         if not a:
-            raise MixerError("risposta vuota")
+            raise MixerError(tr("risposta vuota"))
         return x32_to_db(a[0])
 
     def get_name(self, kind, n):
@@ -130,5 +131,5 @@ class BehringerXAir(MixerDriver):
                 pass
             model = str(a[2]) if len(a) > 2 else ""
             return {"driver": cls.ID, "host": host, "port": PORT, "name": str(a[1]) if len(a) > 1 else "",
-                    "model": _model_code(model), "info": f"{model} · firmware {a[3]}" if len(a) > 3 else model}
+                    "model": _model_code(model), "info": tr("{0} · firmware {1}", model, a[3]) if len(a) > 3 else model}
         return udp_discover(local_ips, PORT, osc_encode("/xinfo"), parse, timeout)

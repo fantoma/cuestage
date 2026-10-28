@@ -1,5 +1,6 @@
 """Editor della matrice audio: canali della sorgente (righe) × uscite della scheda (colonne),
 con il volume di ogni incrocio e una riga finale con il volume di ogni uscita."""
+from .i18n import tr
 from PySide6.QtCore import QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QInputDialog, QMenu, QToolTip, QWidget
@@ -106,13 +107,13 @@ class MatrixEditor(QWidget):
         p.setFont(fb)
         p.setPen(QColor(170, 170, 185))
         for o in range(self.n_out):
-            p.drawText(QRectF(self.LW + o * self.CW, 0, self.CW, self.HH), Qt.AlignCenter, f"Out {o + 1}")
+            p.drawText(QRectF(self.LW + o * self.CW, 0, self.CW, self.HH), Qt.AlignCenter, tr("Out {0}", o + 1))
         for r in range(self.n_src):
             p.drawText(QRectF(4, self.HH + r * self.CH, self.LW - 8, self.CH),
                        Qt.AlignVCenter | Qt.AlignLeft, self.labels[r] if r < len(self.labels) else str(r + 1))
         p.setPen(QColor(255, 200, 90))
         p.drawText(QRectF(4, self.HH + self.n_src * self.CH + self.GAP, self.LW - 8, self.CH),
-                   Qt.AlignVCenter | Qt.AlignLeft, "Vol. out")
+                   Qt.AlignVCenter | Qt.AlignLeft, tr("Vol. out"))
         p.setFont(f)
         for r in list(range(self.n_src)) + ["out"]:
             for o in range(self.n_out):
@@ -151,9 +152,9 @@ class MatrixEditor(QWidget):
     def _tip(self, e, cell):
         r, o = cell
         db = self._get(cell)
-        what = f"Volume uscita {o + 1}" if r == "out" else \
-            f"{self.labels[r] if r < len(self.labels) else r + 1} → Out {o + 1}"
-        QToolTip.showText(e.globalPosition().toPoint(), f"{what}: {fmt_db(db, 'spento')} dB", self)
+        what = tr("Volume uscita {0}", o + 1) if r == "out" else \
+            tr("{0} → Out {1}", self.labels[r] if r < len(self.labels) else r + 1, o + 1)
+        QToolTip.showText(e.globalPosition().toPoint(), tr("{0}: {1} dB", what, fmt_db(db, tr('spento'))), self)
 
     def mousePressEvent(self, e):
         cell = self._cell_at(e.position())
@@ -213,7 +214,7 @@ class MatrixEditor(QWidget):
 
     def _ask(self, cell):
         db = self._get(cell)
-        v, ok = QInputDialog.getDouble(self, "Volume", "dB (-60 = spento):",
+        v, ok = QInputDialog.getDouble(self, tr("Volume"), tr("dB (-60 = spento):"),
                                        MIN_DB if db is None else db, MIN_DB, MAX_DB, 1)
         if ok:
             self._set(cell, None if v <= MIN_DB and cell[0] != "out" else v)
@@ -225,12 +226,12 @@ class MatrixEditor(QWidget):
             a.triggered.connect(lambda _=False, db=db: self._set(cell, db))
         m.addSeparator()
         if cell[0] == "out":
-            m.addAction("Muto (-∞)").triggered.connect(lambda: self._set(cell, MIN_DB))
+            m.addAction(tr("Muto (-∞)")).triggered.connect(lambda: self._set(cell, MIN_DB))
         else:
-            m.addAction("Spento").triggered.connect(lambda: self._set(cell, None))
+            m.addAction(tr("Spento")).triggered.connect(lambda: self._set(cell, None))
             r = cell[0]
-            m.addAction("Solo questa uscita per questo canale").triggered.connect(lambda: self._solo(r, cell[1]))
-        m.addAction("Imposta…").triggered.connect(lambda: self._ask(cell))
+            m.addAction(tr("Solo questa uscita per questo canale")).triggered.connect(lambda: self._solo(r, cell[1]))
+        m.addAction(tr("Imposta…")).triggered.connect(lambda: self._ask(cell))
         m.exec(e.globalPosition().toPoint())
 
     def _solo(self, r, o):

@@ -1,4 +1,5 @@
 """Modifica dello show: selezione, inserimento, spostamento, duplicazione, ispettore (parte di MainWindow)."""
+from ..i18n import tr
 import os
 
 from PySide6.QtCore import QItemSelectionModel
@@ -78,8 +79,8 @@ class EditingMixin:
             from ..model import MEDIA_EXT
             pat = " ".join("*" + e for e in sorted(MEDIA_EXT[ctype]))
             start = self.qs.value("last_dir", os.path.expanduser("~"))
-            paths, _ = QFileDialog.getOpenFileNames(self, f"Scegli file {TYPE_LABELS[ctype]}", start,
-                                                    f"{TYPE_LABELS[ctype]} ({pat});;Tutti (*)")
+            paths, _ = QFileDialog.getOpenFileNames(self, tr("Scegli file {0}", TYPE_LABELS[ctype]), start,
+                                                    tr("{0} ({1});;Tutti (*)", TYPE_LABELS[ctype], pat))
             if not paths:
                 return
             self.qs.setValue("last_dir", os.path.dirname(paths[0]))
@@ -90,13 +91,13 @@ class EditingMixin:
             if ctype in ("fade", "control", "preset") and cur is not None:
                 c.target = cur.number or cur.id
                 if ctype == "preset":
-                    c.name = f"Cambia preset {cur.name}".strip()
+                    c.name = tr("Cambia preset {0}", cur.name).strip()
                     c.fade_duration = 3.0
                 if ctype == "fade":
-                    c.name = f"Fade out {cur.name}".strip()
+                    c.name = tr("Fade out {0}", cur.name).strip()
                     c.stop_when_done = True
             if ctype == "osc":
-                c.name = "Messaggio OSC"
+                c.name = tr("Messaggio OSC")
             if ctype == "wait":
                 c.duration = 5.0
             cues = [c]
@@ -141,7 +142,7 @@ class EditingMixin:
         if made:
             self._insert_cues(made, row)
         else:
-            self.status("Nessun file multimediale riconosciuto")
+            self.status(tr("Nessun file multimediale riconosciuto"))
 
     def _rows_moved(self, rows, dest):
         from ..groups import block_end, membership_for_insert
@@ -226,8 +227,7 @@ class EditingMixin:
         if heads:
             extra = sorted({k for r in heads for k in range(r + 1, block_end(cues, r))} - set(rows))
             if extra and QMessageBox.question(
-                    self, "Elimina gruppo", f"Eliminare il gruppo insieme alle sue {len(extra)} cue?\n"
-                    "(«No» elimina solo il gruppo: le cue restano nella lista)") == QMessageBox.Yes:
+                    self, tr("Elimina gruppo"), tr("Eliminare il gruppo insieme alle sue {0} cue?\n(«No» elimina solo il gruppo: le cue restano nella lista)", len(extra))) == QMessageBox.Yes:
                 rows = sorted(set(rows) | set(extra))
         for r in rows:
             self.ctrl.stop_cue(cues[r].id, 0)

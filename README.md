@@ -84,6 +84,27 @@ Windows:  powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 macOS:    packaging/build_macos.sh
 ```
 
+## Lingua dell'interfaccia
+
+**Impostazioni › Lingua / Language**: italiano, English, slovenščina. La scelta vale per il computer (non
+per lo show) e si applica al **riavvio** di CueStage. Al primo avvio CueStage usa la lingua del sistema, se
+c'è, altrimenti l'inglese. Per una prova al volo: `CUESTAGE_LANG=en ./run.sh`.
+
+I testi stanno in `cuestage/lang/<codice>.json` (`it`, `en`, `sl`): ogni testo italiano del programma con la sua
+traduzione. Nelle traduzioni vanno lasciati i segnaposto `{0}`, `{1}`… (con l'eventuale formato, es. `{0:.1f}`),
+anche in un ordine diverso; un testo vuoto resta in italiano. Si possono correggere o aggiungere lingue anche
+senza toccare il programma, mettendo il file nella cartella `lang` dei dati utente
+(`~/.local/share/cuestage/lang/` su Linux): completa e corregge quello del programma.
+
+Per gli sviluppatori:
+- i testi dell'interfaccia si scrivono in italiano dentro `tr("…")` (`from .i18n import tr`); le parti variabili
+  con `tr("Scheda «{0}» con {1} canali", nome, n)` invece delle f-string;
+- `python3 tools/lang_update.py` aggiunge ai file di lingua i testi nuovi (vuoti, da tradurre) e toglie quelli
+  spariti; `--check` segnala testi mancanti e segnaposto diversi; `--new de "Deutsch"` crea una lingua nuova;
+- i test di regressione controllano che inglese e sloveno siano completi e con gli stessi segnaposto.
+
+Restano in italiano il README, l'interfaccia web per telefono e tablet e i messaggi della prova di avvio.
+
 ## Tipi di cue
 
 | Tipo | Cosa fa |

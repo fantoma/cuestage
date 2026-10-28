@@ -10,6 +10,7 @@ Le stesse foglie «mute»/«fdr» valgono per aux in (/aux), bus (/bus), main (/
 i mute group hanno «/mgrp/N/mute». Nomi: «/ch/N/name» (stessa struttura per le altre sezioni). Il WING non ha canali «ritorno effetti»: gli effetti rientrano su
 canali, aux o bus.
 """
+from cuestage.i18n import tr
 from cuestage.mixers import MixerDriver, MixerError, OscLink, udp_discover
 
 NODES = {"ch": "ch", "auxin": "aux", "aux": "bus", "main": "main", "mtx": "mtx", "dca": "dca", "mgrp": "mgrp"}
@@ -17,14 +18,14 @@ NODES = {"ch": "ch", "auxin": "aux", "aux": "bus", "main": "main", "mtx": "mtx",
 
 class BehringerWing(MixerDriver):
     ID = "behringer_wing"
-    NAME = "Behringer WING"
+    NAME = tr("Behringer WING")
     DEFAULT_PORT = 2223
     FIELDS = ("host", "port")
     SECTIONS = [("ch", 40, {"mute", "fader"}), ("auxin", 8, {"mute", "fader"}), ("aux", 16, {"mute", "fader"}),
                 ("main", 4, {"mute", "fader"}), ("mtx", 8, {"mute", "fader"}), ("dca", 16, {"mute", "fader"}),
                 ("mgrp", 8, {"mute"})]
-    NOTES = ("OSC su UDP 2223 (ricerca su 2222). Aux = bus 1–16; Aux in = ingressi aux 1–8; Master = main 1–4. "
-             "Gli effetti del WING rientrano su canali/aux: si mutano lì.")
+    NOTES = (tr("OSC su UDP 2223 (ricerca su 2222). Aux = bus 1–16; Aux in = ingressi aux 1–8; Master = main 1–4. "
+             "Gli effetti del WING rientrano su canali/aux: si mutano lì."))
 
     def __init__(self, conf):
         super().__init__(conf)
@@ -32,7 +33,7 @@ class BehringerWing(MixerDriver):
 
     def _link(self):
         if not self.host:
-            raise MixerError("indirizzo IP non impostato")
+            raise MixerError(tr("indirizzo IP non impostato"))
         if self.link is None:
             self.link = OscLink(self.host, self.port)
         return self.link
@@ -48,7 +49,7 @@ class BehringerWing(MixerDriver):
         self.check(kind, n, "mute")
         a = self._link().query(self._path(kind, n, "mute"))
         if not a:
-            raise MixerError("risposta vuota")
+            raise MixerError(tr("risposta vuota"))
         v = a[-1]
         if isinstance(v, str):
             return v.strip().upper() in ("1", "ON", "MUTE")
@@ -68,7 +69,7 @@ class BehringerWing(MixerDriver):
         self.check(kind, n, "fader")
         a = self._link().query(self._path(kind, n, "fdr"))
         if not a:
-            raise MixerError("risposta vuota")
+            raise MixerError(tr("risposta vuota"))
         if len(a) >= 3:
             db = float(a[2])
         elif isinstance(a[0], str):
@@ -95,6 +96,6 @@ class BehringerWing(MixerDriver):
                 return None
             p = t.split(",")
             return {"host": p[1] if len(p) > 1 and p[1] else ip, "port": 2223, "name": p[2] if len(p) > 2 else "",
-                    "model": f"WING ({p[3]})" if len(p) > 3 else "WING",
+                    "model": tr("WING ({0})", p[3]) if len(p) > 3 else "WING",
                     "info": f"firmware {p[5]}" if len(p) > 5 else ""}
         return udp_discover(local_ips, 2222, b"WING?", parse, timeout)

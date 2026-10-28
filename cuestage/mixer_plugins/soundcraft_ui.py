@@ -12,6 +12,7 @@ Protocollo come nella libreria open source «soundcraft-ui-connection» (F. Malc
 Numero di canali (dalle specifiche, da verificare): Ui16 12 ingressi + 4 aux, Ui12 8 ingressi + 2 aux;
 per entrambi 2 line in, 2 player, 4 FX. Il master non ha un mute proprio: «Master» = MUTE ALL.
 """
+from cuestage.i18n import tr
 import base64
 import math
 import os
@@ -63,10 +64,10 @@ class _WebSocket:
         while b"\r\n\r\n" not in head:
             chunk = self.sock.recv(1024)
             if not chunk:
-                raise MixerError("connessione chiusa durante l'apertura")
+                raise MixerError(tr("connessione chiusa durante l'apertura"))
             head += chunk
         if b" 101 " not in head.split(b"\r\n", 1)[0]:
-            raise MixerError("il dispositivo non accetta WebSocket (è un Soundcraft Ui?)")
+            raise MixerError(tr("il dispositivo non accetta WebSocket (è un Soundcraft Ui?)"))
         self.buf = head.split(b"\r\n\r\n", 1)[1]
         self.lock = threading.Lock()
         self.sock.settimeout(None)
@@ -93,7 +94,7 @@ class _WebSocket:
         while len(self.buf) < n:
             chunk = self.sock.recv(65536)
             if not chunk:
-                raise ConnectionError("connessione chiusa")
+                raise ConnectionError(tr("connessione chiusa"))
             self.buf += chunk
         out, self.buf = self.buf[:n], self.buf[n:]
         return out
@@ -132,14 +133,14 @@ class _WebSocket:
 
 class SoundcraftUi(MixerDriver):
     ID = "soundcraft_ui"
-    NAME = "Soundcraft Ui12 / Ui16"
+    NAME = tr("Soundcraft Ui12 / Ui16")
     DEFAULT_PORT = PORT
     FIELDS = ("host", "port", "model")
-    MODELS = [("ui16", "Ui16"), ("ui12", "Ui12")]
+    MODELS = [("ui16", tr("Ui16")), ("ui12", tr("Ui12"))]
     NAMES = True
-    NOTES = ("WebSocket sulla porta 80 (la stessa dell'interfaccia web del mixer): basta che il computer sia "
+    NOTES = (tr("WebSocket sulla porta 80 (la stessa dell'interfaccia web del mixer): basta che il computer sia "
              "sulla rete del mixer. Master = MUTE ALL; mute group 1–6. Ingressi: «Canali»; line in stereo: "
-             "«Canali stereo»; player USB; FX 1–4; aux. Numero di canali per modello da verificare.")
+             "«Canali stereo»; player USB; FX 1–4; aux. Numero di canali per modello da verificare."))
 
     @classmethod
     def sections(cls, conf=None):
@@ -164,12 +165,12 @@ class SoundcraftUi(MixerDriver):
         if self.ws is not None and self.alive:
             return self.ws
         if not self.host:
-            raise MixerError("indirizzo IP non impostato")
+            raise MixerError(tr("indirizzo IP non impostato"))
         self.close()
         try:
             self.ws = _WebSocket(self.host, int(self.port or PORT))
         except OSError as e:
-            raise MixerError(f"connessione a {self.host} non riuscita ({e})")
+            raise MixerError(tr("connessione a {0} non riuscita ({1})", self.host, e))
         self.alive = True
         self.got_state.clear()
         threading.Thread(target=self._reader, args=(self.ws,), daemon=True).start()
@@ -217,7 +218,7 @@ class SoundcraftUi(MixerDriver):
             ws.send("3:::" + line)
         except OSError as e:
             self.alive = False
-            raise MixerError(f"invio non riuscito ({e})")
+            raise MixerError(tr("invio non riuscito ({0})", e))
 
     def _setd(self, path, value):
         self._send(f"SETD^{path}^{value}")
@@ -227,7 +228,7 @@ class SoundcraftUi(MixerDriver):
         self._conn()
         v = self.state.get(path)
         if v is None:
-            raise MixerError(f"valore «{path}» non ricevuto dal mixer")
+            raise MixerError(tr("valore «{0}» non ricevuto dal mixer", path))
         return v
 
     # ---------------------------------------------------------------- percorsi
@@ -322,5 +323,5 @@ class SoundcraftUi(MixerDriver):
             if b"soundcraft" in low or b"ui24" in low or b"ui16" in low or b"ui12" in low:
                 model = "ui12" if b"ui12" in low else "ui16"
                 out.append({"driver": cls.ID, "host": h, "port": PORT, "name": "", "model": model,
-                            "info": "modello da verificare" if b"ui1" not in low else ""})
+                            "info": tr("modello da verificare") if b"ui1" not in low else ""})
         return out

@@ -5,14 +5,15 @@ accensione, otturatore, freeze, ingresso, ottica (zoom, fuoco, shift — tenendo
 movimento continua), lens memory, azioni specifiche del modello, comando libero e lettura dello stato.
 Anche col pannello in primo piano valgono i tasti di regia (Spazio = GO, Esc = STOP TUTTO, F7, F8).
 """
+from .i18n import tr
 from PySide6.QtCore import QObject, QPoint, Qt, QTimer, Signal
 from PySide6.QtWidgets import (QComboBox, QFrame, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
                                QMessageBox, QPushButton, QScrollArea, QSpinBox, QVBoxLayout, QWidget)
 
 from .projectors import ACTIONS, CORNER_KEYS, CORNER_LABELS, LENS_ACTIONS, SPEEDS, format_corners
 
-LENS_LABELS = {"zoom": ("Zoom", "−", "+"), "focus": ("Fuoco", "−", "+"),
-               "shift_h": ("Shift orizz.", "◀", "▶"), "shift_v": ("Shift vert.", "▼", "▲")}
+LENS_LABELS = {"zoom": (tr("Zoom"), "−", "+"), "focus": (tr("Fuoco"), "−", "+"),
+               "shift_h": (tr("Shift orizz."), "◀", "▶"), "shift_v": (tr("Shift vert."), "▼", "▲")}
 
 
 class _Relay(QObject):
@@ -41,13 +42,13 @@ class ProjectorBox(QGroupBox):
         self.conf = conf
         self.pm = manager
         self.pid = conf.get("id")
-        self.name = conf.get("name") or conf.get("host") or "Proiettore"
+        self.name = conf.get("name") or conf.get("host") or tr("Proiettore")
         self.cls = cls
         self._lens_busy = None          # ultimo comando ottica in coda (per non accumulare ripetizioni)
         self.setTitle(self.name)
         v = QVBoxLayout(self)
         v.setSpacing(4)
-        info = QLabel((cls.NAME if cls else f"driver «{conf.get('driver')}» non disponibile")
+        info = QLabel((cls.NAME if cls else tr("driver «{0}» non disponibile", conf.get('driver')))
                       + (f" · {conf.get('host')}" if conf.get("host") else ""))
         info.setStyleSheet("color:#999;")
         v.addWidget(info)
@@ -57,19 +58,19 @@ class ProjectorBox(QGroupBox):
 
         row = QHBoxLayout()
         if "power_on" in caps:
-            b = _btn("⏻ Accendi", color="#2c6b3c")
+            b = _btn(tr("⏻ Accendi"), color="#2c6b3c")
             b.clicked.connect(lambda: self.run("power_on"))
             row.addWidget(b)
         if "power_off" in caps:
-            b = _btn("⏻ Spegni", "Mette il proiettore in standby (chiede conferma)", "#6b2c2c")
+            b = _btn(tr("⏻ Spegni"), tr("Mette il proiettore in standby (chiede conferma)"), "#6b2c2c")
             b.clicked.connect(self._power_off)
             row.addWidget(b)
         if "shutter_close" in caps:
-            b = _btn("■ Chiudi otturatore", color="#444")
+            b = _btn(tr("■ Chiudi otturatore"), color="#444")
             b.clicked.connect(lambda: self.run("shutter_close"))
             row.addWidget(b)
         if "shutter_open" in caps:
-            b = _btn("□ Apri otturatore", color="#555")
+            b = _btn(tr("□ Apri otturatore"), color="#555")
             b.clicked.connect(lambda: self.run("shutter_open"))
             row.addWidget(b)
         row.addStretch(1)
@@ -78,23 +79,23 @@ class ProjectorBox(QGroupBox):
 
         row = QHBoxLayout()
         if "freeze_on" in caps or "freeze_off" in caps:
-            row.addWidget(QLabel("Freeze"))
-            for a, t in (("freeze_on", "attiva"), ("freeze_off", "disattiva")):
+            row.addWidget(QLabel(tr("Freeze")))
+            for a, t in (("freeze_on", tr("attiva")), ("freeze_off", tr("disattiva"))):
                 if a in caps:
                     b = _btn(t)
                     b.clicked.connect(lambda _=False, a=a: self.run(a))
                     row.addWidget(b)
             row.addSpacing(10)
         if "input" in caps:
-            row.addWidget(QLabel("Ingresso"))
+            row.addWidget(QLabel(tr("Ingresso")))
             self.input_cb = QComboBox()
             self.input_cb.setFocusPolicy(Qt.NoFocus)
             for code, lab in cls.INPUTS:
                 self.input_cb.addItem(lab, code)
             row.addWidget(self.input_cb)
-            b = _btn("Seleziona")
+            b = _btn(tr("Seleziona"))
             b.clicked.connect(lambda: self.run("input", self.input_cb.currentData() or "",
-                                               label=f"Ingresso {self.input_cb.currentText()}"))
+                                               label=tr("Ingresso {0}", self.input_cb.currentText())))
             row.addWidget(b)
         row.addStretch(1)
         if row.count() > 1:
@@ -109,20 +110,20 @@ class ProjectorBox(QGroupBox):
                 lab, minus, plus = LENS_LABELS[a]
                 g.addWidget(QLabel(lab), i, 0)
                 for col, (txt, d) in enumerate(((minus, -1), (plus, 1))):
-                    b = _btn(txt, f"{lab} {txt} · tieni premuto per continuare", width=36)
+                    b = _btn(txt, tr("{0} {1} · tieni premuto per continuare", lab, txt), width=36)
                     b.setAutoRepeat(True)
                     b.setAutoRepeatDelay(450)
                     b.setAutoRepeatInterval(250)
                     b.clicked.connect(lambda _=False, a=a, d=d: self.lens(a, d))
                     g.addWidget(b, i, 1 + col)
-            g.addWidget(QLabel("Velocità"), 0, 3, Qt.AlignRight)
+            g.addWidget(QLabel(tr("Velocità")), 0, 3, Qt.AlignRight)
             self.speed_cb = QComboBox()
             self.speed_cb.setFocusPolicy(Qt.NoFocus)
             for k, t in SPEEDS.items():
                 self.speed_cb.addItem(t, k)
             self.speed_cb.setCurrentIndex(1)
             g.addWidget(self.speed_cb, 0, 4)
-            g.addWidget(QLabel("Passi"), 1, 3, Qt.AlignRight)
+            g.addWidget(QLabel(tr("Passi")), 1, 3, Qt.AlignRight)
             self.steps_sp = QSpinBox()
             self.steps_sp.setRange(1, 50)
             self.steps_sp.setFocusPolicy(Qt.ClickFocus)
@@ -132,14 +133,14 @@ class ProjectorBox(QGroupBox):
 
         row = QHBoxLayout()
         if "lens_memory" in caps:
-            row.addWidget(QLabel("Lens memory"))
+            row.addWidget(QLabel(tr("Lens memory")))
             self.mem_sp = QSpinBox()
             self.mem_sp.setRange(1, 10)
             self.mem_sp.setFocusPolicy(Qt.ClickFocus)
             row.addWidget(self.mem_sp)
-            b = _btn("Richiama")
+            b = _btn(tr("Richiama"))
             b.clicked.connect(lambda: self.run("lens_memory", str(self.mem_sp.value()),
-                                               label=f"Lens memory {self.mem_sp.value()}"))
+                                               label=tr("Lens memory {0}", self.mem_sp.value())))
             row.addWidget(b)
             row.addSpacing(10)
         params = getattr(cls, "EXTRA_PARAMS", {}) or {}
@@ -164,18 +165,18 @@ class ProjectorBox(QGroupBox):
 
         if "raw" in caps:
             row = QHBoxLayout()
-            row.addWidget(QLabel("Comando libero"))
+            row.addWidget(QLabel(tr("Comando libero")))
             self.raw_ed = QLineEdit()
-            self.raw_ed.setPlaceholderText("comando del protocollo")
+            self.raw_ed.setPlaceholderText(tr("comando del protocollo"))
             self.raw_ed.returnPressed.connect(self._raw)
             row.addWidget(self.raw_ed, 1)
-            b = _btn("Invia")
+            b = _btn(tr("Invia"))
             b.clicked.connect(self._raw)
             row.addWidget(b)
             v.addLayout(row)
 
         row = QHBoxLayout()
-        b = _btn("Leggi stato", "Interroga il proiettore (accensione, otturatore, ingresso…)")
+        b = _btn(tr("Leggi stato"), tr("Interroga il proiettore (accensione, otturatore, ingresso…)"))
         b.clicked.connect(self.query)
         row.addWidget(b)
         self.result = QLabel("—")
@@ -199,16 +200,15 @@ class ProjectorBox(QGroupBox):
         self._lens_busy = self.run(axis, "", direction, steps, speed, label=f"{lab} {plus if direction > 0 else minus}")
 
     def _power_off(self):
-        r = QMessageBox.question(self.window(), "Spegni proiettore",
-                                 f"Mettere in standby «{self.name}»?\n"
-                                 "La riaccensione richiede tempo (raffreddamento e riscaldamento lampada).")
+        r = QMessageBox.question(self.window(), tr("Spegni proiettore"),
+                                 tr("Mettere in standby «{0}»?\nLa riaccensione richiede tempo (raffreddamento e riscaldamento lampada).", self.name))
         if r == QMessageBox.Yes:
             self.run("power_off")
 
     def _raw(self):
         t = self.raw_ed.text().strip()
         if t:
-            self.run("raw", t, label=f"Comando «{t}»")
+            self.run("raw", t, label=tr("Comando «{0}»", t))
 
     # ---- correzione 4 angoli
     def _corners_section(self, cls):
@@ -218,7 +218,7 @@ class ProjectorBox(QGroupBox):
         bv.setContentsMargins(0, 2, 0, 2)
         bv.setSpacing(3)
         self.corner_toggle = QToolButton()
-        self.corner_toggle.setText("▸ Correzione 4 angoli")
+        self.corner_toggle.setText(tr("▸ Correzione 4 angoli"))
         self.corner_toggle.setCheckable(True)
         self.corner_toggle.setFocusPolicy(Qt.NoFocus)
         self.corner_toggle.setStyleSheet("QToolButton{border:none;font-weight:bold;}")
@@ -226,7 +226,7 @@ class ProjectorBox(QGroupBox):
         body = QWidget()
         body.setVisible(False)
         self.corner_toggle.toggled.connect(lambda on: (body.setVisible(on), self.corner_toggle.setText(
-            ("▾" if on else "▸") + " Correzione 4 angoli"), self._resize_panel()))
+            ("▾" if on else "▸") + tr(" Correzione 4 angoli")), self._resize_panel()))
         g = QGridLayout(body)
         g.setContentsMargins(14, 0, 0, 0)
         g.setHorizontalSpacing(6)
@@ -256,31 +256,30 @@ class ProjectorBox(QGroupBox):
                 sp.setRange(lo, hi)
                 sp.setPrefix(f"{axis.upper()} ")
                 sp.setFocusPolicy(Qt.ClickFocus)
-                sp.setToolTip(f"{CORNER_LABELS[k]} · {'orizzontale' if axis == 'x' else 'verticale'}: "
-                              f"{lo}…{hi} (le frecce e la rotella inviano subito)")
+                sp.setToolTip(tr("{0} · {1}: {2}…{3} (le frecce e la rotella inviano subito)", CORNER_LABELS[k], tr('orizzontale') if axis == 'x' else tr('verticale'), lo, hi))
                 sp.valueChanged.connect(lambda _v, k=k, axis=axis: self._corner_changed(k, axis))
                 self.corner_spins[(k, axis)] = sp
                 cl.addWidget(sp)
             g.addWidget(cell, r, c)
         row = QHBoxLayout()
-        for text, fn, tip in (("Leggi", self.read_corners, "Legge i valori attuali dal proiettore"),
-                              ("Azzera", self.reset_corners, "Riporta tutti gli angoli a 0"),
-                              ("Invia tutti", self.send_all_corners, "Invia tutti gli 8 valori")):
+        for text, fn, tip in ((tr("Leggi"), self.read_corners, tr("Legge i valori attuali dal proiettore")),
+                              (tr("Azzera"), self.reset_corners, tr("Riporta tutti gli angoli a 0")),
+                              (tr("Invia tutti"), self.send_all_corners, tr("Invia tutti gli 8 valori"))):
             b = _btn(text, tip)
             b.clicked.connect(fn)
             row.addWidget(b)
         if "corners_off" in cls.CAPS:
-            b = _btn("Disattiva", "Spegne la correzione geometrica (i valori restano nel proiettore)")
+            b = _btn(tr("Disattiva"), tr("Spegne la correzione geometrica (i valori restano nel proiettore)"))
             b.clicked.connect(self._corners_off)
             row.addWidget(b)
         row.addStretch(1)
         g.addLayout(row, 2, 0, 1, 2)
         self.corner_values = QLineEdit()
         self.corner_values.setReadOnly(True)
-        self.corner_values.setToolTip("Valori da incollare nel campo di una cue Proiettore "
-                                      "«Correzione 4 angoli: imposta»")
+        self.corner_values.setToolTip(tr("Valori da incollare nel campo di una cue Proiettore "
+                                      "«Correzione 4 angoli: imposta»"))
         vr = QHBoxLayout()
-        vr.addWidget(QLabel("Valori per cue:"))
+        vr.addWidget(QLabel(tr("Valori per cue:")))
         vr.addWidget(self.corner_values, 1)
         g.addLayout(vr, 3, 0, 1, 2)
         if getattr(cls, "CORNERS_NOTE", ""):
@@ -338,7 +337,7 @@ class ProjectorBox(QGroupBox):
                         for k, axis in items)
         action = "corner_live" if self._corner_mode_on else "corner_one"
         self._corner_mode_on = True
-        self._corner_job = self.run(action, "; ".join(parts), label=f"Angoli: {lab}")
+        self._corner_job = self.run(action, "; ".join(parts), label=tr("Angoli: {0}", lab))
         if self._corner_dirty or not self._corner_timer.isActive():
             self._corner_timer.start()
 
@@ -349,20 +348,20 @@ class ProjectorBox(QGroupBox):
     def send_all_corners(self):
         self._corner_dirty.clear()
         self._corner_mode_on = True
-        self._corner_job = self.run("corners", format_corners(self.corners()), label="Correzione 4 angoli")
+        self._corner_job = self.run("corners", format_corners(self.corners()), label=tr("Correzione 4 angoli"))
 
     def reset_corners(self):
         self.set_corners({k: [0, 0] for k in CORNER_KEYS})
         self.send_all_corners()
 
     def read_corners(self):
-        self.set_result("… lettura angoli", None)
+        self.set_result(tr("… lettura angoli"), None)
         p = self.parent_panel()
         if p is not None:
             p.relay_corners(self.pid)
 
     def query(self):
-        self.set_result("… lettura stato", None)
+        self.set_result(tr("… lettura stato"), None)
         self.parent_panel().relay_status(self.pid)
 
     def parent_panel(self):
@@ -399,23 +398,23 @@ class ProjectorPanel(QFrame):
         v = QVBoxLayout(self)
         v.setContentsMargins(8, 6, 8, 8)
         head = QHBoxLayout()
-        t = QLabel("Proiettori")
+        t = QLabel(tr("Proiettori"))
         t.setStyleSheet("font-weight:bold;font-size:14px;")
         head.addWidget(t)
         head.addStretch(1)
         self.all_row = QWidget()
         ar = QHBoxLayout(self.all_row)
         ar.setContentsMargins(0, 0, 0, 0)
-        ar.addWidget(QLabel("Tutti:"))
-        for text, act in (("■ Chiudi otturatori", "shutter_close"), ("□ Apri otturatori", "shutter_open")):
+        ar.addWidget(QLabel(tr("Tutti:")))
+        for text, act in ((tr("■ Chiudi otturatori"), "shutter_close"), (tr("□ Apri otturatori"), "shutter_open")):
             b = _btn(text)
             b.clicked.connect(lambda _=False, act=act: self.all(act))
             ar.addWidget(b)
-        b = _btn("Leggi stati")
+        b = _btn(tr("Leggi stati"))
         b.clicked.connect(lambda: [bx.query() for bx in self.boxes.values() if bx.cls])
         ar.addWidget(b)
         head.addWidget(self.all_row)
-        close = _btn("✕", "Chiudi il pannello", width=28)
+        close = _btn("✕", tr("Chiudi il pannello"), width=28)
         close.clicked.connect(self.hide)
         head.addWidget(close)
         v.addLayout(head)
@@ -457,9 +456,9 @@ class ProjectorPanel(QFrame):
             return
         if ok and isinstance(res, dict):
             bx.set_corners(res)
-            bx.set_result("✔ Angoli letti dal proiettore", True)
+            bx.set_result(tr("✔ Angoli letti dal proiettore"), True)
         else:
-            bx.set_result(f"✘ Lettura angoli: {res}", False)
+            bx.set_result(tr("✘ Lettura angoli: {0}", res), False)
 
     def fit(self):
         """Ridimensiona il pannello al contenuto (es. aprendo la sezione 4 angoli)."""
@@ -477,7 +476,7 @@ class ProjectorPanel(QFrame):
             return
         if ok and isinstance(res, dict):
             res = " · ".join(f"{k}: {v}" for k, v in res.items() if k != "risposta") or str(res)
-        bx.set_result(("Stato — " if ok else "✘ ") + str(res), ok)
+        bx.set_result((tr("Stato — ") if ok else "✘ ") + str(res), ok)
 
     def _done(self, name, action, ok, msg):
         for bx in self.boxes.values():

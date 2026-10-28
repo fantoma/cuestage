@@ -1,4 +1,5 @@
 """File dello show: nuovo, apri, salva, ultimo progetto, salvataggio automatico e recupero (parte di MainWindow)."""
+from ..i18n import tr
 import os
 import time
 
@@ -35,7 +36,7 @@ class FilesMixin:
             try:
                 self.show_data.save(self._autosave_path(None), copy_only=True)
             except OSError:
-                self.status(f"Autosave non riuscito: {e}")
+                self.status(tr("Autosave non riuscito: {0}", e))
 
     def _remove_autosave(self, show_path="__current__"):
         paths = {self._autosave_path(None)}
@@ -70,11 +71,10 @@ class FilesMixin:
             self._discard_file(auto)
             return False
         orig = getattr(rec, "original_path", None)
-        name = os.path.basename(orig) if orig else "show senza titolo"
+        name = os.path.basename(orig) if orig else tr("show senza titolo")
         r = QMessageBox.question(
-            self, "Recupero dopo chiusura imprevista",
-            f"CueStage non è stato chiuso correttamente.\n\nÈ disponibile un salvataggio automatico di "
-            f"«{name}» del {when}, con modifiche non salvate.\n\nRecuperarlo?",
+            self, tr("Recupero dopo chiusura imprevista"),
+            tr("CueStage non è stato chiuso correttamente.\n\nÈ disponibile un salvataggio automatico di «{0}» del {1}, con modifiche non salvate.\n\nRecuperarlo?", name, when),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
         if r != QMessageBox.Yes:
             self._discard_file(auto)
@@ -82,7 +82,7 @@ class FilesMixin:
         rec.path = orig if orig and os.path.isdir(os.path.dirname(orig)) else None
         rec.dirty = True
         self._set_show(rec)
-        self.status("Show recuperato dal salvataggio automatico: salvalo per conservarlo")
+        self.status(tr("Show recuperato dal salvataggio automatico: salvalo per conservarlo"))
         return True
 
     @staticmethod
@@ -99,7 +99,7 @@ class FilesMixin:
     def _confirm_discard(self):
         if not self.show_data.dirty or not self.show_data.cues:
             return True
-        r = QMessageBox.question(self, "Modifiche non salvate", "Salvare lo show corrente?",
+        r = QMessageBox.question(self, tr("Modifiche non salvate"), tr("Salvare lo show corrente?"),
                                  QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel)
         if r == QMessageBox.Save:
             return self.save()
@@ -136,7 +136,7 @@ class FilesMixin:
         if not self._confirm_discard():
             return
         start = self.qs.value("last_show_dir", os.path.expanduser("~"))
-        path, _ = QFileDialog.getOpenFileName(self, "Apri show", start, FILE_FILTER)
+        path, _ = QFileDialog.getOpenFileName(self, tr("Apri show"), start, FILE_FILTER)
         if path:
             self.open_show(path)
 
@@ -144,16 +144,16 @@ class FilesMixin:
         try:
             show = Show.load(path)
         except Exception as e:
-            QMessageBox.critical(self, "Errore", f"Impossibile aprire lo show:\n{e}")
+            QMessageBox.critical(self, tr("Errore"), tr("Impossibile aprire lo show:\n{0}", e))
             return
         self.qs.setValue("last_show_dir", os.path.dirname(path))
         self._remember_last(path)
         self._set_show(show)
         missing = [c for c in show.all_cues() if c.is_media() and c.file and not os.path.exists(c.file)]
         if missing:
-            QMessageBox.warning(self, "File mancanti",
-                                "File non trovati:\n" + "\n".join(c.file for c in missing[:15]))
-        self.status(f"Aperto {path}")
+            QMessageBox.warning(self, tr("File mancanti"),
+                                tr("File non trovati:\n") + "\n".join(c.file for c in missing[:15]))
+        self.status(tr("Aperto {0}", path))
 
     def save(self):
         if not self.show_data.path:
@@ -162,18 +162,18 @@ class FilesMixin:
             self._corners_changed()
             self.show_data.save(self.show_data.path)
         except Exception as e:
-            QMessageBox.critical(self, "Errore", f"Salvataggio fallito:\n{e}")
+            QMessageBox.critical(self, tr("Errore"), tr("Salvataggio fallito:\n{0}", e))
             return False
         self._remove_autosave()        # salvato davvero: l'autosave non serve più
         self._remember_last(self.show_data.path)
-        self.status(f"Salvato {self.show_data.path}")
+        self.status(tr("Salvato {0}", self.show_data.path))
         self._update_title()
         return True
 
     def save_as(self):
         start = self.show_data.path or os.path.join(
             self.qs.value("last_show_dir", os.path.expanduser("~")), "show.cueshow")
-        path, _ = QFileDialog.getSaveFileName(self, "Salva show", start, FILE_FILTER)
+        path, _ = QFileDialog.getSaveFileName(self, tr("Salva show"), start, FILE_FILTER)
         if not path:
             return False
         if not os.path.splitext(path)[1]:

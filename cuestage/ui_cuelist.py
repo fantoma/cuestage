@@ -1,4 +1,5 @@
 """Lista delle cue (modello tabellare con drag&drop) e pannello delle cue attive."""
+from .i18n import tr
 import json
 
 from PySide6.QtCore import QAbstractTableModel, QEvent, QMimeData, QModelIndex, QRectF, Qt, Signal, QTimer
@@ -8,7 +9,7 @@ from PySide6.QtWidgets import QStyledItemDelegate, QStyle, QWidget
 from .media import fmt_time
 from .model import TRIGGER_SHORT, TYPE_ICONS, TYPE_LABELS
 
-COLS = ["", "#", "Tipo", "Nome", "File / Target", "Ritardo", "Durata", "Avvio", "Stato", "PFL"]
+COLS = ["", "#", tr("Tipo"), tr("Nome"), tr("File / Target"), tr("Ritardo"), tr("Durata"), tr("Avvio"), tr("Stato"), "PFL"]
 C_PLAYHEAD, C_NUM, C_TYPE, C_NAME, C_TARGET, C_DELAY, C_DUR, C_TRIG, C_STATE, C_PFL = range(10)
 PFL_TYPES = ("audio", "video", "group")      # cue che possono andare al preascolto
 
@@ -166,64 +167,63 @@ class CueTableModel(QAbstractTableModel):
                     i = idx.row()
                     n = block_end(lst.cues, i) - i - 1
                     arrow = "▸" if cue.collapsed else "▾"
-                    return f"{arrow} {cue.name or 'Gruppo'}   [{GROUP_SHORT.get(cue.group_mode, cue.group_mode)} · {n} cue]"
+                    return tr("{0} {1}   [{2} · {3} cue]", arrow, cue.name or tr('Gruppo'), GROUP_SHORT.get(cue.group_mode, cue.group_mode), n)
                 if cue.group:
                     return f"      ↳ {cue.name}"
                 return cue.name
             if col == C_TARGET:
                 if cue.is_media():
-                    return cue.file.rsplit("/", 1)[-1] if cue.file else "— nessun file —"
+                    return cue.file.rsplit("/", 1)[-1] if cue.file else tr("— nessun file —")
                 if cue.type in ("fade", "control", "preset"):
                     if cue.type == "control" and cue.action == "stop_all":
-                        return "tutte"
+                        return tr("tutte")
                     tg = self.show.resolve_target(cue.target)
-                    return f"→ {tg.label()}" if tg else (f"→ ? ({cue.target})" if cue.target else "— nessun target —")
+                    return f"→ {tg.label()}" if tg else (f"→ ? ({cue.target})" if cue.target else tr("— nessun target —"))
                 if cue.type == "group":
                     m = cue.group_mode
                     from .engine import fmt_div, tap_active
                     if tap_active(cue):
-                        return (f"♩ {float(cue.group_bpm):g} BPM · una cue ogni {fmt_div(cue.group_tap_div)} "
-                                f"battit{'o' if float(cue.group_tap_div) <= 1 else 'i'}"
-                                + (" · casuale" if m == "rloop" else " · col GO a tempo" if m == "sequence" else ""))
+                        return ((tr("♩ {0:g} BPM · una cue ogni {1} battito", float(cue.group_bpm), fmt_div(cue.group_tap_div)) if float(cue.group_tap_div) <= 1 else tr("♩ {0:g} BPM · una cue ogni {1} battiti", float(cue.group_bpm), fmt_div(cue.group_tap_div)))
+                                + (tr(" · casuale") if m == "rloop" else tr(" · col GO a tempo") if m == "sequence" else ""))
                     if m in ("loop", "rloop"):
-                        hold = f"{float(cue.group_hold):g} s" if float(cue.group_hold or 0) > 0 else "durata della cue"
-                        adv = "avanza col GO · ESC esce" if (m == "rloop" and cue.group_advance == "go") else f"ogni {hold}"
-                        return f"{adv} · crossfade {float(cue.group_xfade):g} s"
+                        hold = f"{float(cue.group_hold):g} s" if float(cue.group_hold or 0) > 0 else tr("durata della cue")
+                        adv = tr("avanza col GO · ESC esce") if (m == "rloop" and cue.group_advance == "go") else tr("ogni {0}", hold)
+                        return tr("{0} · crossfade {1:g} s", adv, float(cue.group_xfade))
                     if m in ("playlist", "rplaylist"):
                         xf = float(cue.group_xfade or 0)
-                        how = "in ordine casuale, " if m == "rplaylist" else ""
-                        return (f"{how}una dopo l'altra" + (" · in loop" if cue.group_loop else "")
-                                + (f" · crossfade {xf:g} s" if xf > 0 else ""))
-                    return {"sequence": "prima cue col GO, poi in sequenza", "random": "una cue a caso",
-                            "all": "tutte insieme (con i loro pre-wait)"}.get(m, "")
+                        how = tr("in ordine casuale, ") if m == "rplaylist" else ""
+                        return (tr("{0}una dopo l'altra", how) + (tr(" · in loop") if cue.group_loop else "")
+                                + (tr(" · crossfade {0:g} s", xf) if xf > 0 else ""))
+                    return {"sequence": tr("prima cue col GO, poi in sequenza"), "random": tr("una cue a caso"),
+                            "all": tr("tutte insieme (con i loro pre-wait)")}.get(m, "")
                 if cue.type == "text":
                     from .text_render import split_phrases
                     if cue.text_mode == "sequence":
                         ps = split_phrases(cue.text_content)
-                        first = ps[0].replace("\n", " / ") if ps else "— nessun testo —"
-                        return f"T {len(ps)} frasi · «{first[:50]}»"
+                        first = ps[0].replace("\n", " / ") if ps else tr("— nessun testo —")
+                        return tr("T {0} frasi · «{1}»", len(ps), first[:50])
                     t = (cue.text_content or "").replace("\n", " / ")
-                    return f"T «{t[:60]}»" if t else "— nessun testo —"
+                    return tr("T «{0}»", t[:60]) if t else tr("— nessun testo —")
                 if cue.type == "midiout":
                     lines = [l.strip() for l in (cue.mo_msgs or "").splitlines() if l.strip() and not l.strip().startswith("#")]
-                    return (f"♫ {cue.mo_port or 'predefinita'}: " + " · ".join(lines[:3]) + (" …" if len(lines) > 3 else "")) if lines else "— nessun messaggio —"
+                    return (f"♫ {cue.mo_port or 'predefinita'}: " + " · ".join(lines[:3]) + (" …" if len(lines) > 3 else "")) if lines else tr("— nessun messaggio —")
                 if cue.type == "stoppanel":
                     from .engine import stop_panel_targets
                     fade = float(cue.stop_fade or 0)
-                    tail = f" · fade {fade:g} s" if fade > 0 else ""
+                    tail = tr(" · fade {0:g} s", fade) if fade > 0 else ""
                     if "*" in (cue.sp_panels or []):
                         pre = f"«{self.show.main.name}» + " if self.show.main.id in cue.sp_panels else ""
-                        return f"⊠ {pre}tutti i PANEL" + tail
+                        return tr("⊠ {0}tutti i PANEL", pre) + tail
                     names = [f"«{lst.name}»" for lst in stop_panel_targets(self.show, cue)]
-                    return ("⊠ " + ", ".join(names) + tail) if names else "— nessuna lista scelta —"
+                    return ("⊠ " + ", ".join(names) + tail) if names else tr("— nessuna lista scelta —")
                 if cue.type == "groupexit":
                     tg = self.show.resolve_target(cue.target) if cue.target else self.show.by_id(cue.group)
-                    return f"⇥ esce da «{tg.label()}»" if tg else "— nessun gruppo —"
+                    return tr("⇥ esce da «{0}»", tg.label()) if tg else tr("— nessun gruppo —")
                 if cue.type == "mixer":
                     from .mixers import KIND_SHORT, fmt_db
                     mm = getattr(self.ctrl, "mixers", None)
                     conf = mm.find(cue.mix_target) if mm else None
-                    who = (conf.get("name") or conf.get("host")) if conf else "— nessun mixer —"
+                    who = (conf.get("name") or conf.get("host")) if conf else tr("— nessun mixer —")
                     if cue.mix_action == "control":
                         info = mm.control_info(cue.mix_target, cue.mix_ctl) if mm else None
                         if info:
@@ -232,15 +232,15 @@ class CueTableModel(QAbstractTableModel):
                         else:
                             val = str(cue.mix_ctl_value)
                         from .alsactl import pretty_name
-                        return f"{who}: {pretty_name(cue.mix_ctl) if cue.mix_ctl else '— nessun controllo —'} = {val}"
+                        return f"{who}: {pretty_name(cue.mix_ctl) if cue.mix_ctl else tr('— nessun controllo —')} = {val}"
                     if cue.mix_action in ("mute", "unmute"):
                         from .mixers import mute_states, mute_summary
                         return f"{who}: {mute_summary(mute_states(cue))}"
                     what = None
                     if cue.mix_action == "duck":
-                        what = f"{fmt_db(float(cue.mix_level))} ⇣ ducking −{float(cue.mix_duck_db or 0):.1f} dB"
+                        what = tr("{0} ⇣ ducking −{1:.1f} dB", fmt_db(float(cue.mix_level)), float(cue.mix_duck_db or 0))
                     if what is None:
-                        what = fmt_db(float(cue.mix_level)) + (f" in {float(cue.mix_fade):.1f} s" if cue.mix_fade else "")
+                        what = fmt_db(float(cue.mix_level)) + (tr(" in {0:.1f} s", float(cue.mix_fade)) if cue.mix_fade else "")
                     from .mixers import parse_numbers
                     nums = parse_numbers(cue.mix_channels) or []
                     nm = mm.channel_name(cue.mix_target, cue.mix_kind, nums[0]) if mm and len(nums) == 1 else ""
@@ -254,10 +254,10 @@ class CueTableModel(QAbstractTableModel):
                     drv = pm.registry.get(conf.get("driver")) if conf is not None else None
                     if drv is not None:
                         acts = dict(drv.actions())
-                        act = acts.get(cue.proj_action) or f"⚠ {act} (non supportata)"
+                        act = acts.get(cue.proj_action) or tr("⚠ {0} (non supportata)", act)
                     elif conf is not None:
-                        act = f"⚠ driver «{conf.get('driver')}» mancante"
-                    who = conf.get("name") if conf else "— nessun proiettore —"
+                        act = tr("⚠ driver «{0}» mancante", conf.get('driver'))
+                    who = conf.get("name") if conf else tr("— nessun proiettore —")
                     extra = ""
                     if cue.proj_action == "input" or cue.proj_action == "raw":
                         extra = f" {cue.proj_value}"
@@ -269,7 +269,7 @@ class CueTableModel(QAbstractTableModel):
                         from .osc_profiles import describe
                         dev = next((d for d in self.show.settings.get("osc_devices") or []
                                     if d.get("id") == cue.osc_device), None)
-                        who = dev.get("name") if dev else "— dispositivo mancante —"
+                        who = dev.get("name") if dev else tr("— dispositivo mancante —")
                         return f"{who}: {describe(dev.get('profile') if dev else '', cue.osc_cmd, cue.osc_params)}"
                     return f"{cue.osc_host}:{cue.osc_port} {cue.osc_address} {cue.osc_args}".strip()
                 return ""
@@ -289,7 +289,7 @@ class CueTableModel(QAbstractTableModel):
             f.setBold(True)
             return f
         if role == Qt.ToolTipRole and cue.type == "group" and col in (C_TYPE, C_NAME):
-            return "Clic sulla colonna «Tipo» (o Ctrl+E): espandi / compatta il gruppo"
+            return tr("Clic sulla colonna «Tipo» (o Ctrl+E): espandi / compatta il gruppo")
         if role == Qt.FontRole and col in (C_PLAYHEAD, C_NUM):
             f = QFont()
             f.setBold(True)
@@ -323,10 +323,10 @@ class CueTableModel(QAbstractTableModel):
             return int(Qt.AlignRight | Qt.AlignVCenter)
         if role == Qt.ToolTipRole and col == C_PFL and cue.type in PFL_TYPES:
             g = pfl_inherited(self.show, cue)
-            return ("Preascolto acceso: la cue suona solo in cuffia · clic per spegnere" if cue.pfl else
-                    f"In preascolto tramite il gruppo «{g.label()}»" if g else
-                    "Clic: manda la cue al preascolto (solo in cuffia)") + \
-                (" — vale per tutte le cue del gruppo" if cue.type == "group" else "")
+            return (tr("Preascolto acceso: la cue suona solo in cuffia · clic per spegnere") if cue.pfl else
+                    tr("In preascolto tramite il gruppo «{0}»", g.label()) if g else
+                    tr("Clic: manda la cue al preascolto (solo in cuffia)")) + \
+                (tr(" — vale per tutte le cue del gruppo") if cue.type == "group" else "")
         if role == Qt.ToolTipRole and col == C_TARGET and cue.file:
             return cue.file
         if role == Qt.ToolTipRole and cue.notes:
@@ -580,7 +580,7 @@ class ActivePanel(QWidget):
         W = self.width()
         if not items:
             p.setPen(QColor(120, 120, 130))
-            p.drawText(self.rect(), Qt.AlignCenter, "Nessuna cue attiva")
+            p.drawText(self.rect(), Qt.AlignCenter, tr("Nessuna cue attiva"))
             p.end()
             return
         y = 4
@@ -622,7 +622,7 @@ class ActivePanel(QWidget):
             p.setFont(f)
             if kind == "wait":
                 p.setPen(QColor(240, 200, 80))
-                p.drawText(bar, Qt.AlignCenter, f"in attesa  ⧗ {fmt_time(x)}")
+                p.drawText(bar, Qt.AlignCenter, tr("in attesa  ⧗ {0}", fmt_time(x)))
                 sb = QRectF(r.right() - 34, r.top() + 8, 28, 26)
                 p.setPen(Qt.NoPen)
                 p.setBrush(QColor(170, 50, 50))
@@ -687,7 +687,7 @@ class ActivePanel(QWidget):
         pos = e.position()
         for badge, _cid, name in getattr(self, "badges", []):
             if badge.contains(pos):
-                QToolTip.showText(e.globalPosition().toPoint(), f"Lista «{name}» · clic per mostrarla", self)
+                QToolTip.showText(e.globalPosition().toPoint(), tr("Lista «{0}» · clic per mostrarla", name), self)
                 return
         for bar, ax, marks in getattr(self, "bars", []):
             if bar.adjusted(0, -3, 0, 3).contains(pos):

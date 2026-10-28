@@ -1,4 +1,5 @@
 """Interfaccia web: stato, comandi, proiettori dal telefono (parte di MainWindow)."""
+from ..i18n import tr
 import os
 
 
@@ -17,8 +18,8 @@ class WebMixin:
         out = []
         for conf in self.projectors.projectors:
             cls = self.projectors.registry.get(conf.get("driver"))
-            item = {"id": conf.get("id"), "name": conf.get("name") or conf.get("host") or "Proiettore",
-                    "driver": cls.NAME if cls else f"driver «{conf.get('driver')}» non disponibile",
+            item = {"id": conf.get("id"), "name": conf.get("name") or conf.get("host") or tr("Proiettore"),
+                    "driver": cls.NAME if cls else tr("driver «{0}» non disponibile", conf.get('driver')),
                     "host": conf.get("host", ""), "caps": sorted(cls.CAPS) if cls else []}
             if cls is not None:
                 params = getattr(cls, "EXTRA_PARAMS", {}) or {}
@@ -49,12 +50,12 @@ class WebMixin:
         if kind == "status":
             if ok and isinstance(data, dict):
                 data = " · ".join(f"{k}: {v}" for k, v in data.items() if k != "risposta")
-            d.update(result=("Stato — " if ok else "✘ ") + str(data), ok=ok)
+            d.update(result=(tr("Stato — ") if ok else "✘ ") + str(data), ok=ok)
         elif kind == "corners":
             if ok and isinstance(data, dict):
                 d.update(corners=data, result="✔ Angoli letti dal proiettore", ok=True)
             else:
-                d.update(result=f"✘ Lettura angoli: {data}", ok=False)
+                d.update(result=tr("✘ Lettura angoli: {0}", data), ok=False)
         self.web.refresh()
 
     def _web_proj_command(self, d):
@@ -135,7 +136,7 @@ class WebMixin:
             self._web_corner_mode.add(pid)
             lab = ", ".join(f"{CORNER_LABELS[k].lower()} {a.upper()}={v}" for (k, a), v in items)
             self._web_proj_jobs[(pid, "corner")] = self.projectors.run(
-                pid, action, "; ".join(f"{k} {a} {v}" for (k, a), v in items), label=f"Angoli (web): {lab}")
+                pid, action, "; ".join(f"{k} {a} {v}" for (k, a), v in items), label=tr("Angoli (web): {0}", lab))
             busy = True
         if busy and not self._web_corner_timer.isActive():
             self._web_corner_timer.start()
@@ -178,7 +179,7 @@ class WebMixin:
             act.append(entry(inst.cue, state="run", elapsed=round(inst.elapsed, 2),
                              remaining=round(max(0.0, tot - inst.elapsed), 2) if tot else None,
                              progress=inst.progress(), paused=bool(inst.paused or ctrl.paused_all)))
-        return {"show": os.path.basename(sh.path) if sh.path else "senza titolo",
+        return {"show": os.path.basename(sh.path) if sh.path else tr("senza titolo"),
                 "go_target": sh.settings.get("go_target", "main"), "go_list": ctrl.go_list().id,
                 "playheads": {l.id: ctrl.playhead_of(l) for l in sh.lists},
                 "paused_all": bool(ctrl.paused_all), "active": act, "running_lists": sorted(running),
@@ -221,5 +222,5 @@ class WebMixin:
             return               # niente messaggio in barra di stato a ogni passo (ottica/angoli)
         else:
             return
-        self.status(f"Web ← {cmd}" + (f" ({lst.name})" if lst is not None else ""))
+        self.status(tr("Web ← {0}", cmd) + (f" ({lst.name})" if lst is not None else ""))
         self.web.refresh()

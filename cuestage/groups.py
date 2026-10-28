@@ -2,17 +2,18 @@
 
 La lista resta piatta: un gruppo occupa le righe dalla sua cue fino all'ultimo membro contiguo.
 """
+from .i18n import tr
 GROUP_MODES = {
-    "sequence": "Sequence — la prima parte col GO, le altre in sequenza con i GO",
-    "random": "Random — parte una cue a caso; il GO successivo esce",
-    "loop": "Loop — in sequenza da sole (attesa + crossfade); il GO successivo esce",
-    "rloop": "Random loop — in ordine casuale; avanzamento a tempo o col GO",
-    "all": "All — partono tutte insieme (pre-wait rispettati); il GO successivo esce",
-    "playlist": "Playlist — una dopo l'altra da sole, senza GO né pre-wait; finisce dopo l'ultima",
-    "rplaylist": "Random playlist — come Playlist, in ordine casuale (ognuna una volta)",
+    "sequence": tr("Sequence — la prima parte col GO, le altre in sequenza con i GO"),
+    "random": tr("Random — parte una cue a caso; il GO successivo esce"),
+    "loop": tr("Loop — in sequenza da sole (attesa + crossfade); il GO successivo esce"),
+    "rloop": tr("Random loop — in ordine casuale; avanzamento a tempo o col GO"),
+    "all": tr("All — partono tutte insieme (pre-wait rispettati); il GO successivo esce"),
+    "playlist": tr("Playlist — una dopo l'altra da sole, senza GO né pre-wait; finisce dopo l'ultima"),
+    "rplaylist": tr("Random playlist — come Playlist, in ordine casuale (ognuna una volta)"),
 }
-GROUP_SHORT = {"sequence": "Sequence", "random": "Random", "loop": "Loop", "rloop": "Random loop", "all": "All",
-               "playlist": "Playlist", "rplaylist": "Random playlist"}
+GROUP_SHORT = {"sequence": tr("Sequence"), "random": tr("Random"), "loop": tr("Loop"), "rloop": tr("Random loop"), "all": tr("All"),
+               "playlist": tr("Playlist"), "rplaylist": tr("Random playlist")}
 
 
 def normalize(cues):

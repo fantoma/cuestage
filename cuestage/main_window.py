@@ -1,4 +1,5 @@
 """Finestra principale di CueStage."""
+from .i18n import tr
 import os
 import time
 
@@ -55,7 +56,7 @@ class Meter(QWidget):
         w = 4 + sum(len(o.meter) * (self.BAR + self.GAP) for o in outs) + self.SEP * max(0, len(outs) - 1)
         if self.width() != max(18, w):
             self.setFixedWidth(max(18, min(w, 420)))
-            self.setToolTip("\n".join(f"{o.name}: {o.channels} canali" for o in outs))
+            self.setToolTip("\n".join(tr("{0}: {1} canali", o.name, o.channels) for o in outs))
         super().update()
 
     def paintEvent(self, e):
@@ -146,7 +147,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.ctrl.message.connect(self.status)
         self.ctrl.playheadChanged.connect(self._playhead_changed)
         self.loader.infoReady.connect(lambda p: self.model.refresh())
-        self.loader.error.connect(lambda p, e: self.status(f"Errore media «{os.path.basename(p)}»: {e}"))
+        self.loader.error.connect(lambda p, e: self.status(tr("Errore media «{0}»: {1}", os.path.basename(p), e)))
         self.osc.message.connect(self._osc_message)
         from .webserver import WebServer
         self.web = WebServer(self._web_state, self._web_lists)
@@ -215,17 +216,17 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.standby.setFont(f)
         self.standby_notes = QLabel("")
         self.standby_notes.setStyleSheet("color:#aaa;")
-        sb.addWidget(QLabel("In attesa (standby):"))
+        sb.addWidget(QLabel(tr("In attesa (standby):")))
         sb.addWidget(self.standby)
         sb.addWidget(self.standby_notes)
         bar.addLayout(sb, 1)
         # pannello a scomparsa dei proiettori (visibile se ce n'è almeno uno configurato)
         from .ui_projpanel import ProjectorPanel
-        self.proj_btn = QPushButton("📽 Proiettori ▾")
+        self.proj_btn = QPushButton(tr("📽 Proiettori ▾"))
         self.proj_btn.setCheckable(True)
         self.proj_btn.setFocusPolicy(Qt.NoFocus)
         self.proj_btn.setFixedHeight(40)
-        self.proj_btn.setToolTip("Controllo diretto dei proiettori configurati")
+        self.proj_btn.setToolTip(tr("Controllo diretto dei proiettori configurati"))
         self.proj_btn.setStyleSheet("QPushButton{padding:0 10px;font-weight:bold;}"
                                     "QPushButton:checked{background:#3a4a6a;color:white;}")
         self.proj_panel = ProjectorPanel(self.projectors, self)
@@ -238,11 +239,11 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.proj_btn.setVisible(False)
         # pannello a scomparsa dei mute dei mixer
         from .ui_mixers import MixerPanel
-        self.mix_btn = QPushButton("≣ Mixer ▾")
+        self.mix_btn = QPushButton(tr("≣ Mixer ▾"))
         self.mix_btn.setCheckable(True)
         self.mix_btn.setFocusPolicy(Qt.NoFocus)
         self.mix_btn.setFixedHeight(40)
-        self.mix_btn.setToolTip("Mute dei mixer configurati (F10)")
+        self.mix_btn.setToolTip(tr("Mute dei mixer configurati (F10)"))
         self.mix_btn.setStyleSheet("QPushButton{padding:0 10px;font-weight:bold;}"
                                    "QPushButton:checked{background:#3a4a6a;color:white;}")
         self.mix_panel = MixerPanel(self.mixers, self)
@@ -253,14 +254,14 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.mix_btn.setVisible(False)
         # volume globale (master): vale per audio e video
         mv = QVBoxLayout()
-        self.master_label = QLabel("Volume master")
+        self.master_label = QLabel(tr("Volume master"))
         self.master_label.setAlignment(Qt.AlignCenter)
         self.master_label.setStyleSheet("font-weight:bold;")
         self.master_slider = MasterSlider(Qt.Horizontal)
         self.master_slider.setRange(-600, 60)        # decimi di dB
         self.master_slider.setFixedWidth(180)
         self.master_slider.setFocusPolicy(Qt.NoFocus)
-        self.master_slider.setToolTip("Volume globale di audio e video · doppio clic = 0 dB")
+        self.master_slider.setToolTip(tr("Volume globale di audio e video · doppio clic = 0 dB"))
         self.master_slider.valueChanged.connect(self._master_changed)
         mv.addStretch(1)
         mv.addWidget(self.master_label)
@@ -271,14 +272,14 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.pfl_box = QWidget()
         pv = QVBoxLayout(self.pfl_box)
         pv.setContentsMargins(0, 0, 0, 0)
-        self.pfl_label = QLabel("Preascolto")
+        self.pfl_label = QLabel(tr("Preascolto"))
         self.pfl_label.setAlignment(Qt.AlignCenter)
         self.pfl_label.setStyleSheet("font-weight:bold;color:#3d8fd6;")
         self.pfl_slider = MasterSlider(Qt.Horizontal)
         self.pfl_slider.setRange(-600, 120)
         self.pfl_slider.setFixedWidth(130)
         self.pfl_slider.setFocusPolicy(Qt.NoFocus)
-        self.pfl_slider.setToolTip("Volume del preascolto (cuffia): solo le cue con «Preascolto» · doppio clic = 0 dB")
+        self.pfl_slider.setToolTip(tr("Volume del preascolto (cuffia): solo le cue con «Preascolto» · doppio clic = 0 dB"))
         self.pfl_slider.valueChanged.connect(self._pfl_changed)
         pv.addStretch(1)
         pv.addWidget(self.pfl_label)
@@ -287,7 +288,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         bar.addWidget(self.pfl_box)
         self.pfl_box.setVisible(False)
         # Duck: il Master ducking (riduzione dell'uscita master quando parla il microfono del ducking)
-        self.duck_btn = QPushButton("Duck")
+        self.duck_btn = QPushButton(tr("Duck"))
         self.duck_btn.setCheckable(True)
         self.duck_btn.setFocusPolicy(Qt.NoFocus)
         self.duck_btn.setFixedHeight(32)
@@ -314,9 +315,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self._dim_look = None
         self._duck_look = None
         for text, color, fn, tip in (
-            ("❚❚ Pausa", "#8a6d1a", self.pause_all, "F7"),
-            ("▶ Riprendi", "#2d5f8a", self.resume_all, "F8"),
-            ("■ STOP TUTTO", "#9b2525", self.stop_all, "Esc"),
+            (tr("❚❚ Pausa"), "#8a6d1a", self.pause_all, "F7"),
+            (tr("▶ Riprendi"), "#2d5f8a", self.resume_all, "F8"),
+            (tr("■ STOP TUTTO"), "#9b2525", self.stop_all, "Esc"),
         ):
             b = QPushButton(text)
             b.setFixedHeight(70)
@@ -369,7 +370,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         right = QWidget()
         rv = QVBoxLayout(right)
         rv.setContentsMargins(0, 0, 0, 0)
-        rv.addWidget(QLabel("Cue attive"))
+        rv.addWidget(QLabel(tr("Cue attive")))
         self.active = ActivePanel(self.ctrl)
         self.active.stopRequested.connect(lambda cid: self.ctrl.stop_cue(cid, float(self.show_data.settings.get("stop_fade", 0.3))))
         self.active.pauseRequested.connect(self._toggle_pause_cue)
@@ -378,7 +379,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         sa.setWidget(self.active)
         sa.setWidgetResizable(True)
         rv.addWidget(sa, 2)
-        rv.addWidget(QLabel("Anteprima uscita video"))
+        rv.addWidget(QLabel(tr("Anteprima uscita video")))
         self.preview = OutputPreview(self.comp, self._output_aspect)
         self.preview.selected_fn = self._current_cue
         self.preview.size_fn = self._visual_size
@@ -410,7 +411,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.local_go_btn.setStyleSheet(
             "QPushButton{background:#1f8f45;color:white;font-size:16px;font-weight:bold;border-radius:6px;}"
             "QPushButton:pressed{background:#2bc060;}QPushButton:disabled{background:#3a4a3f;color:#888;}")
-        self.local_go_btn.setToolTip("GO su questo PANEL (il GO principale resta sulla MAIN)")
+        self.local_go_btn.setToolTip(tr("GO su questo PANEL (il GO principale resta sulla MAIN)"))
         self.local_go_btn.clicked.connect(self.local_go_pressed)
         lg.addWidget(self.local_go_btn)
         self.local_stop_btn = QPushButton("STOP")
@@ -419,7 +420,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.local_stop_btn.setStyleSheet(
             "QPushButton{background:#b3261e;color:white;font-size:16px;font-weight:bold;border-radius:6px;}"
             "QPushButton:pressed{background:#e0453a;}QPushButton:disabled{background:#4a3a3a;color:#888;}")
-        self.local_stop_btn.setToolTip("Ferma solo le cue di questo PANEL (le altre liste continuano)")
+        self.local_stop_btn.setToolTip(tr("Ferma solo le cue di questo PANEL (le altre liste continuano)"))
         self.local_stop_btn.clicked.connect(self.local_stop_pressed)
         lg.addWidget(self.local_stop_btn)
         self.local_standby = QLabel()
@@ -464,7 +465,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         vsplit.setSizes([520, 380])
         root.addWidget(vsplit, 1)
         self.setCentralWidget(central)
-        self.statusBar().showMessage("Pronto")
+        self.statusBar().showMessage(tr("Pronto"))
         self.engine_label = QLabel()
         self.statusBar().addPermanentWidget(self.engine_label)
         self.cluster_btn = QPushButton("")
@@ -485,84 +486,95 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
             menu.addAction(a)
             return a
 
-        m = mb.addMenu("&File")
-        add(m, "Nuovo show", self.new_show, "Ctrl+N")
-        add(m, "Apri…", self.open_dialog, "Ctrl+O")
-        add(m, "Salva", self.save, "Ctrl+S")
-        add(m, "Salva con nome…", self.save_as, "Ctrl+Shift+S")
+        m = mb.addMenu(tr("&File"))
+        add(m, tr("Nuovo show"), self.new_show, "Ctrl+N")
+        add(m, tr("Apri…"), self.open_dialog, "Ctrl+O")
+        add(m, tr("Salva"), self.save, "Ctrl+S")
+        add(m, tr("Salva con nome…"), self.save_as, "Ctrl+Shift+S")
         m.addSeparator()
-        add(m, "Esci", self.close, "Ctrl+Q")
+        add(m, tr("Esci"), self.close, "Ctrl+Q")
 
-        m = mb.addMenu("&Cue")
+        m = mb.addMenu(tr("&Cue"))
         for t in CUE_TYPES:
-            add(m, f"Nuova cue {TYPE_LABELS[t]}", lambda _=False, t=t: self.add_cue(t))
+            add(m, tr("Nuova cue {0}", TYPE_LABELS[t]), lambda _=False, t=t: self.add_cue(t))
         m.addSeparator()
-        add(m, "Duplica", self.duplicate, "Ctrl+D")
-        add(m, "Elimina", self.delete_cues, "Delete")
-        add(m, "Sposta su", lambda: self.move_selected(-1), "Ctrl+Up")
-        add(m, "Sposta giù", lambda: self.move_selected(1), "Ctrl+Down")
-        add(m, "Rinumera tutte (lista visualizzata)", self.renumber)
+        add(m, tr("Duplica"), self.duplicate, "Ctrl+D")
+        add(m, tr("Elimina"), self.delete_cues, "Delete")
+        add(m, tr("Sposta su"), lambda: self.move_selected(-1), "Ctrl+Up")
+        add(m, tr("Sposta giù"), lambda: self.move_selected(1), "Ctrl+Down")
+        add(m, tr("Rinumera tutte (lista visualizzata)"), self.renumber)
         m.addSeparator()
-        add(m, "Raggruppa le selezionate", self.group_selected, "Ctrl+Shift+G")
-        add(m, "Espandi / compatta gruppo", lambda: self.toggle_group(), "Ctrl+E")
-        add(m, "Togli dal gruppo", self.remove_from_group)
-        add(m, "Sciogli il gruppo", self.ungroup_selected)
-        self.move_menu = m.addMenu("Sposta le selezionate in")
+        add(m, tr("Raggruppa le selezionate"), self.group_selected, "Ctrl+Shift+G")
+        add(m, tr("Espandi / compatta gruppo"), lambda: self.toggle_group(), "Ctrl+E")
+        add(m, tr("Togli dal gruppo"), self.remove_from_group)
+        add(m, tr("Sciogli il gruppo"), self.ungroup_selected)
+        self.move_menu = m.addMenu(tr("Sposta le selezionate in"))
         self.move_menu.aboutToShow.connect(lambda: self._fill_move_menu(self.move_menu))
         m.addSeparator()
-        add(m, "Nuovo PANEL", self.add_panel, "Ctrl+Shift+N")
-        add(m, "Lista successiva", lambda: self.show_list((self.show_data.view + 1) % len(self.show_data.lists)),
+        add(m, tr("Nuovo PANEL"), self.add_panel, "Ctrl+Shift+N")
+        add(m, tr("Lista successiva"), lambda: self.show_list((self.show_data.view + 1) % len(self.show_data.lists)),
             "Ctrl+PgDown")
-        add(m, "Lista precedente", lambda: self.show_list((self.show_data.view - 1) % len(self.show_data.lists)),
+        add(m, tr("Lista precedente"), lambda: self.show_list((self.show_data.view - 1) % len(self.show_data.lists)),
             "Ctrl+PgUp")
         m.addSeparator()
-        add(m, "Prova cue selezionata", lambda: self.test_cue(self._current_cue().id) if self._current_cue() else None, "Ctrl+T")
+        add(m, tr("Prova cue selezionata"), lambda: self.test_cue(self._current_cue().id) if self._current_cue() else None, "Ctrl+T")
 
-        m = mb.addMenu("&Riproduzione")
+        m = mb.addMenu(tr("&Riproduzione"))
         add(m, "GO", self.go)
-        add(m, "Stop tutto", self.stop_all)
-        add(m, "Pausa tutto", self.pause_all)
-        add(m, "Riprendi tutto", self.resume_all)
-        add(m, "Playhead alla prima cue", lambda: self.ctrl.set_playhead(0), "Home")
+        add(m, tr("Stop tutto"), self.stop_all)
+        add(m, tr("Pausa tutto"), self.pause_all)
+        add(m, tr("Riprendi tutto"), self.resume_all)
+        add(m, tr("Playhead alla prima cue"), lambda: self.ctrl.set_playhead(0), "Home")
         m.addSeparator()
-        add(m, "Crossfade alla successiva", self.crossfade_next, "F6")
-        add(m, "Testo: frase successiva", lambda: self.text_step(1), "Alt+Right")
-        add(m, "Testo: frase precedente", lambda: self.text_step(-1), "Alt+Left")
+        add(m, tr("Crossfade alla successiva"), self.crossfade_next, "F6")
+        add(m, tr("Testo: frase successiva"), lambda: self.text_step(1), "Alt+Right")
+        add(m, tr("Testo: frase precedente"), lambda: self.text_step(-1), "Alt+Left")
 
-        m = mb.addMenu("&Uscita video")
-        self.act_out_show = add(m, "Mostra finestra di uscita", self.toggle_output, "Ctrl+Shift+O")
-        self.act_full = add(m, "Schermo intero", self.toggle_fullscreen)
+        m = mb.addMenu(tr("&Uscita video"))
+        self.act_out_show = add(m, tr("Mostra finestra di uscita"), self.toggle_output, "Ctrl+Shift+O")
+        self.act_full = add(m, tr("Schermo intero"), self.toggle_fullscreen)
         self.act_full.setCheckable(True)
-        self.screens_menu = m.addMenu("Schermo di uscita")
+        self.screens_menu = m.addMenu(tr("Schermo di uscita"))
         self.screens_menu.aboutToShow.connect(self._fill_screens)
         m.addSeparator()
-        add(m, "Geometria a 4 angoli…", self.geometry_dialog, "Ctrl+G")
-        self.act_grid = add(m, "Griglia di test", self.toggle_grid)
+        add(m, tr("Geometria a 4 angoli…"), self.geometry_dialog, "Ctrl+G")
+        self.act_grid = add(m, tr("Griglia di test"), self.toggle_grid)
         self.act_grid.setCheckable(True)
-        self.act_gl = add(m, "Usa accelerazione OpenGL (al riavvio dell'uscita)", self.toggle_gl)
+        self.act_gl = add(m, tr("Usa accelerazione OpenGL (al riavvio dell'uscita)"), self.toggle_gl)
         self.act_gl.setCheckable(True)
-        self.act_vpre = add(m, "Precarica i video (cue con «Precarica»)", self._toggle_video_preload)
+        self.act_vpre = add(m, tr("Precarica i video (cue con «Precarica»)"), self._toggle_video_preload)
         self.act_vpre.setCheckable(True)
 
-        m = mb.addMenu("&Impostazioni")
-        add(m, "Audio, OSC e MIDI…", self.settings_dialog, "Ctrl+,")
-        add(m, "Ducking…", self.ducking_dialog)
-        add(m, "Proiettori…", self.projectors_dialog)
-        add(m, "Pannello proiettori", self.toggle_projector_panel, "F9")
+        m = mb.addMenu(tr("&Impostazioni"))
+        add(m, tr("Audio, OSC e MIDI…"), self.settings_dialog, "Ctrl+,")
+        add(m, tr("Ducking…"), self.ducking_dialog)
+        add(m, tr("Proiettori…"), self.projectors_dialog)
+        add(m, tr("Pannello proiettori"), self.toggle_projector_panel, "F9")
         m.addSeparator()
-        add(m, "Mixer e schede audio…", self.mixers_dialog)
-        add(m, "Pannello mixer", self.toggle_mixer_panel, "F10")
+        add(m, tr("Mixer e schede audio…"), self.mixers_dialog)
+        add(m, tr("Pannello mixer"), self.toggle_mixer_panel, "F10")
         m.addSeparator()
-        add(m, "Diventa slave…", self.become_slave)
-        self.act_leave = add(m, "Esci dalla modalità slave (diventa indipendente)", self.cluster_promote)
+        add(m, tr("Diventa slave…"), self.become_slave)
+        self.act_leave = add(m, tr("Esci dalla modalità slave (diventa indipendente)"), self.cluster_promote)
         self.act_leave.setEnabled(False)
-        add(m, "Istanze collegate…", self._cluster_clicked)
+        add(m, tr("Istanze collegate…"), self._cluster_clicked)
+        m.addSeparator()
+        from . import i18n
+        lm = m.addMenu(tr("Lingua") + ("" if i18n.language() == "en" else " / Language"))
+        from PySide6.QtGui import QActionGroup
+        grp = QActionGroup(self)
+        for code, name in sorted(i18n.available().items(), key=lambda x: x[1].lower()):
+            a = QAction(name, self, checkable=True)
+            a.setChecked(code == i18n.language())
+            a.triggered.connect(lambda _=False, code=code: self._choose_language(code))
+            grp.addAction(a)
+            lm.addAction(a)
 
-        m = mb.addMenu("&Aiuto")
-        add(m, "Comandi OSC / MIDI / tastiera", lambda: HelpDialog(self).exec())
-        add(m, "Informazioni", lambda: QMessageBox.about(
-            self, "CueStage", "<b>CueStage</b><br>Sistema di cue per spettacolo: audio, video, immagini, "
-            "fade, comandi, OSC e MIDI.<br>Python + Qt6 (PySide6) · motore audio PortAudio."))
+        m = mb.addMenu(tr("&Aiuto"))
+        add(m, tr("Comandi OSC / MIDI / tastiera"), lambda: HelpDialog(self).exec())
+        add(m, tr("Informazioni"), lambda: QMessageBox.about(
+            self, "CueStage", tr("<b>CueStage</b><br>Sistema di cue per spettacolo: audio, video, immagini, "
+            "fade, comandi, OSC e MIDI.<br>Python + Qt6 (PySide6) · motore audio PortAudio.")))
 
     def _build_shortcuts(self, widget=None):
         """Scorciatoie di regia, installate sia sulla finestra principale che sull'uscita."""
@@ -598,7 +610,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self._update_pfl_label()
         self.audio.duck.configure(s.get("ducking") or {})
         if self.audio.duck.wanted() and self.audio.duck.error:
-            self.status(f"Ducking: {self.audio.duck.error}")
+            self.status(tr("Ducking: {0}", self.audio.duck.error))
         self.duck_btn.blockSignals(True)
         self.duck_btn.setChecked(bool(self.audio.duck.cfg.get("master_on")))
         self.duck_btn.blockSignals(False)
@@ -675,9 +687,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         if self.inspector.cue is cue:
             self.inspector.set_cue(cue)
         if cue.pfl and not self.audio.preview.get("enabled"):
-            self.status("Preascolto non configurato: Impostazioni › Audio, OSC e MIDI › Preascolto")
+            self.status(tr("Preascolto non configurato: Impostazioni › Audio, OSC e MIDI › Preascolto"))
         else:
-            self.status(f"PFL {'acceso' if cue.pfl else 'spento'}: {cue.label()}")
+            self.status(tr("PFL {0}: {1}", tr('acceso') if cue.pfl else tr('spento'), cue.label()))
 
     def _pfl_changed(self, v):
         from .audio_engine import preview_settings
@@ -692,12 +704,12 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
 
     def _update_pfl_label(self):
         db = self.pfl_slider.value() / 10.0
-        self.pfl_label.setText("Preascolto  " + ("-∞ dB" if db <= MIN_DB else f"{db:+.1f} dB"))
+        self.pfl_label.setText(tr("Preascolto  ") + (tr("-∞ dB") if db <= MIN_DB else f"{db:+.1f} dB"))
 
     def _update_master_label(self):
         db = self.master_slider.value() / 10.0
-        txt = "-∞ dB" if db <= MIN_DB else f"{db:+.1f} dB"
-        self.master_label.setText(f"Volume master  {txt}")
+        txt = tr("-∞ dB") if db <= MIN_DB else f"{db:+.1f} dB"
+        self.master_label.setText(tr("Volume master  {0}", txt))
 
     def _underrun_note(self):
         """Buchi audio negli ultimi 10 s (il contatore delle schede cresce a ogni underrun)."""
@@ -716,13 +728,12 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         recent = self._underrun_note()
         parts = [self.audio.status]
         if recent:
-            parts.insert(0, f"⚠ {recent} buchi audio (underrun) negli ultimi 10 s: aumenta il buffer in "
-                            "Impostazioni › Audio")
-        parts.append(f"OSC :{self.osc.port}" if self.osc.port else "OSC off")
+            parts.insert(0, tr("⚠ {0} buchi audio (underrun) negli ultimi 10 s: aumenta il buffer in Impostazioni › Audio", recent))
+        parts.append(tr("OSC :{0}", self.osc.port) if self.osc.port else tr("OSC off"))
         n = len(self.midi.ports)
-        parts.append("MIDI off" if not n else ("MIDI on" if n == 1 else f"MIDI {n} schede"))
+        parts.append(tr("MIDI off") if not n else (tr("MIDI on") if n == 1 else tr("MIDI {0} schede", n)))
         if getattr(self, "web", None) is not None and self.web.port:
-            parts.append(f"Web :{self.web.port}")
+            parts.append(tr("Web :{0}", self.web.port))
         self.engine_label.setText("  ·  ".join(parts))
         self.engine_label.setStyleSheet("color:#e0b040;font-weight:bold;" if recent else "")
 
@@ -731,8 +742,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.statusBar().showMessage(msg, 8000)
 
     def _update_title(self):
-        name = os.path.basename(self.show_data.path) if self.show_data.path else "Senza titolo"
-        self.setWindowTitle(f"{'● ' if self.show_data.dirty else ''}{name} — CueStage")
+        name = os.path.basename(self.show_data.path) if self.show_data.path else tr("Senza titolo")
+        self.setWindowTitle(tr("{0}{1} — CueStage", '● ' if self.show_data.dirty else '', name))
 
     def _update_edit_overlay(self):
         """Con la scheda crop aperta (e non in blind) l'uscita mostra il fermo immagine in modifica."""
@@ -779,7 +790,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
             self.model.refresh_state()
         self._update_title()
         self._update_engine_label()
-        self.go_btn.setText("GO" if not self.ctrl.paused_all else "GO ❚❚")
+        self.go_btn.setText("GO" if not self.ctrl.paused_all else tr("GO ❚❚"))
         self._update_duck_btn()
         if time.monotonic() - self._preload_at > 0.25:
             self._preload_at = time.monotonic()
@@ -789,8 +800,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.show_data.settings["video_preload"] = self.act_vpre.isChecked()
         self.show_data.dirty = True
         self._preload_videos()
-        self.status("Precaricamento dei video " + ("attivo" if self.act_vpre.isChecked() else
-                                                  "spento: i video si aprono quando partono"))
+        self.status(tr("Precaricamento dei video ") + ("attivo" if self.act_vpre.isChecked() else
+                                                  tr("spento: i video si aprono quando partono")))
 
     def _preload_videos(self):
         """Sceglie i video da tenere pronti: vicini al playhead di ogni lista, poi la pagina del GRID, poi gli
@@ -824,6 +835,16 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
             add(c)
         pre.update(order)
 
+    def _choose_language(self, code):
+        from . import i18n
+        i18n.save_language(code)
+        msg = "La nuova lingua sarà usata al prossimo avvio di CueStage."
+        txt = tr("La nuova lingua sarà usata al prossimo avvio di CueStage.")
+        other = i18n.load(code).get(msg, msg)
+        if other != txt:
+            txt += "\n\n" + other
+        QMessageBox.information(self, "CueStage", txt)
+
     # =========================================================== ducking
     def ducking_dialog(self):
         from .ui_ducking import DuckingDialog
@@ -852,11 +873,11 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.set_ducking(cfg)
         d = self.audio.duck
         if on and cfg["master_db"] <= 0:
-            self.status("Duck acceso ma il Master ducking è a 0 dB: impostalo in Impostazioni › Ducking…")
+            self.status(tr("Duck acceso ma il Master ducking è a 0 dB: impostalo in Impostazioni › Ducking…"))
         elif on and d.error:
-            self.status(f"Ducking: {d.error}")
+            self.status(tr("Ducking: {0}", d.error))
         else:
-            self.status(f"Duck {'acceso' if on else 'spento'} (Master ducking −{cfg['master_db']:.1f} dB)")
+            self.status(tr("Duck {0} (Master ducking −{1:.1f} dB)", tr('acceso') if on else tr('spento'), cfg['master_db']))
 
     def set_dim(self, on=None):
         """DIM acceso/spento (None = cambia): dal tasto, da MIDI o da OSC."""
@@ -870,9 +891,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
             self.dim_btn.setChecked(on)
             self.dim_btn.blockSignals(False)
         if on and cfg["master_db"] <= 0:
-            self.status("DIM acceso ma la riduzione del master è 0 dB: impostala in Impostazioni › Ducking…")
+            self.status(tr("DIM acceso ma la riduzione del master è 0 dB: impostala in Impostazioni › Ducking…"))
         else:
-            self.status(f"DIM {'acceso' if on else 'spento'} (master −{cfg['master_db']:.1f} dB)")
+            self.status(tr("DIM {0} (master −{1:.1f} dB)", tr('acceso') if on else tr('spento'), cfg['master_db']))
 
     def set_duck(self, on=None):
         """Duck (Master ducking) acceso/spento (None = cambia): da MIDI o da OSC."""
@@ -891,10 +912,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.duck_btn.setStyleSheet(f"QPushButton{{background:{bg};color:white;font-weight:bold;"
                                     f"border-radius:6px;padding:0 10px;}}")
         db = float(d.cfg.get("master_db") or 0)
-        why = {"red": "sta intervenendo", "green": "acceso, in ascolto",
-               "warn": "acceso ma non attivo (riduzione a 0 dB o ingresso non disponibile)", "off": "spento"}[look]
-        self.duck_btn.setToolTip(f"Master ducking: abbassa l'uscita master di {db:.1f} dB quando l'ingresso del "
-                                 f"ducking supera la soglia — {why}. Tasto destro: impostazioni del ducking.")
+        why = {"red": tr("sta intervenendo"), "green": tr("acceso, in ascolto"),
+               "warn": tr("acceso ma non attivo (riduzione a 0 dB o ingresso non disponibile)"), "off": "spento"}[look]
+        self.duck_btn.setToolTip(tr("Master ducking: abbassa l'uscita master di {0:.1f} dB quando l'ingresso del ducking supera la soglia — {1}. Tasto destro: impostazioni del ducking.", db, why))
 
     def _update_dim_btn(self):
         d = self.audio.duck
@@ -907,10 +927,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.dim_btn.setStyleSheet(f"QPushButton{{background:{bg};color:white;font-weight:bold;"
                                    f"border-radius:6px;padding:0 10px;}}")
         db = float(d.cfg.get("master_db") or 0)
-        why = {"on": "acceso", "warn": "acceso ma la riduzione è 0 dB", "off": "spento"}[look]
-        self.dim_btn.setToolTip(f"DIM: abbassa l'uscita master di {db:.1f} dB (la riduzione del Master ducking) — "
-                                f"{why}. Anche da MIDI (Impostazioni › MIDI) e OSC (/dim). Tasto destro: "
-                                "impostazioni del ducking.")
+        why = {"on": "acceso", "warn": tr("acceso ma la riduzione è 0 dB"), "off": "spento"}[look]
+        self.dim_btn.setToolTip(tr("DIM: abbassa l'uscita master di {0:.1f} dB (la riduzione del Master ducking) — {1}. Anche da MIDI (Impostazioni › MIDI) e OSC (/dim). Tasto destro: impostazioni del ducking.", db, why))
 
     def closeEvent(self, e):
         if not self._confirm_discard():

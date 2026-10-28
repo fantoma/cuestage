@@ -17,6 +17,7 @@ SQ (documento «SQ MIDI Protocol», issue 5):
   - livelli: ingresso→LR 40 00–2F, gruppo→LR 40 30–3B, LR 4F 00, aux 4F 01–0C, mandate FX 4F 0D–10,
     matrici 4F 11–13, DCA 4F 20–27
 """
+from cuestage.i18n import tr
 import time
 
 from cuestage.mixers import (MixerDriver, MixerError, NrpnParser, TcpMidiLink, interp, nrpn, tcp_scan)
@@ -60,13 +61,13 @@ def _identify(host, timeout=0.8):
         link.read_for(timeout, p, stop=lambda: "sysex" in found)
         sx = found.get("sysex")
         if sx and sx.startswith(QU_SYSEX_HEAD) and len(sx) > 11:
-            return "qu", sx[8] & 0x0F, f"Qu (box {sx[10]:02X})"
+            return "qu", sx[8] & 0x0F, tr("Qu (box {0:02X})", sx[10])
         for ch in range(16):            # SQ: richiesta del mute LR su ogni canale MIDI
             link.send(nrpn(ch, 0x00, 0x44, 0, inc=0x7F))
         link.read_for(timeout, p, stop=lambda: "nrpn" in found)
         if "nrpn" in found:
             return "sq", found["nrpn"][0], "SQ"
-        return None, None, "Allen & Heath (porta 51325)"
+        return None, None, tr("Allen & Heath (porta 51325)")
     except Exception:
         return None, None, ""
     finally:
@@ -84,7 +85,7 @@ class _AHBase(MixerDriver):
 
     def _link(self):
         if not self.host:
-            raise MixerError("indirizzo IP non impostato")
+            raise MixerError(tr("indirizzo IP non impostato"))
         if self.link is None:
             self.link = TcpMidiLink(self.host, self.port)
         return self.link
@@ -103,11 +104,11 @@ QU_BASE = {"ch": 0x20, "st": 0x40, "fx": 0x08, "fxs": 0x00, "aux": 0x60, "main":
 
 class AllenHeathQu(_AHBase):
     ID = "ah_qu"
-    NAME = "Allen & Heath Qu"
-    MODELS = [("qu32", "Qu-32 / Qu-Pac / Qu-SB"), ("qu24", "Qu-24"), ("qu16", "Qu-16")]
-    NOTES = ("MIDI su TCP, porta 51325. Canale MIDI: quello impostato sul mixer (Setup › Control › MIDI). "
+    NAME = tr("Allen & Heath Qu")
+    MODELS = [("qu32", tr("Qu-32 / Qu-Pac / Qu-SB")), ("qu24", tr("Qu-24")), ("qu16", tr("Qu-16"))]
+    NOTES = (tr("MIDI su TCP, porta 51325. Canale MIDI: quello impostato sul mixer (Setup › Control › MIDI). "
              "Aux = Mix 1–10 (7 master: 1, 2, 3, 4, 5-6, 7-8, 9-10). Mandate effetti = master FX send 1–4. Gruppi e matrici non ci sono sul Qu-16. "
-             "La lettura usa «Get System State»: il mixer invia tutto il suo stato.")
+             "La lettura usa «Get System State»: il mixer invia tutto il suo stato."))
 
     @classmethod
     def sections(cls, conf=None):
@@ -174,7 +175,7 @@ class AllenHeathQu(_AHBase):
         self._sync()
         v = self.state["mute"].get(self._code(kind, n))
         if v is None:
-            raise MixerError("stato non ricevuto dal mixer")
+            raise MixerError(tr("stato non ricevuto dal mixer"))
         return v
 
     def get_mutes(self, kind):
@@ -187,7 +188,7 @@ class AllenHeathQu(_AHBase):
         self._sync(force=True)
         va = self.state["fader"].get(self._code(kind, n))
         if va is None:
-            raise MixerError("livello non ricevuto dal mixer")
+            raise MixerError(tr("livello non ricevuto dal mixer"))
         return qu_va_to_db(va)
 
     def status(self):
@@ -202,8 +203,8 @@ class AllenHeathQu(_AHBase):
             kind, ch, info = _identify(h)
             if kind == "qu" or kind is None:
                 out.append({"driver": cls.ID, "host": h, "port": AH_PORT, "name": "",
-                            "model": info or "Allen & Heath", "midi_ch": (ch or 0) + 1,
-                            "info": "" if kind else "modello da verificare (Qu o SQ?)"})
+                            "model": info or tr("Allen & Heath"), "midi_ch": (ch or 0) + 1,
+                            "info": "" if kind else tr("modello da verificare (Qu o SQ?)")})
         return out
 
 
@@ -225,14 +226,14 @@ def _add(base, n):
 
 class AllenHeathSQ(_AHBase):
     ID = "ah_sq"
-    NAME = "Allen & Heath SQ"
+    NAME = tr("Allen & Heath SQ")
     FIELDS = ("host", "port", "midi_ch", "fader_law")
     SECTIONS = [("ch", 48, {"mute", "fader"}), ("grp", 12, {"mute", "fader"}), ("fx", 8, {"mute"}),
                 ("aux", 12, {"mute", "fader"}), ("fxs", 4, {"mute", "fader"}), ("mtx", 3, {"mute", "fader"}),
                 ("main", 1, {"mute", "fader"}), ("dca", 8, {"mute", "fader"}), ("mgrp", 8, {"mute"})]
-    NOTES = ("MIDI su TCP, porta 51325. Canale MIDI: Utility › General › MIDI. Imposta la stessa «NRPN Fader Law» "
+    NOTES = (tr("MIDI su TCP, porta 51325. Canale MIDI: Utility › General › MIDI. Imposta la stessa «NRPN Fader Law» "
              "del mixer (consigliata: lineare, esatta; «audio» è approssimata). Livello dei canali e dei gruppi = "
-             "mandata al LR.")
+             "mandata al LR."))
 
     def _law(self):
         return "audio" if (self.conf.get("fader_law") or "linear") == "audio" else "linear"
@@ -262,7 +263,7 @@ class AllenHeathSQ(_AHBase):
         link.send(nrpn(self.ch, mb, lb, 0, inc=0x7F))
         link.read_for(1.0, NrpnParser(on_nrpn=par), stop=lambda: "v" in res)
         if "v" not in res:
-            raise MixerError("nessuna risposta (canale MIDI giusto?)")
+            raise MixerError(tr("nessuna risposta (canale MIDI giusto?)"))
         return res["v"]
 
     def set_mute(self, kind, n, muted):
@@ -287,7 +288,7 @@ class AllenHeathSQ(_AHBase):
         return self._v_to_db((vc << 7) + vf)
 
     def status(self):
-        return {"canale MIDI": self.ch + 1, "LR": "muto" if self.get_mute("main", 1) else "acceso"}
+        return {"canale MIDI": self.ch + 1, "LR": tr("muto") if self.get_mute("main", 1) else tr("acceso")}
 
     @classmethod
     def discover(cls, local_ips, timeout=1.5):

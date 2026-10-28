@@ -1,4 +1,5 @@
 """Utility media: durata (ffprobe), decodifica audio (ffmpeg), forme d'onda, curve."""
+from .i18n import tr
 import json
 import math
 import os
@@ -36,7 +37,7 @@ def probe(path):
         )
         out = p.stdout
         if p.returncode != 0 or not out:
-            LAST_PROBE_ERROR = f"ffprobe uscita {p.returncode}: {p.stderr.decode(errors='replace').strip()[:300]}"
+            LAST_PROBE_ERROR = tr("ffprobe uscita {0}: {1}", p.returncode, p.stderr.decode(errors='replace').strip()[:300])
         data = json.loads(out or b"{}")
         info["duration"] = float(data.get("format", {}).get("duration") or 0.0)
         for st in data.get("streams", []):
@@ -133,7 +134,7 @@ def decode_audio(path, sr=SR, channels=None):
         a = _decode_wav(path, sr)
         if a is not None:
             return a
-        raise RuntimeError(f"ffmpeg non trovato: {install_hint('ffmpeg')}")
+        raise RuntimeError(tr("ffmpeg non trovato: {0}", install_hint('ffmpeg')))
     if channels is None:
         info = probe(path)
         if not info["has_audio"]:
@@ -155,7 +156,7 @@ def decode_audio(path, sr=SR, channels=None):
         if a is not None:
             return a
         raise RuntimeError((p.stderr.decode(errors="replace").strip() if p is not None else err)
-                           or "decodifica fallita")
+                           or tr("decodifica fallita"))
     a = np.frombuffer(p.stdout, dtype=np.int16)
     a = a[: (len(a) // ch) * ch].reshape(-1, ch)
     return np.ascontiguousarray(a)

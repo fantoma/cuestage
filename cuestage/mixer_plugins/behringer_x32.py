@@ -12,6 +12,7 @@ Protocollo OSC del X32/M32 (lo stesso per le due famiglie):
     /dca/1/config/name); i mute group non hanno nome
 Sezioni: 32 canali, 8 aux in, 8 ritorni FX, 16 mix bus (aux), 6 matrici, master stereo, 8 DCA, 6 mute group.
 """
+from cuestage.i18n import tr
 from cuestage.mixers import MixerDriver, MixerError, OscLink, db_to_x32, x32_to_db, osc_decode, osc_encode, udp_discover
 
 PATHS = {"ch": "/ch/{:02d}/mix", "auxin": "/auxin/{:02d}/mix", "fx": "/fxrtn/{:02d}/mix",
@@ -20,14 +21,14 @@ PATHS = {"ch": "/ch/{:02d}/mix", "auxin": "/auxin/{:02d}/mix", "fx": "/fxrtn/{:0
 
 class BehringerX32(MixerDriver):
     ID = "behringer_x32"
-    NAME = "Behringer X32"
+    NAME = tr("Behringer X32")
     DEFAULT_PORT = 10023
     FIELDS = ("host", "port")
     SECTIONS = [("ch", 32, {"mute", "fader"}), ("auxin", 8, {"mute", "fader"}), ("fx", 8, {"mute", "fader"}),
                 ("aux", 16, {"mute", "fader"}), ("mtx", 6, {"mute", "fader"}), ("main", 1, {"mute", "fader"}),
                 ("dca", 8, {"mute", "fader"}), ("mgrp", 6, {"mute"})]
-    NOTES = ("OSC su UDP 10023. Nessuna impostazione sul mixer: basta che sia in rete (stessa sottorete). "
-             "Aux = mix bus 1–16; Ritorni FX = FX return 1–8; Mute group 1–6.")
+    NOTES = (tr("OSC su UDP 10023. Nessuna impostazione sul mixer: basta che sia in rete (stessa sottorete). "
+             "Aux = mix bus 1–16; Ritorni FX = FX return 1–8; Mute group 1–6."))
     MODEL_KEYS = ("X32",)
     NAMES = True
 
@@ -37,7 +38,7 @@ class BehringerX32(MixerDriver):
 
     def _link(self):
         if not self.host:
-            raise MixerError("indirizzo IP non impostato")
+            raise MixerError(tr("indirizzo IP non impostato"))
         if self.link is None:
             self.link = OscLink(self.host, self.port)
         return self.link
@@ -79,7 +80,7 @@ class BehringerX32(MixerDriver):
         self.check(kind, n, "fader")
         a = self._link().query(self._base(kind, n) + "/fader")
         if not a:
-            raise MixerError("risposta vuota")
+            raise MixerError(tr("risposta vuota"))
         return x32_to_db(a[0])
 
     def status(self):
@@ -117,6 +118,6 @@ class BehringerX32(MixerDriver):
 
 class MidasM32(BehringerX32):
     ID = "midas_m32"
-    NAME = "Midas M32"
-    NOTES = ("OSC su UDP 10023 (stesso protocollo del Behringer X32). Aux = mix bus 1–16; "
-             "Ritorni FX = FX return 1–8; Mute group 1–6.")
+    NAME = tr("Midas M32")
+    NOTES = (tr("OSC su UDP 10023 (stesso protocollo del Behringer X32). Aux = mix bus 1–16; "
+             "Ritorni FX = FX return 1–8; Mute group 1–6."))

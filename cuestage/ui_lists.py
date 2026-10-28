@@ -1,4 +1,5 @@
 """Tab delle liste di cue: MAIN + PANEL, con il selettore della lista su cui agisce GO."""
+from .i18n import tr
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (QButtonGroup, QHBoxLayout, QLabel, QMenu, QPushButton, QTabBar, QToolButton,
@@ -51,14 +52,14 @@ class ListTabs(QWidget):
                                "QTabBar::tab:selected{background:#3a4a6a;color:white;}")
         h.addWidget(self.bar)
         self.add_btn = QToolButton()
-        self.add_btn.setText("+ PANEL")
-        self.add_btn.setToolTip("Nuova lista di cue (PANEL)")
+        self.add_btn.setText(tr("+ PANEL"))
+        self.add_btn.setToolTip(tr("Nuova lista di cue (PANEL)"))
         self.add_btn.setFocusPolicy(Qt.NoFocus)
         self.add_btn.clicked.connect(self.addRequested.emit)
         h.addWidget(self.add_btn)
         self.add_grid_btn = QToolButton()
-        self.add_grid_btn.setText("+ GRID")
-        self.add_grid_btn.setToolTip("Nuovo PANEL a caselle (GRID): cue da cliccare o da tastiera, su più pagine")
+        self.add_grid_btn.setText(tr("+ GRID"))
+        self.add_grid_btn.setToolTip(tr("Nuovo PANEL a caselle (GRID): cue da cliccare o da tastiera, su più pagine"))
         self.add_grid_btn.setFocusPolicy(Qt.NoFocus)
         self.add_grid_btn.clicked.connect(self.addGridRequested.emit)
         h.addWidget(self.add_grid_btn)
@@ -84,10 +85,10 @@ class ListTabs(QWidget):
                 self.bar.setTabIcon(i, _dot(list_color(i)))
             else:
                 self.bar.setTabIcon(i, QIcon())
-            self.bar.setTabToolTip(i, ("Lista principale" if i == 0 else "PANEL · doppio clic: rinomina · "
-                                       "tasto destro: altre azioni")
-                                   + ("\nGO agisce su questa lista" if i == go_index else "")
-                                   + ("\nCue in riproduzione" if i in running else ""))
+            self.bar.setTabToolTip(i, (tr("Lista principale") if i == 0 else tr("PANEL · doppio clic: rinomina · "
+                                       "tasto destro: altre azioni"))
+                                   + (tr("\nGO agisce su questa lista") if i == go_index else "")
+                                   + (tr("\nCue in riproduzione") if i in running else ""))
         if self.bar.currentIndex() != current:
             self.bar.setCurrentIndex(current)
         self._guard = False
@@ -99,21 +100,21 @@ class ListTabs(QWidget):
     def _menu(self, pos):
         i = self.bar.tabAt(pos)
         m = QMenu(self)
-        m.addAction("Nuovo PANEL", self.addRequested.emit)
-        m.addAction("Nuovo PANEL GRID (caselle)", self.addGridRequested.emit)
+        m.addAction(tr("Nuovo PANEL"), self.addRequested.emit)
+        m.addAction(tr("Nuovo PANEL GRID (caselle)"), self.addGridRequested.emit)
         if i > 0:
             m.addSeparator()
-            m.addAction("Rinomina…", lambda: self.renameRequested.emit(i))
+            m.addAction(tr("Rinomina…"), lambda: self.renameRequested.emit(i))
             if i < len(self.kinds) and self.kinds[i] == "grid":
-                m.addAction("Mostra come lista", lambda: self.kindRequested.emit(i, "list"))
+                m.addAction(tr("Mostra come lista"), lambda: self.kindRequested.emit(i, "list"))
             else:
-                m.addAction("Mostra come griglia (GRID)", lambda: self.kindRequested.emit(i, "grid"))
-            a = m.addAction("Sposta a sinistra", lambda: self.moveRequested.emit(i, -1))
+                m.addAction(tr("Mostra come griglia (GRID)"), lambda: self.kindRequested.emit(i, "grid"))
+            a = m.addAction(tr("Sposta a sinistra"), lambda: self.moveRequested.emit(i, -1))
             a.setEnabled(i > 1)
-            a = m.addAction("Sposta a destra", lambda: self.moveRequested.emit(i, 1))
+            a = m.addAction(tr("Sposta a destra"), lambda: self.moveRequested.emit(i, 1))
             a.setEnabled(i < self.bar.count() - 1)
             m.addSeparator()
-            m.addAction("Elimina PANEL…", lambda: self.deleteRequested.emit(i))
+            m.addAction(tr("Elimina PANEL…"), lambda: self.deleteRequested.emit(i))
         m.exec(self.bar.mapToGlobal(pos))
 
 
@@ -126,15 +127,15 @@ class GoTarget(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
         v.setSpacing(2)
-        lab = QLabel("GO su")
+        lab = QLabel(tr("GO su"))
         lab.setAlignment(Qt.AlignCenter)
         lab.setStyleSheet("color:#888;font-size:11px;")
         v.addWidget(lab)
         self.group = QButtonGroup(self)
         self.btns = {}
-        for key, text, tip in (("main", "MAIN", "GO avvia sempre la cue in standby della MAIN, "
-                                                 "qualunque lista si stia guardando"),
-                               ("panel", "PANEL", "GO segue la lista selezionata nei tab (MAIN o PANEL)")):
+        for key, text, tip in (("main", "MAIN", tr("GO avvia sempre la cue in standby della MAIN, "
+                                                 "qualunque lista si stia guardando")),
+                               ("panel", "PANEL", tr("GO segue la lista selezionata nei tab (MAIN o PANEL)"))):
             b = QPushButton(text)
             b.setCheckable(True)
             b.setFocusPolicy(Qt.NoFocus)

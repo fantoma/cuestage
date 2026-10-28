@@ -3,6 +3,7 @@
 Modalità byte, correzione d'errore M, versioni 1–20 (fino a ~ 400 caratteri). Basato sull'algoritmo
 di riferimento di Project Nayuki (licenza MIT). Uso: qr_matrix("http://…") -> lista di righe di bool.
 """
+from .i18n import tr
 
 # correzione M: codeword ECC per blocco e numero di blocchi, per versione (indice = versione)
 _ECC_PER_BLOCK_M = (-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26)
@@ -71,7 +72,7 @@ def qr_matrix(text):
         if 4 + cc_bits + len(data) * 8 <= _data_codewords(ver) * 8:
             break
     else:
-        raise ValueError("testo troppo lungo per il QR code")
+        raise ValueError(tr("testo troppo lungo per il QR code"))
     cap = _data_codewords(ver) * 8
     bits = []
 

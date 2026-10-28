@@ -1,4 +1,5 @@
 """Barra dei preset con nome della singola cue."""
+from ..i18n import tr
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
     QComboBox, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton,
@@ -22,7 +23,7 @@ class PresetBar(QWidget):
         self.cue = cue
         h = QHBoxLayout(self)
         h.setContentsMargins(0, 0, 0, 0)
-        lab = QLabel(PRESET_LABELS[kind] + " di questa cue:")
+        lab = QLabel(PRESET_LABELS[kind] + tr(" di questa cue:"))
         lab.setStyleSheet("font-weight:bold;")
         h.addWidget(lab)
         self.combo = QComboBox()
@@ -32,11 +33,11 @@ class PresetBar(QWidget):
         self.use_lab.setStyleSheet("color:#888;")
         h.addWidget(self.use_lab)
         for text, tip, fn in (
-            ("Applica", "Copia i valori del preset in questa cue", self.apply),
-            ("Salva come…", "Crea un nuovo preset con i valori attuali di questa cue", self.save_new),
-            ("Aggiorna", "Sovrascrive il preset selezionato con i valori attuali", self.update_sel),
-            ("Rinomina…", "Rinomina il preset selezionato", self.rename),
-            ("Elimina", "Elimina il preset selezionato", self.delete),
+            (tr("Applica"), tr("Copia i valori del preset in questa cue"), self.apply),
+            (tr("Salva come…"), tr("Crea un nuovo preset con i valori attuali di questa cue"), self.save_new),
+            (tr("Aggiorna"), tr("Sovrascrive il preset selezionato con i valori attuali"), self.update_sel),
+            (tr("Rinomina…"), tr("Rinomina il preset selezionato"), self.rename),
+            (tr("Elimina"), tr("Elimina il preset selezionato"), self.delete),
         ):
             b = QPushButton(text)
             b.setToolTip(tip)
@@ -55,7 +56,7 @@ class PresetBar(QWidget):
             return
         na, nb, f = state
         cur = nb if f >= 0.999 else na
-        self.use_lab.setText("▸ in uso: " + kfm.describe(state))
+        self.use_lab.setText(tr("▸ in uso: ") + kfm.describe(state))
         self.use_lab.setStyleSheet("color:#ffaa28;" if self.kind == "visual" else "color:#50c8ff;")
         if cur != kfm.BASE and cur in self.presets():
             self.combo.setCurrentText(cur)
@@ -85,12 +86,12 @@ class PresetBar(QWidget):
             self.applied.emit()
 
     def save_new(self):
-        n, ok = QInputDialog.getText(self, "Nuovo preset", "Nome del preset:")
+        n, ok = QInputDialog.getText(self, tr("Nuovo preset"), tr("Nome del preset:"))
         n = n.strip()
         if not ok or not n:
             return
         if n in self.presets() and QMessageBox.question(
-                self, "Preset esistente", f"Il preset «{n}» esiste già. Sovrascriverlo?") != QMessageBox.Yes:
+                self, tr("Preset esistente"), tr("Il preset «{0}» esiste già. Sovrascriverlo?", n)) != QMessageBox.Yes:
             return
         self.presets()[n] = self.cue.preset_values(self.kind)
         self.reload(n)
@@ -106,7 +107,7 @@ class PresetBar(QWidget):
         old = self._sel()
         if not old:
             return
-        n, ok = QInputDialog.getText(self, "Rinomina preset", "Nuovo nome:", text=old)
+        n, ok = QInputDialog.getText(self, tr("Rinomina preset"), tr("Nuovo nome:"), text=old)
         n = n.strip()
         if not ok or not n or n == old:
             return
@@ -123,7 +124,7 @@ class PresetBar(QWidget):
 
     def delete(self):
         n = self._sel()
-        if n and QMessageBox.question(self, "Elimina preset", f"Eliminare il preset «{n}»?") == QMessageBox.Yes:
+        if n and QMessageBox.question(self, tr("Elimina preset"), tr("Eliminare il preset «{0}»?", n)) == QMessageBox.Yes:
             del self.presets()[n]
             self.reload()
             self._dirty()

@@ -1,5 +1,6 @@
 """Motore audio: mixer sample-accurate con loop, curve di volume, fade, più schede audio
 contemporaneamente e matrice di routing (canali sorgente × canali della scheda) per ogni voce."""
+from .i18n import tr
 import re
 import threading
 import time
@@ -18,9 +19,9 @@ BLOCK = 512
 # dimensione del buffer audio: (campioni per blocco, latenza richiesta in s). Più grande = meno rischio di
 # «underrun» (buchi nell'audio quando il computer è impegnato, es. col video), ma partenza un po' più lenta.
 BUFFERS = {"bassa": (512, 0.05), "normale": (1024, 0.12), "alta": (2048, 0.25), "massima": (4096, 0.5)}
-BUFFER_LABELS = {"bassa": "Bassa latenza (512 · ~50 ms) — solo per computer scarichi",
-                 "normale": "Normale (1024 · ~120 ms)", "alta": "Sicura (2048 · ~250 ms)",
-                 "massima": "Massima sicurezza (4096 · ~500 ms)"}
+BUFFER_LABELS = {"bassa": tr("Bassa latenza (512 · ~50 ms) — solo per computer scarichi"),
+                 "normale": tr("Normale (1024 · ~120 ms)"), "alta": tr("Sicura (2048 · ~250 ms)"),
+                 "massima": tr("Massima sicurezza (4096 · ~500 ms)")}
 
 
 # preascolto: scheda e 2 canali (cuffia del tecnico) a cui vanno le cue con «Preascolto», al posto delle uscite
@@ -203,10 +204,10 @@ def alsa_pcm_owner(card, dev):
         return ""
     m = re.search(r"owner_pid\s*:\s*(\d+)", st)
     if not m:
-        return "un altro programma"
+        return tr("un altro programma")
     try:
         with open(f"/proc/{m.group(1)}/comm", encoding="utf-8") as f:
-            return f"{f.read().strip()} (pid {m.group(1)})"
+            return tr("{0} (pid {1})", f.read().strip(), m.group(1))
     except OSError:
         return f"pid {m.group(1)}"
 
@@ -265,7 +266,7 @@ class AudioEngine:
         self.null_thread = None
         self.running = False
         self.messages = []           # avvisi per l'interfaccia
-        self.status = "spento"
+        self.status = tr("spento")
         from .ducking import Ducker
         self.duck = Ducker()         # ingresso del ducking (microfono → riduzione delle cue / del master)
         self._mduck = {}             # chiave uscita -> ultimo guadagno del Master ducking (rampa senza scalini)
@@ -306,7 +307,7 @@ class AudioEngine:
         if self.duck.wanted():
             self.duck.open()
             if self.duck.error:
-                self.messages.append(f"Ducking: {self.duck.error}")
+                self.messages.append(tr("Ducking: {0}", self.duck.error))
         self._update_status()
 
     def stop(self):
@@ -366,10 +367,9 @@ class AudioEngine:
                 name = key.split('|', 1)[-1]
                 busy = [b for b in busy_devices() if b["name"] == name]
                 if busy:
-                    self.messages.append(f"Scheda audio «{name}» occupata da {busy[0]['owner']}: uso la scheda "
-                                         "predefinita (chiudi quel programma o disattiva la scheda in PipeWire)")
+                    self.messages.append(tr("Scheda audio «{0}» occupata da {1}: uso la scheda predefinita (chiudi quel programma o disattiva la scheda in PipeWire)", name, busy[0]['owner']))
                 else:
-                    self.messages.append(f"Scheda audio «{name}» non trovata: uso la scheda predefinita")
+                    self.messages.append(tr("Scheda audio «{0}» non trovata: uso la scheda predefinita", name))
                 if dev_id and dev_id != self.default_id:
                     o = self.ensure_output(None)
                 else:
@@ -383,11 +383,11 @@ class AudioEngine:
 
     def _open(self, key, dev):
         ch = self.channels_for(dev)
-        name = dev["name"] if dev else "Predefinita di sistema"
+        name = dev["name"] if dev else tr("Predefinita di sistema")
         o = Output(key, name, ch)
         if sd is None:
             o.null = True
-            self._note_null("PortAudio non installato")
+            self._note_null(tr("PortAudio non installato"))
             return o
         try:
             block, lat = BUFFERS.get(self.buffer, BUFFERS["normale"])
@@ -402,24 +402,24 @@ class AudioEngine:
             o.stream.start()
             if dev is None:
                 try:
-                    o.name = f"Sistema ({sd.query_devices(o.stream.device)['name']})"
+                    o.name = tr("Sistema ({0})", sd.query_devices(o.stream.device)['name'])
                 except Exception:
                     pass
         except Exception as e:
             o.stream = None
             o.null = True
-            self.messages.append(f"Impossibile aprire «{name}» con {ch} canali ({e}): uscita silenziosa")
+            self.messages.append(tr("Impossibile aprire «{0}» con {1} canali ({2}): uscita silenziosa", name, ch, e))
         return o
 
     def _note_null(self, why):
-        self.status = f"{why} – modalità silenziosa"
+        self.status = tr("{0} – modalità silenziosa", why)
 
     def _update_status(self):
         parts = []
         for o in self.outputs.values():
-            tag = " (silenziosa)" if o.null else ""
+            tag = tr(" (silenziosa)") if o.null else ""
             parts.append(f"{o.name} {o.channels}ch{tag}")
-        self.status = "Audio: " + " + ".join(dict.fromkeys(parts)) if parts else "Audio spento"
+        self.status = tr("Audio: ") + " + ".join(dict.fromkeys(parts)) if parts else tr("Audio spento")
 
     def resolve(self, dev_id):
         """(nome, canali, trovata) della scheda che userebbe una cue con questa scelta, senza aprirla."""
@@ -429,13 +429,13 @@ class AudioEngine:
             # un'uscita registrata sotto un'altra chiave è un ripiego: la scheda richiesta manca
             return o.name, o.channels, o.key == key
         if key == SYSTEM:
-            return "Predefinita di sistema", self.channels_for(None), True
+            return tr("Predefinita di sistema"), self.channels_for(None), True
         dev = self.find_device(key)
         if dev is None:
             if dev_id and dev_id != self.default_id:
                 n, c, _ = self.resolve(None)
             else:
-                n, c = "Predefinita di sistema", self.channels_for(None)
+                n, c = tr("Predefinita di sistema"), self.channels_for(None)
             return n, c, False
         return dev["name"], self.channels_for(dev), True
 
@@ -447,7 +447,7 @@ class AudioEngine:
                 sd._terminate()
                 sd._initialize()
             except Exception as e:
-                self.messages.append(f"Rilettura schede audio non riuscita: {e}")
+                self.messages.append(tr("Rilettura schede audio non riuscita: {0}", e))
         self.start(self.default_id, self.channel_overrides)
 
     def underruns(self):

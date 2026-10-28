@@ -10,6 +10,7 @@ con gli stessi semi casuali, così i gruppi random scelgono le stesse cue.
 Protocollo: frame = 4 byte di lunghezza + JSON (UTF-8); un frame con "bin": n è seguito da n byte di dati.
 Ricerca: datagramma UDP «CUESTAGE-MASTER?» sulla porta TCP+1 → risposta JSON del master.
 """
+from .i18n import tr
 import hashlib
 import json
 import os
@@ -51,7 +52,7 @@ def _recv_exact(sock, n):
     while len(buf) < n:
         chunk = sock.recv(min(n - len(buf), 1 << 20))
         if not chunk:
-            raise ConnectionError("connessione chiusa")
+            raise ConnectionError(tr("connessione chiusa"))
         buf += chunk
     return bytes(buf)
 
@@ -59,7 +60,7 @@ def _recv_exact(sock, n):
 def recv_frame(sock):
     (n,) = struct.unpack(">I", _recv_exact(sock, 4))
     if n > 64 * 1024 * 1024:
-        raise ConnectionError("frame troppo grande")
+        raise ConnectionError(tr("frame troppo grande"))
     obj = json.loads(_recv_exact(sock, n).decode("utf-8"))
     payload = _recv_exact(sock, obj["bin"]) if obj.get("bin") else None
     return obj, payload
@@ -230,7 +231,7 @@ class ClusterHub(QObject):
                 if self._depth == 0 and _name not in GUARDED:
                     if self.role == "slave" and self.mode == "redundancy" and not self._applying \
                             and _name not in ("stop_all",) and not self.lost:
-                        self.status.emit("Ridondanza: i comandi arrivano dal master")
+                        self.status.emit(tr("Ridondanza: i comandi arrivano dal master"))
                         return None
                     if self.role == "master" and self.clients:
                         self._broadcast_cmd(_name, a, k)
@@ -298,7 +299,7 @@ class ClusterHub(QObject):
         try:
             getattr(self.ctrl, fn)(*a, **k)
         except Exception as e:
-            self.status.emit(f"Comando del master «{fn}» non eseguito: {e}")
+            self.status.emit(tr("Comando del master «{0}» non eseguito: {1}", fn, e))
         finally:
             self._applying = False
 
@@ -312,7 +313,7 @@ class ClusterHub(QObject):
             srv.bind(("0.0.0.0", int(port)))
             srv.listen(8)
         except OSError as e:
-            self.status.emit(f"Istanze secondarie: porta {port} non disponibile ({e})")
+            self.status.emit(tr("Istanze secondarie: porta {0} non disponibile ({1})", port, e))
             return False
         self.server, self.port, self.role = srv, int(port), "master"
         threading.Thread(target=self._accept_loop, args=(srv,), daemon=True, name="cluster-accept").start()
@@ -355,7 +356,7 @@ class ClusterHub(QObject):
             if data.strip() == DISCOVER_MSG:
                 sh = self.show_fn() if self.show_fn else None
                 info = {"app": "CueStage", "id": self.instance_id, "name": self.name, "port": self.port,
-                        "show": os.path.basename(sh.path) if sh is not None and sh.path else "senza titolo",
+                        "show": os.path.basename(sh.path) if sh is not None and sh.path else tr("senza titolo"),
                         "slaves": sum(1 for c in self.clients.values() if c.get("accepted"))}
                 try:
                     u.sendto(json.dumps(info).encode("utf-8"), addr)
@@ -393,7 +394,7 @@ class ClusterHub(QObject):
             except OSError:
                 pass
             if c.get("accepted"):
-                self.status.emit(f"Istanza secondaria «{c['name']}» scollegata")
+                self.status.emit(tr("Istanza secondaria «{0}» scollegata", c['name']))
             self.clientsChanged.emit()
 
     def answer(self, cid, ok):
@@ -409,8 +410,8 @@ class ClusterHub(QObject):
         try:
             hello, _ = recv_frame(sock)
             if hello.get("t") != "hello" or hello.get("proto") != PROTO:
-                self._send_client(cid, {"t": "reject", "why": "versione del protocollo diversa"})
-                raise ConnectionError("hello non valido")
+                self._send_client(cid, {"t": "reject", "why": tr("versione del protocollo diversa")})
+                raise ConnectionError(tr("hello non valido"))
             c.update(name=str(hello.get("name") or c["addr"]), mode=hello.get("mode") or "slave")
             ev = {"ev": threading.Event(), "ok": False}
             self._pending[cid] = ev
@@ -418,13 +419,13 @@ class ClusterHub(QObject):
             ev["ev"].wait(120)
             self._pending.pop(cid, None)
             if not ev["ok"]:
-                self._send_client(cid, {"t": "reject", "why": "richiesta rifiutata dal master"})
+                self._send_client(cid, {"t": "reject", "why": tr("richiesta rifiutata dal master")})
                 raise ConnectionError("rifiutato")
             c["accepted"] = True
             self._send_client(cid, {"t": "welcome", "name": self.name, "id": self.instance_id,
                                     "edit": self.allow_slave_edit})
             self.clientsChanged.emit()
-            self.status.emit(f"Istanza secondaria «{c['name']}» collegata ({c['mode']})")
+            self.status.emit(tr("Istanza secondaria «{0}» collegata ({1})", c['name'], c['mode']))
             while cid in self.clients:
                 msg, _ = recv_frame(sock)
                 c["last"] = time.monotonic()
@@ -480,7 +481,7 @@ class ClusterHub(QObject):
             os.replace(dest + ".part", dest)
             self._send_client(cid, {"t": "put_ok", "local": local, "path": dest})
         else:
-            self._send_client(cid, {"t": "put_err", "local": local, "why": "aggiornamento del progetto non consentito"})
+            self._send_client(cid, {"t": "put_err", "local": local, "why": tr("aggiornamento del progetto non consentito")})
 
     def _show_message(self):
         sh = self.show_fn()
@@ -509,7 +510,7 @@ class ClusterHub(QObject):
         sh = self.show_fn()
         allowed = media_files(sh)
         if path not in allowed:
-            self._send_client(cid, {"t": "file_err", "path": path, "why": "file non usato dallo show"})
+            self._send_client(cid, {"t": "file_err", "path": path, "why": tr("file non usato dallo show")})
             return
         try:
             size = os.path.getsize(path)
@@ -591,13 +592,13 @@ class ClusterHub(QObject):
     def _slave_loop(self, host, port):
         sock = None
         try:
-            self.syncProgress.emit(f"Collegamento a {host}:{port}…", 0, 0)
+            self.syncProgress.emit(tr("Collegamento a {0}:{1}…", host, port), 0, 0)
             sock = socket.create_connection((host, port), timeout=5)
             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             self.sock = sock
             send_frame(sock, self.slock, {"t": "hello", "proto": PROTO, "name": self.name, "mode": self.mode,
                                           "id": self.instance_id})
-            self.syncProgress.emit("In attesa della conferma sul master…", 0, 0)
+            self.syncProgress.emit(tr("In attesa della conferma sul master…"), 0, 0)
             sock.settimeout(130)
             msg, _ = recv_frame(sock)
             if msg.get("t") != "welcome":
@@ -621,7 +622,7 @@ class ClusterHub(QObject):
             if self.role != "slave":
                 self.syncDone.emit(False, str(e))
             elif self.sock is sock:
-                self.status.emit(f"Collegamento al master interrotto: {e}")
+                self.status.emit(tr("Collegamento al master interrotto: {0}", e))
                 if not self.lost:                          # connessione chiusa = master perso subito
                     self.lost = True
                     self.masterLost.emit()
@@ -667,7 +668,7 @@ class ClusterHub(QObject):
             return True
         if t == "edit_refused":
             self.can_edit = False
-            self.status.emit("Il master non accetta modifiche dalle secondarie")
+            self.status.emit(tr("Il master non accetta modifiche dalle secondarie"))
             return True
         return False
 
@@ -699,7 +700,7 @@ class ClusterHub(QObject):
             local = os.path.join(self.media_dir, f["rel"])
             os.makedirs(os.path.dirname(local), exist_ok=True)
             tmp = local + ".part"
-            self.syncProgress.emit(f"File {i}/{len(need)}: {os.path.basename(f['rel'])}", done, total)
+            self.syncProgress.emit(tr("File {0}/{1}: {2}", i, len(need), os.path.basename(f['rel'])), done, total)
             self._send({"t": "get_file", "path": f["path"]})
             out = None
             while True:
@@ -719,7 +720,7 @@ class ClusterHub(QObject):
                 elif t == "chunk" and out is not None:
                     out.write(payload or b"")
                     done += len(payload or b"")
-                    self.syncProgress.emit(f"File {i}/{len(need)}: {os.path.basename(f['rel'])}", done, total)
+                    self.syncProgress.emit(tr("File {0}/{1}: {2}", i, len(need), os.path.basename(f['rel'])), done, total)
                 elif t == "file_end":
                     if out is not None:
                         out.close()
@@ -739,8 +740,8 @@ class ClusterHub(QObject):
                 "errors": errors, "downloaded": len(need), "files": len(files), "update": bool(msg.get("update"))}
         self.showReceived.emit(msg.get("data"), info)
         if first:
-            self.syncDone.emit(True, f"{len(need)} file scaricati su {len(files)}"
-                                     + (f", {len(errors)} errori" if errors else ""))
+            self.syncDone.emit(True, tr("{0} file scaricati su {1}", len(need), len(files))
+                                     + (tr(", {0} errori", len(errors)) if errors else ""))
 
     # ------------------------------------------------------------------ slave → master
     def push_show(self, show):
@@ -769,14 +770,14 @@ class ClusterHub(QObject):
             if not self.copy_settings:
                 data.pop("settings", None)
             self._send({"t": "show_up", "data": data})
-            self.status.emit("Modifiche inviate al master")
+            self.status.emit(tr("Modifiche inviate al master"))
         except (OSError, RuntimeError) as e:
-            self.status.emit(f"Modifiche non inviate al master: {e}")
+            self.status.emit(tr("Modifiche non inviate al master: {0}", e))
 
     def _upload(self, path):
         ev = [threading.Event(), None]
         self._put_wait[path] = ev
-        self.status.emit(f"Invio al master: {os.path.basename(path)}…")
+        self.status.emit(tr("Invio al master: {0}…", os.path.basename(path)))
         self._send({"t": "put_begin", "name": os.path.basename(path), "local": path,
                     "size": os.path.getsize(path)})
         with open(path, "rb") as f:
@@ -787,7 +788,7 @@ class ClusterHub(QObject):
                 send_frame(self.sock, self.slock, {"t": "put_chunk"}, block)
         self._send({"t": "put_end", "local": path})
         if not ev[0].wait(60):
-            raise RuntimeError(f"il master non conferma {os.path.basename(path)}")
+            raise RuntimeError(tr("il master non conferma {0}", os.path.basename(path)))
         self._put_wait.pop(path, None)
         if isinstance(ev[1], Exception):
             raise ev[1]

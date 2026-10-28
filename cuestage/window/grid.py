@@ -1,4 +1,5 @@
 """PANEL GRID e scorciatoie da tastiera delle cue (parte di MainWindow)."""
+from ..i18n import tr
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence, QShortcut
 from PySide6.QtWidgets import QDialog, QMessageBox
@@ -152,7 +153,7 @@ class GridMixin:
         self.model.endResetModel()
         self._structure_changed(select=[lst.index_of(cue.id)])
         self._grid_sync(force=True)
-        self.status(f"«{cue.label()}» ora è nel gruppo «{group.label()}»")
+        self.status(tr("«{0}» ora è nel gruppo «{1}»", cue.label(), group.label()))
 
     def grid_ungroup_member(self, cue):
         self.grid_select(cue, move_playhead=False)
@@ -198,8 +199,8 @@ class GridMixin:
                 continue
             k = s.key()
             if not k.isEmpty():
-                out[k.toString(QKeySequence.PortableText)] = "comando di CueStage"
-        for k, why in (("Space", "GO"), ("Esc", "STOP / esci"), ("Return", "modifica"), ("Enter", "modifica"),
+                out[k.toString(QKeySequence.PortableText)] = tr("comando di CueStage")
+        for k, why in (("Space", "GO"), ("Esc", tr("STOP / esci")), ("Return", "modifica"), ("Enter", "modifica"),
                        ("Del", "elimina"), ("Backspace", "elimina"), ("Tab", "navigazione")):
             out.setdefault(k, why)
         return out
@@ -217,7 +218,7 @@ class GridMixin:
     def learn_hotkey(self, cue, field="hotkey"):
         from ..ui_grid import HotkeyDialog
         others = self._used_keys(exclude=(cue, field))
-        title = "Tap Tempo di " if field == "group_tap_key" else ""
+        title = tr("Tap Tempo di ") if field == "group_tap_key" else ""
         dlg = HotkeyDialog(cue, self._reserved_keys(), others, self, current=getattr(cue, field, ""),
                            purpose=title)
         if dlg.exec() != QDialog.Accepted:
@@ -235,7 +236,7 @@ class GridMixin:
         self.grid.canvas.update()
         if self.inspector.cue is cue:
             self.inspector.set_cue(cue)
-        self.status(f"Scorciatoia {key} → {cue.label()}" if key else f"Scorciatoia tolta da {cue.label()}")
+        self.status(tr("Scorciatoia {0} → {1}", key, cue.label()) if key else tr("Scorciatoia tolta da {0}", cue.label()))
 
     def _rebuild_hotkeys(self, force=False):
         sig = tuple((c.id, field, getattr(c, field)) for c in self.show_data.all_cues()
@@ -284,5 +285,5 @@ class GridMixin:
         """Avvisa (una volta) se lo show usa scorciatoie che CueStage riserva."""
         bad = [c for c in self.show_data.all_cues() if c.hotkey and c.hotkey in self._reserved_keys()]
         if bad:
-            QMessageBox.information(self, "Scorciatoie", "Queste scorciatoie sono usate da CueStage e sono state "
-                                    "ignorate:\n" + "\n".join(f"{c.hotkey} → {c.label()}" for c in bad[:10]))
+            QMessageBox.information(self, tr("Scorciatoie"), tr("Queste scorciatoie sono usate da CueStage e sono state "
+                                    "ignorate:\n") + "\n".join(f"{c.hotkey} → {c.label()}" for c in bad[:10]))

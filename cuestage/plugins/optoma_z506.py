@@ -13,17 +13,18 @@ Non c'è un otturatore meccanico: «Otturatore» usa l'AV mute (immagine nera).
 I codici ingresso variano tra i modelli Optoma: quelli indicati «da verificare» vanno provati sul
 proiettore (in caso di risposta «F» correggere la tabella INPUTS qui sotto).
 """
+from cuestage.i18n import tr
 from cuestage.projectors import ProjectorDriver, ProjectorError
 
 
 class OptomaZ506(ProjectorDriver):
     ID = "optoma_z506"
-    NAME = "Optoma ZU506T / ZH506 / ZW506"
+    NAME = tr("Optoma ZU506T / ZH506 / ZW506")
     DEFAULT_PORT = 23
     FIELDS = ("host", "port", "proj_id")
     CAPS = {"power_on", "power_off", "shutter_close", "shutter_open", "input",
             "freeze_on", "freeze_off", "raw", "corners"}
-    EXTRA_ACTIONS = {"keystone_h": "Keystone orizzontale", "keystone_v": "Keystone verticale"}
+    EXTRA_ACTIONS = {"keystone_h": tr("Keystone orizzontale"), "keystone_v": tr("Keystone verticale")}
     EXTRA_PARAMS = {"keystone_h": "-40…40", "keystone_v": "-40…40"}
     # 4 angoli: comando ~XX58 con sottoindice 1..8 (alto sx x/y, alto dx x/y, basso sx x/y, basso dx x/y),
     # come nei documenti RS232 Optoma della serie ZU (es. ZU850): 0..120 in orizzontale, 0..80 in verticale,
@@ -31,15 +32,15 @@ class OptomaZ506(ProjectorDriver):
     # se il proiettore risponde «F», correggere CORNER_FORMAT (es. "{cmd} {idx} {val}" o "{cmd}{idx} {val}").
     CORNERS = {"tl": {"x": (0, 120), "y": (0, 80)}, "tr": {"x": (0, 120), "y": (0, 80)},
                "bl": {"x": (0, 120), "y": (0, 80)}, "br": {"x": (0, 120), "y": (0, 80)}}
-    CORNERS_NOTE = ("Optoma: comando dei 4 angoli da verificare sul proiettore (valori verso l'interno, "
-                    "0 = nessuna correzione). Se risponde «F» vedi CORNER_FORMAT nel plugin.")
+    CORNERS_NOTE = (tr("Optoma: comando dei 4 angoli da verificare sul proiettore (valori verso l'interno, "
+                    "0 = nessuna correzione). Se risponde «F» vedi CORNER_FORMAT nel plugin."))
     CORNER_INDEX = {("tl", "x"): 1, ("tl", "y"): 2, ("tr", "x"): 3, ("tr", "y"): 4,
                     ("bl", "x"): 5, ("bl", "y"): 6, ("br", "x"): 7, ("br", "y"): 8}
     CORNER_FORMAT = "{idx} {val}"     # parte dopo "~ID58 "
-    INPUTS = [("1", "HDMI 1"), ("15", "HDMI 2"), ("5", "VGA 1"), ("6", "VGA 2 (da verificare)"),
-              ("16", "HDBaseT (da verificare)"), ("10", "Video composito (da verificare)")]
-    NOTES = ("Porta 23 (telnet). ID proiettore 00 = tutti. Ottica manuale: zoom, fuoco e shift non sono "
-             "comandabili. Otturatore = AV mute. Per l'accensione da rete: standby «Attivo».")
+    INPUTS = [("1", tr("HDMI 1")), ("15", tr("HDMI 2")), ("5", tr("VGA 1")), ("6", tr("VGA 2 (da verificare)")),
+              ("16", tr("HDBaseT (da verificare)")), ("10", tr("Video composito (da verificare)"))]
+    NOTES = (tr("Porta 23 (telnet). ID proiettore 00 = tutti. Ottica manuale: zoom, fuoco e shift non sono "
+             "comandabili. Otturatore = AV mute. Per l'accensione da rete: standby «Attivo»."))
 
     def _id(self):
         pid = str(self.proj_id or "00").strip()
@@ -62,13 +63,13 @@ class OptomaZ506(ProjectorDriver):
             s.close()
         resp = "".join(ch for ch in resp if ch.isprintable()).strip()
         if resp.upper().startswith("F"):
-            raise ProjectorError(f"{text}: rifiutato dal proiettore (F)")
+            raise ProjectorError(tr("{0}: rifiutato dal proiettore (F)", text))
         if read:
             if not resp.lower().startswith("ok"):
-                raise ProjectorError(f"{text}: risposta inattesa {resp!r}")
+                raise ProjectorError(tr("{0}: risposta inattesa {1!r}", text, resp))
             return resp[2:]
         if not (resp.upper().startswith("P") or resp.lower().startswith("ok")):
-            raise ProjectorError(f"{text}: risposta inattesa {resp!r} (è davvero un Optoma?)")
+            raise ProjectorError(tr("{0}: risposta inattesa {1!r} (è davvero un Optoma?)", text, resp))
         return resp
 
     def power(self, on):
@@ -92,14 +93,14 @@ class OptomaZ506(ProjectorDriver):
             try:
                 v = int(float(str(param).strip()))
             except ValueError:
-                raise ProjectorError("valore del keystone non valido (-40…40)")
+                raise ProjectorError(tr("valore del keystone non valido (-40…40)"))
             return self.cmd("65" if action == "keystone_h" else "66", max(-40, min(40, v)))
-        raise ProjectorError(f"azione {action} sconosciuta")
+        raise ProjectorError(tr("azione {0} sconosciuta", action))
 
     def raw(self, text):
         text = text.strip()
         if not text.startswith("~"):
-            raise ProjectorError("il comando libero deve iniziare con «~» (es. ~0000 1)")
+            raise ProjectorError(tr("il comando libero deve iniziare con «~» (es. ~0000 1)"))
         s = self.connect()
         try:
             s.sendall((text + "\r").encode("ascii"))
@@ -111,5 +112,5 @@ class OptomaZ506(ProjectorDriver):
         info = self.cmd("150", 1, read=True)      # Information: a bbbbb cc dddd e
         st = {"risposta": info}
         if info:
-            st["power"] = {"1": "acceso", "0": "spento/standby"}.get(info[0], info[0])
+            st["power"] = {"1": "acceso", "0": tr("spento/standby")}.get(info[0], info[0])
         return st

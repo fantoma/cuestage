@@ -1,4 +1,5 @@
 """Controllo remoto: ricezione/invio OSC e ricezione MIDI."""
+from .i18n import tr
 import shlex
 import re
 import threading
@@ -51,7 +52,7 @@ _clients = {}
 
 def osc_send(host, port, address, args_text):
     if SimpleUDPClient is None:
-        raise RuntimeError("python-osc non installato")
+        raise RuntimeError(tr("python-osc non installato"))
     if not address.startswith("/"):
         address = "/" + address
     key = (host, int(port))
@@ -75,7 +76,7 @@ class OscServer(QObject):
     def start(self, port):
         self.stop()
         if ThreadingOSCUDPServer is None:
-            self.status.emit("OSC: python-osc non installato")
+            self.status.emit(tr("OSC: python-osc non installato"))
             return False
         disp = Dispatcher()
         disp.set_default_handler(self._handle)
@@ -83,12 +84,12 @@ class OscServer(QObject):
             self.server = ThreadingOSCUDPServer(("0.0.0.0", int(port)), disp)
         except OSError as e:
             self.server = None
-            self.status.emit(f"OSC: porta {port} non disponibile ({e})")
+            self.status.emit(tr("OSC: porta {0} non disponibile ({1})", port, e))
             return False
         self.port = int(port)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
-        self.status.emit(f"OSC in ascolto su UDP {port}")
+        self.status.emit(tr("OSC in ascolto su UDP {0}", port))
         return True
 
     def stop(self):
@@ -325,10 +326,10 @@ class MidiInput(QObject):
         names = [n for n in (names or []) if n]
         self.close()
         if not names:
-            self.status.emit("MIDI: nessuna porta selezionata")
+            self.status.emit(tr("MIDI: nessuna porta selezionata"))
             return False
         if mido is None:
-            self.status.emit("MIDI: mido/python-rtmidi non installati")
+            self.status.emit(tr("MIDI: mido/python-rtmidi non installati"))
             return False
         available = self.list_ports()
         ok, bad = [], []
@@ -336,16 +337,16 @@ class MidiInput(QObject):
             real = self.resolve(n, available)
             if real is None or real in self.ports:
                 if real is None:
-                    bad.append(f"{n} (non collegata)")
+                    bad.append(tr("{0} (non collegata)", n))
                 continue
             try:
                 self.ports[real] = mido.open_input(real, callback=lambda msg, real=real: self._cb(msg, real))
                 ok.append(real)
             except Exception as e:
                 bad.append(f"{n} ({e})")
-        msg = ("MIDI in: " + ", ".join(ok)) if ok else "MIDI: nessuna porta aperta"
+        msg = (tr("MIDI in: ") + ", ".join(ok)) if ok else tr("MIDI: nessuna porta aperta")
         if bad:
-            msg += " · non aperte: " + ", ".join(bad)
+            msg += tr(" · non aperte: ") + ", ".join(bad)
         self.status.emit(msg)
         return bool(ok)
 
@@ -371,7 +372,7 @@ class MidiInput(QObject):
 
 # ------------------------------------------------------------------ MIDI OUT
 
-MIDI_OUT_HELP = """Un messaggio per riga (canali 1–16, valori 0–127; # = commento):
+MIDI_OUT_HELP = tr("""Un messaggio per riga (canali 1–16, valori 0–127; # = commento):
   note 1 60 100        Note On (canale, nota, velocità) — la nota anche come nome: C4 = 60, F#3, Bb2
   off 1 60             Note Off
   cc 1 7 127           Control Change (canale, controller, valore)
@@ -383,7 +384,7 @@ MIDI_OUT_HELP = """Un messaggio per riga (canali 1–16, valori 0–127; # = com
                        all_off; cue e lista facoltativi: msc all go 5 2)
   sysex F0 43 10 3E … F7   System Exclusive (byte esadecimali)
   hex 90 3C 64         byte grezzi esadecimali
-  wait 0.5             attende 0,5 s prima del messaggio successivo"""
+  wait 0.5             attende 0,5 s prima del messaggio successivo""")
 
 _NOTE_NAMES = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
 _MSC_CMDS = {"go": 0x01, "stop": 0x02, "resume": 0x03, "timed_go": 0x04, "load": 0x05, "set": 0x06,
@@ -396,7 +397,7 @@ def _note(tok):
         return int(t)
     m = re.fullmatch(r"([a-g])([#b]?)(-?\d+)", t)
     if not m:
-        raise ValueError(f"nota non valida «{tok}»")
+        raise ValueError(tr("nota non valida «{0}»", tok))
     n = _NOTE_NAMES[m.group(1)] + (1 if m.group(2) == "#" else -1 if m.group(2) == "b" else 0)
     return (int(m.group(3)) + 1) * 12 + n            # C4 = 60
 
@@ -404,7 +405,7 @@ def _note(tok):
 def _rng(v, lo, hi, what):
     v = int(v)
     if not lo <= v <= hi:
-        raise ValueError(f"{what} fuori intervallo ({lo}–{hi}): {v}")
+        raise ValueError(tr("{0} fuori intervallo ({1}–{2}): {3}", what, lo, hi, v))
     return v
 
 
@@ -425,7 +426,7 @@ def parse_midi_script(text):
             if k in ("note", "on", "off"):
                 ch = _rng(t[1], 1, 16, "canale") - 1
                 note = _rng(_note(t[2]), 0, 127, "nota")
-                vel = _rng(t[3], 0, 127, "velocità") if len(t) > 3 else (100 if k != "off" else 0)
+                vel = _rng(t[3], 0, 127, tr("velocità")) if len(t) > 3 else (100 if k != "off" else 0)
                 msg = [(0x80 if k == "off" else 0x90) | ch, note, vel]
             elif k == "cc":
                 msg = [0xB0 | (_rng(t[1], 1, 16, "canale") - 1), _rng(t[2], 0, 127, "controller"),
@@ -433,7 +434,7 @@ def parse_midi_script(text):
             elif k == "pc":
                 msg = [0xC0 | (_rng(t[1], 1, 16, "canale") - 1), _rng(t[2], 0, 127, "programma")]
             elif k == "pb":
-                v = _rng(t[2], -8192, 8191, "pitch bend") + 8192
+                v = _rng(t[2], -8192, 8191, tr("pitch bend")) + 8192
                 msg = [0xE0 | (_rng(t[1], 1, 16, "canale") - 1), v & 0x7F, v >> 7]
             elif k == "at":
                 msg = [0xD0 | (_rng(t[1], 1, 16, "canale") - 1), _rng(t[2], 0, 127, "valore")]
@@ -446,7 +447,7 @@ def parse_midi_script(text):
                 dev = 0x7F if t[1].lower() == "all" else _rng(t[1], 0, 127, "device")
                 cmd = t[2].lower()
                 if cmd not in _MSC_CMDS:
-                    raise ValueError(f"comando MSC «{t[2]}» (usa: {', '.join(_MSC_CMDS)})")
+                    raise ValueError(tr("comando MSC «{0}» (usa: {1})", t[2], ', '.join(_MSC_CMDS)))
                 data = []
                 for j, field in enumerate(t[3:5]):          # numero di cue, poi lista
                     if j:
@@ -461,15 +462,15 @@ def parse_midi_script(text):
                     if msg[-1] != 0xF7:
                         msg = msg + [0xF7]
                     if any(b > 0x7F for b in msg[1:-1]):
-                        raise ValueError("nei SysEx i byte di dati vanno da 00 a 7F")
+                        raise ValueError(tr("nei SysEx i byte di dati vanno da 00 a 7F"))
                 if any(not 0 <= b <= 0xFF for b in msg):
-                    raise ValueError("byte non validi")
+                    raise ValueError(tr("byte non validi"))
             else:
-                raise ValueError(f"comando sconosciuto «{t[0]}»")
+                raise ValueError(tr("comando sconosciuto «{0}»", t[0]))
         except IndexError:
-            raise ValueError(f"riga {ln}: parametri mancanti in «{line}»")
+            raise ValueError(tr("riga {0}: parametri mancanti in «{1}»", ln, line))
         except ValueError as e:
-            raise ValueError(f"riga {ln}: {e}")
+            raise ValueError(tr("riga {0}: {1}", ln, e))
         out.append((wait, msg))
         wait = 0.0
     if wait and out:
@@ -495,15 +496,15 @@ class MidiOut:
 
     def _port(self, name):
         if mido is None:
-            raise RuntimeError("mido/python-rtmidi non installati")
+            raise RuntimeError(tr("mido/python-rtmidi non installati"))
         if not name:
-            raise RuntimeError("nessuna uscita MIDI scelta (cue o Impostazioni › MIDI)")
+            raise RuntimeError(tr("nessuna uscita MIDI scelta (cue o Impostazioni › MIDI)"))
         names = self.list_ports()
         real = MidiInput.resolve(name, names)
         if real is None:
             real = next((n for n in names if port_key(n).startswith(port_key(name))), None)
         if real is None:
-            raise RuntimeError(f"uscita MIDI «{name}» non collegata")
+            raise RuntimeError(tr("uscita MIDI «{0}» non collegata", name))
         p = self.ports.get(real)
         if p is None:
             p = self.ports[real] = mido.open_output(real)

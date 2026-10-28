@@ -1,4 +1,5 @@
 """Controller della riproduzione: GO, catene di cue, istanze in esecuzione."""
+from .i18n import tr
 import math
 import time
 
@@ -385,7 +386,7 @@ class AudioInstance(RoutedVoice, KeyframeMixin, Instance):
     def start(self, silent=False):
         data = self.ctrl.loader.audio_now(self.cue.file)
         if not len(data):
-            raise RuntimeError("il file non contiene audio")
+            raise RuntimeError(tr("il file non contiene audio"))
         self._init_kf()
         self._start_voice(data, silent)
 
@@ -536,7 +537,7 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
     def _deck_error(self, deck):
         if self.done or deck is not self.deck:
             return
-        self.ctrl.message.emit(f"Errore video '{self.cue.label()}': {deck.error}")
+        self.ctrl.message.emit(tr("Errore video '{0}': {1}", self.cue.label(), deck.error))
         self.finish()
 
     def _want_alt(self):
@@ -751,7 +752,7 @@ class ImageInstance(KeyframeMixin, Instance):
         c = self.cue
         img = self.ctrl.image(c.file)
         if img is None or img.isNull():
-            self.ctrl.message.emit(f"Impossibile aprire l'immagine '{c.file}'")
+            self.ctrl.message.emit(tr("Impossibile aprire l'immagine '{0}'", c.file))
             self.finish()
             return
         self.view = CueView(c)
@@ -822,14 +823,14 @@ class FadeInstance(Instance):
         ctrl = self.ctrl
         target = ctrl.show.resolve_target(c.target)
         if target is None:
-            ctrl.message.emit(f"Fade '{c.label()}': cue target '{c.target}' non trovata")
+            ctrl.message.emit(tr("Fade '{0}': cue target '{1}' non trovata", c.label(), c.target))
             self.finish()
             return
         inst = ctrl.instances.get(target.id)
         if inst is None and c.start_if_idle and target.is_media():
             inst = ctrl.start_cue(target, cascade=False, silent=True)
         if inst is None:
-            ctrl.message.emit(f"Fade '{c.label()}': la cue '{target.label()}' non è in esecuzione")
+            ctrl.message.emit(tr("Fade '{0}': la cue '{1}' non è in esecuzione", c.label(), target.label()))
             self.finish()
             return
         gain = db_to_lin(c.target_db) if c.fade_level else None
@@ -855,12 +856,12 @@ class PresetInstance(Instance):
         ctrl = self.ctrl
         target = ctrl.show.resolve_target(c.target)
         if target is None:
-            ctrl.message.emit(f"Cambia preset '{c.label()}': cue target '{c.target}' non trovata")
+            ctrl.message.emit(tr("Cambia preset '{0}': cue target '{1}' non trovata", c.label(), c.target))
             self.finish()
             return
         inst = ctrl.instances.get(target.id)
         if inst is None:
-            ctrl.message.emit(f"Cambia preset '{c.label()}': la cue '{target.label()}' non è in esecuzione")
+            ctrl.message.emit(tr("Cambia preset '{0}': la cue '{1}' non è in esecuzione", c.label(), target.label()))
             self.finish()
             return
         dur = max(0.0, float(c.fade_duration or 0))
@@ -868,9 +869,9 @@ class PresetInstance(Instance):
         pa = target.preset_dict("audio").get(c.preset_audio) if c.preset_audio else None
         pv = target.preset_dict("visual").get(c.preset_visual) if c.preset_visual else None
         if c.preset_audio and pa is None:
-            ctrl.message.emit(f"La cue '{target.label()}' non ha il preset audio «{c.preset_audio}»")
+            ctrl.message.emit(tr("La cue '{0}' non ha il preset audio «{1}»", target.label(), c.preset_audio))
         if c.preset_visual and pv is None:
-            ctrl.message.emit(f"La cue '{target.label()}' non ha il preset crop/posizione «{c.preset_visual}»")
+            ctrl.message.emit(tr("La cue '{0}' non ha il preset crop/posizione «{1}»", target.label(), c.preset_visual))
         start_preset(inst, target, c.preset_visual if pv is not None else "",
                      c.preset_audio if pa is not None else "", dur, c.fade_shape)
         if dur <= 0:
@@ -895,7 +896,7 @@ class ControlInstance(Instance):
         else:
             target = ctrl.show.resolve_target(c.target)
             if target is None:
-                ctrl.message.emit(f"Comando '{c.label()}': cue target '{c.target}' non trovata")
+                ctrl.message.emit(tr("Comando '{0}': cue target '{1}' non trovata", c.label(), c.target))
             elif act == "start":
                 ctrl.trigger(target, cascade=True, depth=ctrl._depth + 1)
             elif act == "stop":
@@ -916,7 +917,7 @@ class ProjectorInstance(Instance):
         c = self.cue
         pm = getattr(self.ctrl, "projectors", None)
         if pm is None or not c.proj_target:
-            self.ctrl.message.emit(f"Proiettore '{c.label()}': nessun proiettore selezionato")
+            self.ctrl.message.emit(tr("Proiettore '{0}': nessun proiettore selezionato", c.label()))
         else:
             pm.run(c.proj_target, c.proj_action, c.proj_value, c.proj_dir, c.proj_steps, c.proj_speed)
         self.finish()
@@ -967,7 +968,7 @@ class GroupInstance(Instance):
         self.rng = random.Random(f"{ctrl.seed_base}|{c.id}|{ctrl.seed_count}")
         ctrl.seed_count += 1
         if not self.pool:
-            ctrl.message.emit(f"Gruppo '{c.label()}': nessuna cue nel gruppo")
+            ctrl.message.emit(tr("Gruppo '{0}': nessuna cue nel gruppo", c.label()))
             self.cascade = False
             self.finish()
             return
@@ -1295,7 +1296,7 @@ class TextInstance(Instance):
 
     def status_text(self):
         if self.cue.text_mode == "sequence":
-            return f"frase {self.idx + 1}/{len(self.phrases)}"
+            return tr("frase {0}/{1}", self.idx + 1, len(self.phrases))
         return "testo"
 
     def cleanup(self):
@@ -1314,9 +1315,9 @@ class MidiOutInstance(Instance):
         try:
             n = midi_out.send_script(port, c.mo_msgs)
         except Exception as e:
-            self.ctrl.message.emit(f"MIDI out '{c.label()}': {e}")
+            self.ctrl.message.emit(tr("MIDI out '{0}': {1}", c.label(), e))
         else:
-            self.ctrl.message.emit(f"MIDI out ← {c.label()}: {n} messaggi")
+            self.ctrl.message.emit(tr("MIDI out ← {0}: {1} messaggi", c.label(), n))
         self.finish()
 
 
@@ -1330,10 +1331,10 @@ class GroupExitInstance(Instance):
             tg = self.ctrl.show.by_id(c.group)
         inst = self.ctrl.instances.get(tg.id) if tg is not None else None
         if tg is None:
-            self.ctrl.message.emit(f"'{c.label()}': gruppo non trovato")
+            self.ctrl.message.emit(tr("'{0}': gruppo non trovato", c.label()))
         elif isinstance(inst, GroupInstance):
             inst.exit()
-            self.ctrl.message.emit(f"Uscita dal gruppo «{tg.label()}»")
+            self.ctrl.message.emit(tr("Uscita dal gruppo «{0}»", tg.label()))
         self.cascade = False
         self.finish()
 
@@ -1361,8 +1362,8 @@ class StopPanelInstance(Instance):
         for inst in list(ctrl.instances.values()):
             if inst.cue.id in ids and not inst.done:
                 inst.stop(fade)
-        names = ", ".join(f"«{lst.name}»" for lst in lists) or "nessuna lista"
-        ctrl.message.emit(f"Stop panel: {names}" + (f" (fade {fade:g} s)" if fade > 0 else ""))
+        names = ", ".join(f"«{lst.name}»" for lst in lists) or tr("nessuna lista")
+        ctrl.message.emit(tr("Stop panel: {0}", names) + (tr(" (fade {0:g} s)", fade) if fade > 0 else ""))
         ctrl.changed.emit()
         self.finish()
 
@@ -1379,12 +1380,12 @@ class MixerInstance(Instance):
         self.handle = None
         conf = mm.find(c.mix_target) if mm is not None else None
         if conf is None:
-            self.ctrl.message.emit(f"Mixer '{c.label()}': nessun mixer selezionato")
+            self.ctrl.message.emit(tr("Mixer '{0}': nessun mixer selezionato", c.label()))
             self.finish()
             return
         if c.mix_action == "control":
             if not c.mix_ctl:
-                self.ctrl.message.emit(f"Mixer '{c.label()}': nessun controllo scelto")
+                self.ctrl.message.emit(tr("Mixer '{0}': nessun controllo scelto", c.label()))
             else:
                 mm.set_control(c.mix_target, c.mix_ctl, int(c.mix_ctl_value or 0))
             self.finish()
@@ -1393,7 +1394,7 @@ class MixerInstance(Instance):
             from .mixers import mute_states
             states = mute_states(c)
             if not states:
-                self.ctrl.message.emit(f"Mixer '{c.label()}': nessun mute da cambiare")
+                self.ctrl.message.emit(tr("Mixer '{0}': nessun mute da cambiare", c.label()))
             for kind, st in states.items():
                 for flag in (True, False):
                     nums = sorted(n for n, v in st.items() if v is flag)
@@ -1403,7 +1404,7 @@ class MixerInstance(Instance):
             return
         nums = parse_numbers(c.mix_channels) or []
         if not nums:
-            self.ctrl.message.emit(f"Mixer '{c.label()}': nessun canale indicato")
+            self.ctrl.message.emit(tr("Mixer '{0}': nessun canale indicato", c.label()))
             self.finish()
             return
         if c.mix_action == "duck":
@@ -1414,7 +1415,7 @@ class MixerInstance(Instance):
             duck = self.ctrl.audio.duck
             duck.hook(self.key, True)
             if duck.error:
-                self.ctrl.message.emit(f"Mixer '{c.label()}': ducking — {duck.error}")
+                self.ctrl.message.emit(tr("Mixer '{0}': ducking — {1}", c.label(), duck.error))
             self._duck_send(force=True)
             return
         self.fade = max(0.0, float(c.mix_fade or 0))
@@ -1486,7 +1487,7 @@ def osc_target(c, settings):
     if c.osc_device:
         dev = next((d for d in settings.get("osc_devices") or [] if d.get("id") == c.osc_device), None)
         if dev is None:
-            raise RuntimeError("dispositivo OSC non configurato (Impostazioni › OSC)")
+            raise RuntimeError(tr("dispositivo OSC non configurato (Impostazioni › OSC)"))
         from .osc_profiles import render
         address, args = render(dev.get("profile"), c.osc_cmd, c.osc_params or {})
         return dev.get("host"), int(dev.get("port") or 0), address, args
@@ -1500,7 +1501,7 @@ class OscInstance(Instance):
             host, port, address, args = osc_target(c, self.ctrl.show.settings)
             osc_send(host, port, address, args)
         except Exception as e:
-            self.ctrl.message.emit(f"OSC '{c.label()}': invio fallito ({e})")
+            self.ctrl.message.emit(tr("OSC '{0}': invio fallito ({1})", c.label(), e))
         self.finish()
 
 
@@ -1780,7 +1781,7 @@ class Controller(QObject):
         st.update(t0=self.clock, dur=float(dur))
         self._xf_apply(st, 0.0)
         self.xfade = st
-        self.message.emit(f"Crossfade {dur:.1f} s")
+        self.message.emit(tr("Crossfade {0:.1f} s", dur))
         return True
 
     def set_crossfader(self, p, lst=None):
@@ -1844,7 +1845,7 @@ class Controller(QObject):
     def trigger(self, cue, cascade=True, depth=0):
         """Avvia una cue rispettandone il ritardo (pre-wait)."""
         if depth > MAX_CHAIN:
-            self.message.emit("Catena di cue troppo lunga o ricorsiva: interrotta")
+            self.message.emit(tr("Catena di cue troppo lunga o ricorsiva: interrotta"))
             return
         d = float(cue.delay or 0)
         self.pending = [p for p in self.pending if p[1].id != cue.id]
@@ -1883,7 +1884,7 @@ class Controller(QObject):
             old.done = True
             old.cleanup()
         if cue.is_media() and not cue.file:
-            self.message.emit(f"La cue '{cue.label()}' non ha un file")
+            self.message.emit(tr("La cue '{0}' non ha un file", cue.label()))
             inst = None
         else:
             inst = INSTANCE_CLASSES[cue.type](self, cue, cascade)
@@ -1895,7 +1896,7 @@ class Controller(QObject):
                 try:
                     inst.start(silent=silent)
                 except Exception as e:
-                    self.message.emit(f"Errore avviando '{cue.label()}': {e}")
+                    self.message.emit(tr("Errore avviando '{0}': {1}", cue.label(), e))
                     inst.user_stopped = True
                     inst.finish()
                     inst = None
@@ -2089,7 +2090,7 @@ class Controller(QObject):
             try:
                 inst.tick(self.clock, dt)
             except Exception as e:
-                self.message.emit(f"Errore in '{inst.cue.label()}': {e}")
+                self.message.emit(tr("Errore in '{0}': {1}", inst.cue.label(), e))
                 inst.user_stopped = True
                 inst.finish()
             if inst.cue.is_visual():

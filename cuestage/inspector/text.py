@@ -1,5 +1,6 @@
 """Scheda dell'ispettore per le cue di testo (sopratitoli) (parte di Inspector)."""
 
+from ..i18n import tr
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout, QLabel, QPushButton,
@@ -21,17 +22,17 @@ class TextTabMixin:
         # --- contenuto
         top = QHBoxLayout()
         mc = QComboBox()
-        mc.addItem("Sequenza di frasi: una per GO (sottotitoli)", "sequence")
-        mc.addItem("Testo libero: tutto insieme", "free")
+        mc.addItem(tr("Sequenza di frasi: una per GO (sottotitoli)"), "sequence")
+        mc.addItem(tr("Testo libero: tutto insieme"), "free")
         mc.setCurrentIndex(max(0, mc.findData(cue.text_mode)))
-        top.addWidget(QLabel("Modalità"))
+        top.addWidget(QLabel(tr("Modalità")))
         top.addWidget(mc, 1)
-        imp = QPushButton("Importa .txt / .srt…")
+        imp = QPushButton(tr("Importa .txt / .srt…"))
         top.addWidget(imp)
         left.addLayout(top)
         ed = _PTE(cue.text_content)
-        ed.setPlaceholderText("Scrivi qui il testo. In sequenza: ogni frase è separata da una riga vuota; "
-                              "una frase può avere più righe. «_» da solo = schermo vuoto.")
+        ed.setPlaceholderText(tr("Scrivi qui il testo. In sequenza: ogni frase è separata da una riga vuota; "
+                              "una frase può avere più righe. «_» da solo = schermo vuoto."))
         f0 = ed.font()
         f0.setPointSizeF(f0.pointSizeF() * 1.1)
         ed.setFont(f0)
@@ -49,39 +50,39 @@ class TextTabMixin:
                    "Sopratitolo in alto": ([5, 3, 90, 18], "center", "top"),
                    "Centro dello schermo": ([10, 30, 80, 40], "center", "middle"),
                    "Schermo intero": ([3, 3, 94, 94], "center", "middle")}
-        pre.addItem("— posizione rapida —")
+        pre.addItem(tr("— posizione rapida —"))
         for k in presets:
-            pre.addItem(k)
-        f.addRow("Area", pre)
+            pre.addItem(tr(k), k)
+        f.addRow(tr("Area"), pre)
         arow = QHBoxLayout()
         spins = []
-        for j, lab in enumerate(("x", "y", "larg.", "alt.")):
+        for j, lab in enumerate(("x", "y", tr("larg."), tr("alt."))):
             sp = QDoubleSpinBox()
             sp.setRange(0, 100)
             sp.setDecimals(1)
             sp.setSuffix(" %")
             sp.setValue(float((cue.text_area or [5, 78, 90, 18])[j]))
-            sp.setToolTip(f"{lab} dell'area in % dell'uscita")
+            sp.setToolTip(tr("{0} dell'area in % dell'uscita", lab))
             spins.append(sp)
             arow.addWidget(QLabel(lab))
             arow.addWidget(sp)
         f.addRow("", arow)
         al = QHBoxLayout()
-        ha = self._combo("text_halign", ["left", "center", "right"], {"left": "sinistra", "center": "centro", "right": "destra"})
-        va = self._combo("text_valign", ["top", "middle", "bottom"], {"top": "in alto", "middle": "al centro", "bottom": "in basso"})
+        ha = self._combo("text_halign", ["left", "center", "right"], {"left": tr("sinistra"), "center": tr("centro"), "right": tr("destra")})
+        va = self._combo("text_valign", ["top", "middle", "bottom"], {"top": tr("in alto"), "middle": tr("al centro"), "bottom": tr("in basso")})
         al.addWidget(ha)
         al.addWidget(va)
-        f.addRow("Allineamento", al)
+        f.addRow(tr("Allineamento"), al)
         fr = QHBoxLayout()
         fc = QFontComboBox()
         fc.setCurrentFont(QFont(cue.text_font or "Sans Serif"))
         fr.addWidget(fc, 1)
         sz = self._dspin("text_size", 6, 400, 1, 0, suffix=" px")
-        sz.setToolTip("Dimensione riferita a un'uscita alta 1080 px")
+        sz.setToolTip(tr("Dimensione riferita a un'uscita alta 1080 px"))
         fr.addWidget(sz)
-        f.addRow("Carattere", fr)
+        f.addRow(tr("Carattere"), fr)
         st = QHBoxLayout()
-        for attr, lab in (("text_bold", "Grassetto"), ("text_italic", "Corsivo")):
+        for attr, lab in (("text_bold", tr("Grassetto")), ("text_italic", tr("Corsivo"))):
             cb = QCheckBox(lab)
             cb.setChecked(bool(getattr(cue, attr)))
             cb.toggled.connect(lambda on, attr=attr: (setattr(cue, attr, on), self._emit()))
@@ -98,7 +99,7 @@ class TextTabMixin:
             paint()
 
             def pick():
-                c = QColorDialog.getColor(QColor(getattr(cue, attr) or "#000000"), self, "Colore")
+                c = QColorDialog.getColor(QColor(getattr(cue, attr) or "#000000"), self, tr("Colore"))
                 if c.isValid():
                     setattr(cue, attr, c.name())
                     paint()
@@ -106,46 +107,46 @@ class TextTabMixin:
             b.clicked.connect(pick)
             if allow_none:
                 b.setContextMenuPolicy(Qt.CustomContextMenu)
-                b.setToolTip("Clic: scegli · tasto destro: nessuno sfondo")
+                b.setToolTip(tr("Clic: scegli · tasto destro: nessuno sfondo"))
                 b.customContextMenuRequested.connect(lambda *_: (setattr(cue, attr, ""), paint(), self._emit()))
             return b
-        st.addWidget(QLabel("Colore"))
+        st.addWidget(QLabel(tr("Colore")))
         st.addWidget(color_btn("text_color"))
         st.addStretch(1)
-        f.addRow("Stile", st)
+        f.addRow(tr("Stile"), st)
         ol = QHBoxLayout()
         ol.addWidget(self._dspin("text_outline", 0, 30, 0.5, 1, suffix=" px"))
         ol.addWidget(color_btn("text_outline_color"))
-        f.addRow("Contorno", ol)
+        f.addRow(tr("Contorno"), ol)
         bgr = QHBoxLayout()
         bgr.addWidget(color_btn("text_bg", allow_none=True))
         op = self._dspin("text_bg_opacity", 0, 100, 5, 0, suffix=" %")
         bgr.addWidget(op)
-        bgr.addWidget(self._combo("text_bg_mode", ["block", "area"], {"block": "dietro il testo", "area": "tutta l'area"}))
-        f.addRow("Sfondo", bgr)
-        f.addRow("Margine interno", self._dspin("text_padding", 0, 200, 1, 0, suffix=" px"))
-        f.addRow("Adattamento", self._combo("text_fit", list(FIT_MODES), FIT_MODES))
+        bgr.addWidget(self._combo("text_bg_mode", ["block", "area"], {"block": tr("dietro il testo"), "area": tr("tutta l'area")}))
+        f.addRow(tr("Sfondo"), bgr)
+        f.addRow(tr("Margine interno"), self._dspin("text_padding", 0, 200, 1, 0, suffix=" px"))
+        f.addRow(tr("Adattamento"), self._combo("text_fit", list(FIT_MODES), FIT_MODES))
         ml = QSpinBox()
         ml.setRange(0, 20)
-        ml.setSpecialValueText("senza limite")
+        ml.setSpecialValueText(tr("senza limite"))
         ml.setValue(int(cue.text_max_lines or 0))
         ml.valueChanged.connect(lambda v: (setattr(cue, "text_max_lines", v), self._emit()))
-        f.addRow("Righe massime", ml)
-        f.addRow("Interlinea", self._dspin("text_spacing", 60, 250, 5, 0, suffix=" %"))
-        f.addRow("Dissolvenza tra frasi", self._dspin("text_fade", 0, 10, 0.1, 2))
+        f.addRow(tr("Righe massime"), ml)
+        f.addRow(tr("Interlinea"), self._dspin("text_spacing", 60, 250, 5, 0, suffix=" %"))
+        f.addRow(tr("Dissolvenza tra frasi"), self._dspin("text_fade", 0, 10, 0.1, 2))
         if cue.text_mode == "free":
             dur = self._dspin("duration", 0, 36000, 0.5, 1)
-            dur.setSpecialValueText("finché non si ferma")
-            f.addRow("Durata", dur)
-        f.addRow("Layer", self._ispin("layer", 0, 99))
+            dur.setSpecialValueText(tr("finché non si ferma"))
+            f.addRow(tr("Durata"), dur)
+        f.addRow(tr("Layer"), self._ispin("layer", 0, 99))
         right.addLayout(f)
         # --- anteprima
         prow = QHBoxLayout()
-        prow.addWidget(QLabel("Anteprima frase"))
+        prow.addWidget(QLabel(tr("Anteprima frase")))
         pn = QSpinBox()
         pn.setRange(1, 1)
         prow.addWidget(pn)
-        live = QPushButton("Mostra in uscita da questa frase")
+        live = QPushButton(tr("Mostra in uscita da questa frase"))
         prow.addWidget(live)
         prow.addStretch(1)
         prev = QLabel()
@@ -175,9 +176,8 @@ class TextTabMixin:
             pn.blockSignals(True)
             pn.setRange(1, max(1, len(ps)))
             pn.blockSignals(False)
-            info.setText(f"{len(ps)} frasi · GO avanza di una frase, dopo l'ultima il GO esce · "
-                         f"Alt+→ / Alt+← frase successiva / precedente · ESC esce"
-                         if cue.text_mode == "sequence" else "Il testo compare intero all'avvio della cue")
+            info.setText(tr("{0} frasi · GO avanza di una frase, dopo l'ultima il GO esce · Alt+→ / Alt+← frase successiva / precedente · ESC esce", len(ps))
+                         if cue.text_mode == "sequence" else tr("Il testo compare intero all'avvio della cue"))
             W, H = self.ctrl.comp.out_size
             img = render_text(cue, ps[pn.value() - 1], int(W), int(H))
             pm = QPixmap(320, 180)
@@ -214,7 +214,7 @@ class TextTabMixin:
         def preset(j):
             if j <= 0:
                 return
-            area, h, v = presets[pre.itemText(j)]
+            area, h, v = presets[pre.itemData(j)]
             cue.text_area = list(area)
             cue.text_halign, cue.text_valign = h, v
             pre.setCurrentIndex(0)
@@ -223,7 +223,7 @@ class TextTabMixin:
         pre.currentIndexChanged.connect(preset)
 
         def do_import():
-            path, _ = QFileDialog.getOpenFileName(self, "Importa testo", "", "Testo (*.txt *.srt);;Tutti (*)")
+            path, _ = QFileDialog.getOpenFileName(self, tr("Importa testo"), "", tr("Testo (*.txt *.srt);;Tutti (*)"))
             if not path:
                 return
             try:

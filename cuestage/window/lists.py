@@ -1,5 +1,6 @@
 """Liste MAIN e PANEL: schede, GO su, spostamento tra liste (parte di MainWindow)."""
 
+from ..i18n import tr
 from PySide6.QtCore import QEvent
 from PySide6.QtWidgets import (
     QAbstractItemView, QInputDialog, QMenu, QMessageBox, )
@@ -74,7 +75,7 @@ class ListsMixin:
         self.show_data.settings["go_target"] = key
         self.show_data.dirty = True
         self._update_standby()
-        self.status("GO agisce sempre sulla MAIN" if key == "main" else "GO segue la lista selezionata")
+        self.status(tr("GO agisce sempre sulla MAIN") if key == "main" else tr("GO segue la lista selezionata"))
 
     def add_panel(self, kind="list"):
         if kind not in ("list", "grid"):        # dal segnale «clicked» del pulsante arriva un booleano
@@ -83,18 +84,18 @@ class ListsMixin:
         if kind == "grid":
             lst.name = lst.name.replace("PANEL", "GRID")
         self.show_list(len(self.show_data.lists) - 1)
-        self.status(f"Creato «{lst.name}» (doppio clic sul tab per rinominarlo)"
-                    + (" · ✎ Modifica per righe, colonne e pagine" if kind == "grid" else ""))
+        self.status(tr("Creato «{0}» (doppio clic sul tab per rinominarlo)", lst.name)
+                    + (tr(" · ✎ Modifica per righe, colonne e pagine") if kind == "grid" else ""))
 
     def rename_panel(self, i):
         sh = self.show_data
         if i <= 0 or i >= len(sh.lists):
             return
-        name, ok = QInputDialog.getText(self, "Rinomina PANEL", "Nome:", text=sh.lists[i].name)
+        name, ok = QInputDialog.getText(self, tr("Rinomina PANEL"), tr("Nome:"), text=sh.lists[i].name)
         name = name.strip()
         if ok and name and name != sh.lists[i].name:
             if any(l.name.lower() == name.lower() for l in sh.lists):
-                QMessageBox.warning(self, "Rinomina PANEL", f"Esiste già una lista «{name}».")
+                QMessageBox.warning(self, tr("Rinomina PANEL"), tr("Esiste già una lista «{0}».", name))
                 return
             sh.lists[i].name = name
             sh.dirty = True
@@ -106,7 +107,7 @@ class ListsMixin:
             return
         lst = sh.lists[i]
         if lst.cues and QMessageBox.question(
-                self, "Elimina PANEL", f"Eliminare «{lst.name}» con le sue {len(lst.cues)} cue?") != QMessageBox.Yes:
+                self, tr("Elimina PANEL"), tr("Eliminare «{0}» con le sue {1} cue?", lst.name, len(lst.cues))) != QMessageBox.Yes:
             return
         for c in lst.cues:
             self.ctrl.stop_cue(c.id, 0)
@@ -135,7 +136,7 @@ class ListsMixin:
             a = menu.addAction(lst.name, lambda i=i: self.move_cues_to(i))
             a.setEnabled(bool(rows))
         menu.addSeparator()
-        a = menu.addAction("Nuovo PANEL…", lambda: self.move_cues_to(None))
+        a = menu.addAction(tr("Nuovo PANEL…"), lambda: self.move_cues_to(None))
         a.setEnabled(bool(rows))
 
     def move_cues_to(self, i):
@@ -157,7 +158,7 @@ class ListsMixin:
         sh.dirty = True
         self.ctrl.set_playhead(min(rows[0], len(sh.cues)))
         self._select_row(min(rows[0], len(sh.cues) - 1))
-        self.status(f"{len(moving)} cue spostate in «{dest.name}»")
+        self.status(tr("{0} cue spostate in «{1}»", len(moving), dest.name))
         self._update_standby()
 
     def _new_cue_menu(self, menu):
@@ -172,7 +173,7 @@ class ListsMixin:
             if not self.table.indexAt(ev.position().toPoint()).isValid():
                 self.table.clearSelection()
                 m = QMenu(self)
-                m.addSection("Nuova cue in fondo alla lista")
+                m.addSection(tr("Nuova cue in fondo alla lista"))
                 self._new_cue_menu(m)
                 m.exec(ev.globalPosition().toPoint())
                 return True
@@ -183,21 +184,21 @@ class ListsMixin:
         if not self.table.indexAt(pos).isValid():     # clic nello spazio vuoto: si aggiunge in fondo
             self.table.clearSelection()
         rows = self._selected_rows()
-        self._new_cue_menu(m.addMenu("Nuova cue" + (" dopo la selezione" if rows else " in fondo")))
+        self._new_cue_menu(m.addMenu(tr("Nuova cue") + (tr(" dopo la selezione") if rows else tr(" in fondo"))))
         m.addSeparator()
         if rows:
-            m.addAction("Duplica", self.duplicate)
-            m.addAction("Elimina", self.delete_cues)
-            sub = m.addMenu("Sposta in")
+            m.addAction(tr("Duplica"), self.duplicate)
+            m.addAction(tr("Elimina"), self.delete_cues)
+            sub = m.addMenu(tr("Sposta in"))
             self._fill_move_menu(sub)
             m.addSeparator()
-            m.addAction("Raggruppa le selezionate", self.group_selected)
+            m.addAction(tr("Raggruppa le selezionate"), self.group_selected)
             cur = self._current_cue()
             if cur is not None and (cur.type == "group" or cur.group):
-                m.addAction("Espandi / compatta gruppo", lambda: self.toggle_group())
+                m.addAction(tr("Espandi / compatta gruppo"), lambda: self.toggle_group())
                 if cur.group:
-                    m.addAction("Togli dal gruppo", self.remove_from_group)
-                m.addAction("Sciogli il gruppo", self.ungroup_selected)
+                    m.addAction(tr("Togli dal gruppo"), self.remove_from_group)
+                m.addAction(tr("Sciogli il gruppo"), self.ungroup_selected)
             m.addSeparator()
-        m.addAction("Nuovo PANEL", self.add_panel)
+        m.addAction(tr("Nuovo PANEL"), self.add_panel)
         m.exec(self.table.viewport().mapToGlobal(pos))

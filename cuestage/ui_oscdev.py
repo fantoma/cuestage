@@ -1,4 +1,5 @@
 """Dispositivi OSC da profilo: finestra di aggiunta/modifica con indirizzo IP o ricerca in rete."""
+from .i18n import tr
 import threading
 import uuid
 
@@ -16,7 +17,7 @@ class _Relay(QObject):
 class OscDeviceDialog(QDialog):
     def __init__(self, device=None, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Dispositivo OSC")
+        self.setWindowTitle(tr("Dispositivo OSC"))
         self.dev = dict(device or {})
         v = QVBoxLayout(self)
         f = QFormLayout()
@@ -25,17 +26,17 @@ class OscDeviceDialog(QDialog):
             self.prof.addItem(p["name"], pid)
         self.prof.setCurrentIndex(max(0, self.prof.findData(self.dev.get("profile"))))
         self.prof.currentIndexChanged.connect(self._profile_changed)
-        f.addRow("Profilo", self.prof)
+        f.addRow(tr("Profilo"), self.prof)
         self.name = QLineEdit(self.dev.get("name") or "")
-        f.addRow("Nome", self.name)
+        f.addRow(tr("Nome"), self.name)
         hr = QHBoxLayout()
         self.host = QLineEdit(self.dev.get("host") or "")
-        self.host.setPlaceholderText("indirizzo IP del dispositivo, es. 192.168.1.50")
+        self.host.setPlaceholderText(tr("indirizzo IP del dispositivo, es. 192.168.1.50"))
         hr.addWidget(self.host, 1)
-        self.search_btn = QPushButton("🔍 Cerca in rete")
+        self.search_btn = QPushButton(tr("🔍 Cerca in rete"))
         self.search_btn.clicked.connect(self.search)
         hr.addWidget(self.search_btn)
-        f.addRow("Indirizzo IP", hr)
+        f.addRow(tr("Indirizzo IP"), hr)
         self.found = QListWidget()
         self.found.setMaximumHeight(110)
         self.found.setVisible(False)
@@ -43,7 +44,7 @@ class OscDeviceDialog(QDialog):
         f.addRow("", self.found)
         self.port = QSpinBox()
         self.port.setRange(1, 65535)
-        f.addRow("Porta OSC", self.port)
+        f.addRow(tr("Porta OSC"), self.port)
         v.addLayout(f)
         self.notes = QLabel()
         self.notes.setWordWrap(True)
@@ -74,11 +75,11 @@ class OscDeviceDialog(QDialog):
             self.name.setText(p.get("name", ""))
         self.notes.setText(p.get("notes", ""))
         self.search_btn.setEnabled(bool(p.get("discover")))
-        self.search_btn.setToolTip("" if p.get("discover") else "Questo profilo non prevede la ricerca: scrivi l'IP")
+        self.search_btn.setToolTip("" if p.get("discover") else tr("Questo profilo non prevede la ricerca: scrivi l'IP"))
 
     def search(self):
         self.search_btn.setEnabled(False)
-        self.msg.setText("ricerca in rete…")
+        self.msg.setText(tr("ricerca in rete…"))
         self.msg.setStyleSheet("color:#999;")
         p = self.profile()
         threading.Thread(target=lambda: self.relay.found.emit(discover(p)), daemon=True).start()
@@ -94,17 +95,16 @@ class OscDeviceDialog(QDialog):
             it.setData(Qt.UserRole, r)
             self.found.addItem(it)
         if hits:
-            self.msg.setText(f"Trovati {len(hits)} dispositivi «{self.profile().get('name')}»"
-                             + (f" (e {len(res) - len(hits)} altri nodi in rete)" if len(res) > len(hits) else ""))
+            self.msg.setText(tr("Trovati {0} dispositivi «{1}»", len(hits), self.profile().get('name'))
+                             + (tr(" (e {0} altri nodi in rete)", len(res) - len(hits)) if len(res) > len(hits) else ""))
             self.msg.setStyleSheet("color:#6c6;")
             self.found.setCurrentRow(0)
         elif res:
-            self.msg.setText(f"Nessun «{self.profile().get('name')}» riconosciuto; {len(res)} altri nodi in rete: "
-                             "sceglilo dall'elenco se è uno di questi")
+            self.msg.setText(tr("Nessun «{0}» riconosciuto; {1} altri nodi in rete: sceglilo dall'elenco se è uno di questi", self.profile().get('name'), len(res)))
             self.msg.setStyleSheet("color:#e0b040;")
         else:
-            self.msg.setText("Nessun dispositivo trovato: controlla la rete (e, per la MagicQ, che l'uscita Art-Net "
-                             "sia attiva) oppure scrivi l'indirizzo IP")
+            self.msg.setText(tr("Nessun dispositivo trovato: controlla la rete (e, per la MagicQ, che l'uscita Art-Net "
+                             "sia attiva) oppure scrivi l'indirizzo IP"))
             self.msg.setStyleSheet("color:#e66;")
 
     def _picked(self, it, _prev=None):
@@ -113,7 +113,7 @@ class OscDeviceDialog(QDialog):
 
     def _ok(self):
         if not self.host.text().strip():
-            self.msg.setText("Indica l'indirizzo IP (o cercalo in rete).")
+            self.msg.setText(tr("Indica l'indirizzo IP (o cercalo in rete)."))
             self.msg.setStyleSheet("color:#e66;")
             return
         self.dev.update(id=self.dev.get("id") or uuid.uuid4().hex[:8], profile=self.prof.currentData(),

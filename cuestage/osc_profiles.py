@@ -5,6 +5,7 @@ Un profilo è un file JSON in cuestage/osc_profiles/ o in ~/.local/share/cuestag
   notes, commands: [{id, label, address, args, params: [{id, label, type int|float|enum|text, …}], help}]
 Indirizzo e argomenti usano i parametri tra graffe: "/pb/{pb}/go".
 """
+from .i18n import tr
 import json
 import os
 import socket
@@ -36,7 +37,7 @@ def profiles(reload=False):
                     if p.get("id") and p.get("commands"):
                         out[p["id"]] = p
                 except (OSError, ValueError) as e:
-                    print(f"Profilo OSC {fn} non valido: {e}")
+                    print(tr("Profilo OSC {0} non valido: {1}", fn, e))
     _cache = out
     return out
 
@@ -72,7 +73,7 @@ def render(profile_id, cmd_id, values):
     """(indirizzo, testo degli argomenti) del comando con i valori dei parametri."""
     p, c = command(profile_id, cmd_id)
     if c is None:
-        raise KeyError(f"comando «{cmd_id}» non presente nel profilo «{profile_id}»")
+        raise KeyError(tr("comando «{0}» non presente nel profilo «{1}»", cmd_id, profile_id))
     vals = param_values(c, values)
     address = c["address"].format(**vals)
     args = " ".join(a.format(**vals) for a in c.get("args") or [])

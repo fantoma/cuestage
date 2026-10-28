@@ -1,4 +1,5 @@
 """Dialogo «Proiettori»: elenco dei videoproiettori in rete, driver/plugin, prova di connessione."""
+from .i18n import tr
 import copy
 import os
 import uuid
@@ -11,8 +12,8 @@ from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QFormLayout
 
 from .projectors import USER_PLUGIN_DIR
 
-FIELD_LABELS = {"host": "Indirizzo IP", "port": "Porta TCP", "user": "Utente",
-                "password": "Password", "proj_id": "ID proiettore"}
+FIELD_LABELS = {"host": tr("Indirizzo IP"), "port": tr("Porta TCP"), "user": tr("Utente"),
+                "password": tr("Password"), "proj_id": tr("ID proiettore")}
 
 
 class _Relay(QObject):
@@ -22,7 +23,7 @@ class _Relay(QObject):
 class ProjectorsDialog(QDialog):
     def __init__(self, projectors, manager, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Proiettori in rete")
+        self.setWindowTitle(tr("Proiettori in rete"))
         self.pm = manager
         self.items = copy.deepcopy(projectors or [])
         self.cur = None
@@ -35,7 +36,7 @@ class ProjectorsDialog(QDialog):
         self.list.currentRowChanged.connect(self._select)
         left.addWidget(self.list, 1)
         bl = QHBoxLayout()
-        for text, fn in (("Aggiungi", self._add), ("Duplica", self._dup), ("Elimina", self._del)):
+        for text, fn in ((tr("Aggiungi"), self._add), (tr("Duplica"), self._dup), (tr("Elimina"), self._del)):
             b = QPushButton(text)
             b.clicked.connect(fn)
             bl.addWidget(b)
@@ -47,10 +48,10 @@ class ProjectorsDialog(QDialog):
         f = QFormLayout(self.form_w)
         self.name = QLineEdit()
         self.name.textEdited.connect(self._store)
-        f.addRow("Nome", self.name)
+        f.addRow(tr("Nome"), self.name)
         self.driver = QComboBox()
         self.driver.currentIndexChanged.connect(self._driver_changed)
-        f.addRow("Driver", self.driver)
+        f.addRow(tr("Driver"), self.driver)
         self.fields = {}
         for key in ("host", "port", "user", "password", "proj_id"):
             if key == "port":
@@ -62,9 +63,9 @@ class ProjectorsDialog(QDialog):
                 if key == "password":
                     w.setEchoMode(QLineEdit.Password)
                 if key == "proj_id":
-                    w.setPlaceholderText("00 = tutti")
+                    w.setPlaceholderText(tr("00 = tutti"))
                 if key == "host":
-                    w.setPlaceholderText("es. 192.168.0.50")
+                    w.setPlaceholderText(tr("es. 192.168.0.50"))
                 w.textEdited.connect(self._store)
             lab = QLabel(FIELD_LABELS[key])
             f.addRow(lab, w)
@@ -75,7 +76,7 @@ class ProjectorsDialog(QDialog):
         self.notes.setStyleSheet("color:#999;")
         right.addWidget(self.notes)
         tb = QHBoxLayout()
-        self.test_btn = QPushButton("Prova connessione")
+        self.test_btn = QPushButton(tr("Prova connessione"))
         self.test_btn.clicked.connect(self._test)
         tb.addWidget(self.test_btn)
         tb.addStretch(1)
@@ -83,7 +84,7 @@ class ProjectorsDialog(QDialog):
         self.result = QPlainTextEdit()
         self.result.setReadOnly(True)
         self.result.setMaximumHeight(110)
-        self.result.setPlaceholderText("Risultato della prova…")
+        self.result.setPlaceholderText(tr("Risultato della prova…"))
         right.addWidget(self.result)
         h.addLayout(right, 2)
         v.addLayout(h, 1)
@@ -92,9 +93,9 @@ class ProjectorsDialog(QDialog):
         self.plug_lab = QLabel()
         self.plug_lab.setWordWrap(True)
         pl.addWidget(self.plug_lab, 1)
-        rb = QPushButton("Ricarica plugin")
+        rb = QPushButton(tr("Ricarica plugin"))
         rb.clicked.connect(self._reload)
-        ob = QPushButton("Apri cartella plugin")
+        ob = QPushButton(tr("Apri cartella plugin"))
         ob.clicked.connect(self._open_dir)
         pl.addWidget(rb)
         pl.addWidget(ob)
@@ -118,7 +119,7 @@ class ProjectorsDialog(QDialog):
         self.driver.setCurrentIndex(max(0, i))
         self.driver.blockSignals(False)
         errs = self.pm.registry.errors
-        txt = f"Plugin caricati: {len(self.pm.registry.drivers)} driver. Plugin utente in {USER_PLUGIN_DIR}"
+        txt = tr("Plugin caricati: {0} driver. Plugin utente in {1}", len(self.pm.registry.drivers), USER_PLUGIN_DIR)
         if errs:
             txt += "\n⚠ " + "\n⚠ ".join(errs)
         self.plug_lab.setText(txt)
@@ -129,8 +130,8 @@ class ProjectorsDialog(QDialog):
         self.list.clear()
         for p in self.items:
             cls = self.pm.registry.get(p.get("driver"))
-            drv = cls.NAME if cls else f"{p.get('driver')} (driver mancante)"
-            QListWidgetItem(f"{p.get('name') or '(senza nome)'}\n   {p.get('host') or '—'} · {drv}", self.list)
+            drv = cls.NAME if cls else tr("{0} (driver mancante)", p.get('driver'))
+            QListWidgetItem(f"{p.get('name') or tr('(senza nome)')}\n   {p.get('host') or '—'} · {drv}", self.list)
         self.list.blockSignals(False)
         if self.items:
             self.list.setCurrentRow(min(select, len(self.items) - 1))
@@ -143,14 +144,14 @@ class ProjectorsDialog(QDialog):
         self.test_btn.setEnabled(self.cur is not None)
         self.result.clear()
         if self.cur is None:
-            self.notes.setText("Aggiungi un proiettore con «Aggiungi».")
+            self.notes.setText(tr("Aggiungi un proiettore con «Aggiungi»."))
             return
         p = self.cur
         self.name.setText(p.get("name", ""))
         self.driver.blockSignals(True)
         i = self.driver.findData(p.get("driver"))
         if i < 0:
-            self.driver.addItem(f"{p.get('driver')} (mancante)", p.get("driver"))
+            self.driver.addItem(tr("{0} (mancante)", p.get('driver')), p.get("driver"))
             i = self.driver.count() - 1
         self.driver.setCurrentIndex(i)
         self.driver.blockSignals(False)
@@ -169,7 +170,7 @@ class ProjectorsDialog(QDialog):
         for key, (lab, w) in self.fields.items():
             lab.setVisible(key in wanted)
             w.setVisible(key in wanted)
-        self.notes.setText(cls.NOTES if cls else "Driver non disponibile: controlla i plugin.")
+        self.notes.setText(cls.NOTES if cls else tr("Driver non disponibile: controlla i plugin."))
 
     def _driver_changed(self, i):
         if self.cur is None:
@@ -199,13 +200,13 @@ class ProjectorsDialog(QDialog):
         it = self.list.item(row)
         if it is not None and self.cur is not None:
             cls = self.pm.registry.get(self.cur.get("driver"))
-            it.setText(f"{self.cur.get('name') or '(senza nome)'}\n   {self.cur.get('host') or '—'} · "
+            it.setText(f"{self.cur.get('name') or tr('(senza nome)')}\n   {self.cur.get('host') or '—'} · "
                        f"{cls.NAME if cls else self.cur.get('driver')}")
 
     def _add(self):
         did = self.driver.currentData() or "pjlink"
         cls = self.pm.registry.get(did)
-        self.items.append({"id": uuid.uuid4().hex[:8], "name": f"Proiettore {len(self.items) + 1}",
+        self.items.append({"id": uuid.uuid4().hex[:8], "name": tr("Proiettore {0}", len(self.items) + 1),
                            "driver": did, "host": "", "port": cls.DEFAULT_PORT if cls else 4352,
                            "user": "", "password": "", "proj_id": ""})
         self._fill_list(len(self.items) - 1)
@@ -215,7 +216,7 @@ class ProjectorsDialog(QDialog):
             return
         p = copy.deepcopy(self.cur)
         p["id"] = uuid.uuid4().hex[:8]
-        p["name"] = (p.get("name") or "") + " (copia)"
+        p["name"] = (p.get("name") or "") + tr(" (copia)")
         self.items.append(p)
         self._fill_list(len(self.items) - 1)
 
@@ -229,13 +230,13 @@ class ProjectorsDialog(QDialog):
     def _test(self):
         if self.cur is None:
             return
-        self.result.setPlainText("Connessione in corso…")
+        self.result.setPlainText(tr("Connessione in corso…"))
         self.test_btn.setEnabled(False)
         self.pm.test(dict(self.cur), lambda ok, txt: self.relay.result.emit(ok, txt))
 
     def _test_done(self, ok, txt):
         self.test_btn.setEnabled(True)
-        self.result.setPlainText(("✔ Collegato\n" if ok else "✘ ") + txt)
+        self.result.setPlainText((tr("✔ Collegato\n") if ok else "✘ ") + txt)
 
     def _reload(self):
         self.pm.reload_plugins()

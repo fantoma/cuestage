@@ -1,4 +1,5 @@
 """Istanze secondarie: master, slave, ridondanza (parte di MainWindow)."""
+from ..i18n import tr
 import os
 
 from PySide6.QtCore import QSettings
@@ -22,7 +23,7 @@ class ClusterMixin:
         port = int(s.get("cluster_port") or 53900)
         if want and (hub.role != "master" or hub.port != port):
             if hub.start_master(port, lambda: self.show_data, self._cluster_hw):
-                self.status(f"Istanze secondarie abilitate: porta TCP {port}")
+                self.status(tr("Istanze secondarie abilitate: porta TCP {0}", port))
         elif not want and hub.role == "master":
             hub.stop_master()
         self._cluster_indicator()
@@ -49,18 +50,17 @@ class ClusterMixin:
         return {"audio": audio, "midi_out": outs, "mixers": self.show_data.settings.get("mixers") or []}
 
     def _cluster_join(self, cid, name, addr, mode):
-        what = "RIDONDANZA (esegue le stesse cue)" if mode == "redundancy" else "SLAVE (copia del progetto)"
-        r = QMessageBox.question(self, "Istanza secondaria",
-                                 f"«{name}» ({addr}) chiede di collegarsi come {what}.\n\n"
-                                 "Riceverà lo show, i file multimediali e ogni modifica. Accetti?")
+        what = tr("RIDONDANZA (esegue le stesse cue)") if mode == "redundancy" else tr("SLAVE (copia del progetto)")
+        r = QMessageBox.question(self, tr("Istanza secondaria"),
+                                 tr("«{0}» ({1}) chiede di collegarsi come {2}.\n\nRiceverà lo show, i file multimediali e ogni modifica. Accetti?", name, addr, what))
         self.cluster.answer(cid, r == QMessageBox.Yes)
 
     def become_slave(self):
         if self.cluster.role == "slave":
-            QMessageBox.information(self, "Slave", "Questa istanza è già slave: «Esci dalla modalità slave» prima.")
+            QMessageBox.information(self, tr("Slave"), tr("Questa istanza è già slave: «Esci dalla modalità slave» prima."))
             return
         if self.ctrl.instances and QMessageBox.question(
-                self, "Diventa slave", "Ci sono cue in esecuzione: verranno fermate. Continuare?") != QMessageBox.Yes:
+                self, tr("Diventa slave"), tr("Ci sono cue in esecuzione: verranno fermate. Continuare?")) != QMessageBox.Yes:
             return
         if not self._confirm_discard():
             return
@@ -102,24 +102,22 @@ class ClusterMixin:
         try:
             self.show_data.save(path)
         except OSError as e:
-            self.status(f"Copia locale dello show non salvata: {e}")
+            self.status(tr("Copia locale dello show non salvata: {0}", e))
         self._slave_hash = self._show_hash()          # base per riconoscere le modifiche fatte qui
         diffs = self._cluster_hw_check(info.get("hw") or {}, data.get("settings") or {})
         if info["first"]:
-            msg = (f"Collegato a «{hub.master_info.get('name')}» come "
-                   f"{'RIDONDANZA' if hub.mode == 'redundancy' else 'SLAVE'}.\n"
-                   f"File: {info['downloaded']} scaricati su {info['files']}.")
+            msg = (tr("Collegato a «{0}» come {1}.\nFile: {2} scaricati su {3}.", hub.master_info.get('name'), 'RIDONDANZA' if hub.mode == 'redundancy' else 'SLAVE', info['downloaded'], info['files']))
             if info.get("errors"):
-                msg += "\n\nErrori:\n" + "\n".join(info["errors"][:10])
+                msg += tr("\n\nErrori:\n") + "\n".join(info["errors"][:10])
             if diffs:
-                msg += "\n\n⚠ Hardware diverso dal master (le cue interessate sono in rosso):\n• " + \
+                msg += tr("\n\n⚠ Hardware diverso dal master (le cue interessate sono in rosso):\n• ") + \
                        "\n• ".join(diffs[:20])
-                QMessageBox.warning(self, "Istanza secondaria", msg)
+                QMessageBox.warning(self, tr("Istanza secondaria"), msg)
             else:
                 self.status(msg.replace("\n", " "))
         else:
-            self.status(f"Show aggiornato dal master ({info['downloaded']} file scaricati)"
-                        + (f" · ⚠ {len(diffs)} differenze hardware" if diffs else ""))
+            self.status(tr("Show aggiornato dal master ({0} file scaricati)", info['downloaded'])
+                        + (tr(" · ⚠ {0} differenze hardware", len(diffs)) if diffs else ""))
         self._cluster_indicator()
 
     def _cluster_replace(self, new, take_settings):
@@ -183,7 +181,7 @@ class ClusterMixin:
         self._cluster_replace(new, take)
         sh.dirty = True
         self._update_title()
-        self.status(f"Progetto aggiornato da «{who}» (istanza secondaria)")
+        self.status(tr("Progetto aggiornato da «{0}» (istanza secondaria)", who))
 
     def _cluster_hw_check(self, hw, master_settings):
         """Cue che usano hardware diverso da quello del master → rosse nella lista."""
@@ -194,9 +192,9 @@ class ClusterMixin:
             name, ch, found = self.audio.resolve(key or None)
             why = None
             if not found:
-                why = f"scheda audio «{m.get('name')}» non presente qui (uso «{name}»)"
+                why = tr("scheda audio «{0}» non presente qui (uso «{1}»)", m.get('name'), name)
             elif m.get("channels") and ch < int(m["channels"]):
-                why = f"scheda «{m.get('name')}»: qui {ch} canali, sul master {m['channels']}"
+                why = tr("scheda «{0}»: qui {1} canali, sul master {2}", m.get('name'), ch, m['channels'])
             if why:
                 diffs.append(why)
                 for c in sh.all_cues():
@@ -214,11 +212,11 @@ class ClusterMixin:
             lm = local.get(mid)
             why = None
             if lm is None:
-                why = f"mixer «{m.get('name')}» non configurato qui"
+                why = tr("mixer «{0}» non configurato qui", m.get('name'))
             elif any((lm.get(k) or "") != (m.get(k) or "") for k in ("driver", "host", "port", "card", "midi_out")):
-                why = f"mixer «{m.get('name')}» configurato in modo diverso"
+                why = tr("mixer «{0}» configurato in modo diverso", m.get('name'))
             elif lm.get("card") and cards and lm.get("card") not in cards:
-                why = f"scheda «{lm.get('card_name') or lm.get('card')}» del mixer «{m.get('name')}» non collegata qui"
+                why = tr("scheda «{0}» del mixer «{1}» non collegata qui", lm.get('card_name') or lm.get('card'), m.get('name'))
             if why:
                 diffs.append(why)
                 for c in sh.all_cues():
@@ -234,7 +232,7 @@ class ClusterMixin:
             if c.type == "midiout":
                 port = c.mo_port or sh.settings.get("midi_out_port") or ""
                 if port and not any(o.startswith(port_key(port)) for o in outs):
-                    why = f"uscita MIDI «{port}» non presente qui"
+                    why = tr("uscita MIDI «{0}» non presente qui", port)
                     if why not in diffs:
                         diffs.append(why)
                     bad[c.id] = why
@@ -244,13 +242,13 @@ class ClusterMixin:
         return diffs
 
     def _cluster_lost(self):
-        self.status("⚠ MASTER NON RAGGIUNGIBILE (nessun heartbeat)")
+        self.status(tr("⚠ MASTER NON RAGGIUNGIBILE (nessun heartbeat)"))
         self._cluster_indicator()
         if QSettings("CueStage", "CueStage").value("cluster/auto_promote", "false") in (True, "true"):
             self.cluster_promote(ask=False)
 
     def _cluster_back(self):
-        self.status("Master di nuovo raggiungibile")
+        self.status(tr("Master di nuovo raggiungibile"))
         self._cluster_indicator()
 
     def cluster_promote(self, ask=True):
@@ -258,8 +256,8 @@ class ClusterMixin:
         if hub.role != "slave":
             return
         if ask and QMessageBox.question(
-                self, "Promuovi", "Scollegarsi dal master e diventare indipendente (master, se le istanze "
-                "secondarie sono abilitate)? Le cue in esecuzione continuano.") != QMessageBox.Yes:
+                self, tr("Promuovi"), tr("Scollegarsi dal master e diventare indipendente (master, se le istanze "
+                "secondarie sono abilitate)? Le cue in esecuzione continuano.")) != QMessageBox.Yes:
             return
         hub.promote()
         self.inspector.setEnabled(True)
@@ -268,7 +266,7 @@ class ClusterMixin:
         self.model.hw_bad = {}
         self.model.refresh()
         self._cluster_apply_settings()
-        self.status("Questa istanza ora è indipendente" + (" (master)" if hub.role == "master" else ""))
+        self.status(tr("Questa istanza ora è indipendente") + (tr(" (master)") if hub.role == "master" else ""))
         self._cluster_indicator()
 
     def _cluster_indicator(self):
@@ -278,16 +276,16 @@ class ClusterMixin:
         b = self.cluster_btn
         if hub.role == "master":
             n = len(hub.client_list())
-            b.setText(f"◉ MASTER · {n} secondari{'a' if n == 1 else 'e'}")
+            b.setText(tr("◉ MASTER · {0} secondari{1}", n, 'a' if n == 1 else 'e'))
             b.setStyleSheet("color:#6c6;font-weight:bold;")
         elif hub.role == "slave":
             who = hub.master_info.get("name") or hub.master_info.get("host")
             kind = "RIDONDANZA" if hub.mode == "redundancy" else "SLAVE"
             if hub.lost:
-                b.setText(f"⚠ {kind}: master «{who}» perso — clic per promuovere")
+                b.setText(tr("⚠ {0}: master «{1}» perso — clic per promuovere", kind, who))
                 b.setStyleSheet("color:white;background:#b3261e;font-weight:bold;padding:0 6px;")
             else:
-                b.setText(f"◎ {kind} di «{who}» ♥" + ("  ✎" if hub.can_edit else ""))
+                b.setText(tr("◎ {0} di «{1}» ♥", kind, who) + ("  ✎" if hub.can_edit else ""))
                 b.setStyleSheet("color:#e0b040;font-weight:bold;")
         b.setVisible(hub.role is not None)
 
@@ -297,17 +295,15 @@ class ClusterMixin:
             if hub.lost:
                 self.cluster_promote()
             else:
-                QMessageBox.information(self, "Istanza secondaria",
-                                        f"Collegata a «{hub.master_info.get('name')}» "
-                                        f"({hub.master_info.get('host')}:{hub.master_info.get('port')}) in modalità "
-                                        f"{'RIDONDANZA' if hub.mode == 'redundancy' else 'SLAVE'}.\n"
-                                        + ("Le modifiche fatte qui vengono inviate al master." if hub.can_edit else
-                                           "Le modifiche al progetto arrivano dal master; l'editor è bloccato."))
+                QMessageBox.information(self, tr("Istanza secondaria"),
+                                        tr("Collegata a «{0}» ({1}:{2}) in modalità {3}.\n", hub.master_info.get('name'), hub.master_info.get('host'), hub.master_info.get('port'), 'RIDONDANZA' if hub.mode == 'redundancy' else 'SLAVE')
+                                        + (tr("Le modifiche fatte qui vengono inviate al master.") if hub.can_edit else
+                                           tr("Le modifiche al progetto arrivano dal master; l'editor è bloccato.")))
         elif hub.role == "master":
             rows = hub.client_list()
-            QMessageBox.information(self, "Istanze collegate",
+            QMessageBox.information(self, tr("Istanze collegate"),
                                     "\n".join(f"• {n} ({a}) — {'ridondanza' if m == 'redundancy' else 'slave'}"
-                                              for n, a, m in rows) or "Nessuna istanza secondaria collegata.")
+                                              for n, a, m in rows) or tr("Nessuna istanza secondaria collegata."))
         else:
-            QMessageBox.information(self, "Istanze", "Questa istanza non è né master né slave. Per accettare "
-                                    "istanze secondarie: Impostazioni › Audio, OSC e MIDI › Istanze.")
+            QMessageBox.information(self, tr("Istanze"), tr("Questa istanza non è né master né slave. Per accettare "
+                                    "istanze secondarie: Impostazioni › Audio, OSC e MIDI › Istanze."))

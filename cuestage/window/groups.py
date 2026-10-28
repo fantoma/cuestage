@@ -1,6 +1,7 @@
 """Gruppi di cue: raggruppa, espandi/compatta, cue di uscita (parte di MainWindow)."""
 
 
+from ..i18n import tr
 from ..model import (
     Cue, )
 
@@ -54,7 +55,7 @@ class GroupsMixin:
                 if any(x.type == "groupexit" for x in cues[i + 1:end]):
                     continue
                 ex = Cue("groupexit", number=self.show_data.next_number(),
-                         name=f"Esci da «{c.name or 'Gruppo'}»", target=c.number or c.id, group=c.id)
+                         name=tr("Esci da «{0}»", c.name or tr('Gruppo')), target=c.number or c.id, group=c.id)
                 cues.insert(end, ex)
 
     def toggle_group(self, r=None):
@@ -81,7 +82,7 @@ class GroupsMixin:
         cues = self.show_data.cues
         rows = [r for r in self._selected_rows() if cues[r].type != "group"]
         if not rows:
-            self.status("Seleziona le cue da raggruppare (non gruppi)")
+            self.status(tr("Seleziona le cue da raggruppare (non gruppi)"))
             return
         moving = [cues[r] for r in rows]
         g = Cue("group", number=self.show_data.next_number(), name="Gruppo")
@@ -94,7 +95,7 @@ class GroupsMixin:
         cues[:] = rest[:pos] + [g] + moving + rest[pos:]
         self.model.endResetModel()
         self._structure_changed(select=[pos])
-        self.status(f"Creato un gruppo con {len(moving)} cue (tipo nella scheda «Gruppo» dell'ispettore)")
+        self.status(tr("Creato un gruppo con {0} cue (tipo nella scheda «Gruppo» dell'ispettore)", len(moving)))
 
     def ungroup_selected(self):
         """Scioglie il gruppo selezionato (le cue restano al loro posto)."""

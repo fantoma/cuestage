@@ -1,4 +1,5 @@
 """Barra dei keyframe: timeline con le corsie Immagine/Audio, cursore del tempo e riga di modifica."""
+from .i18n import tr
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen, QPolygonF
 from PySide6.QtWidgets import (QComboBox, QDoubleSpinBox, QHBoxLayout, QLabel, QMenu, QPushButton,
@@ -39,9 +40,9 @@ class KeyframeStrip(QWidget):
         self.setFixedHeight(self.TOP + len(lanes) * self.LANE_H + 12)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMouseTracking(True)
-        self.setToolTip("Clic: sposta il cursore · doppio clic su una corsia: nuovo keyframe\n"
+        self.setToolTip(tr("Clic: sposta il cursore · doppio clic su una corsia: nuovo keyframe\n"
                         "Trascina un ◆ per spostarlo · tasto destro su un ◆: preset / elimina · "
-                        "frecce: ±0,1 s (Maiusc ±1 s) · Canc: elimina il keyframe selezionato")
+                        "frecce: ±0,1 s (Maiusc ±1 s) · Canc: elimina il keyframe selezionato"))
 
     # ---- stile QSlider
     def setRange(self, lo, hi):
@@ -168,7 +169,7 @@ class KeyframeStrip(QWidget):
         self._mark_hits = []
         y0, y1 = 4, 4 + self.MARK_H - 3
         p.setPen(QColor(150, 150, 160))
-        p.drawText(QRectF(4, y0, self.LM - 8, y1 - y0), Qt.AlignVCenter | Qt.AlignLeft, "Marcatori")
+        p.drawText(QRectF(4, y0, self.LM - 8, y1 - y0), Qt.AlignVCenter | Qt.AlignLeft, tr("Marcatori"))
         p.setPen(Qt.NoPen)
         p.setBrush(QColor(36, 38, 46))
         p.drawRect(QRectF(x0, y0, x1 - x0, y1 - y0))
@@ -187,7 +188,7 @@ class KeyframeStrip(QWidget):
             if i == 0:
                 p.setPen(COLORS["loop"])
                 p.drawText(QRectF(xa + 3, y0, max(40.0, xb - xa), y1 - y0), Qt.AlignVCenter | Qt.AlignLeft,
-                           f"loop ×{ax.loops}" if ax.loops > 0 else "loop ∞")
+                           tr("loop ×{0}", ax.loops) if ax.loops > 0 else tr("loop ∞"))
         from .markers import Mark
         ends = [Mark(0.0, "in", "IN")] + ([Mark(ax.total, "out", "OUT")] if ax.total else [])
         for m in ends + [m for m in cue_marks(self.cue, ax) if m.kind not in ("visual", "audio")]:
@@ -209,7 +210,7 @@ class KeyframeStrip(QWidget):
                 p.drawEllipse(QPointF(x, y1 - 3), 2.2, 2.2)
             self._mark_hits.append((x, m))
         for a, b in unrolled_regions(ax, upto):
-            for t, lab in ((a, "inizio loop"), (b, "fine loop")):
+            for t, lab in ((a, tr("inizio loop")), (b, tr("fine loop"))):
                 self._mark_hits.append((self._x(t * 10), Mark(t, "loop", lab)))
 
     # ---- interazione
@@ -297,15 +298,15 @@ class KeyframeStrip(QWidget):
     def _menu(self, e, p):
         m = QMenu(self)
         lane = p.get("kind")
-        sub = m.addMenu("Preset")
+        sub = m.addMenu(tr("Preset"))
         for name in [kf.BASE] + sorted(self.cue.preset_dict(lane), key=str.lower):
             a = sub.addAction(kf.BASE_LABEL if name == kf.BASE else name)
             a.setCheckable(True)
             a.setChecked(p.get("preset") == name)
             a.triggered.connect(lambda _=False, name=name: (p.__setitem__("preset", name), self.select(p),
                                                           self.edited.emit()))
-        m.addAction("Vai a questo keyframe").triggered.connect(lambda: self.select(p, jump=True))
-        m.addAction("Elimina keyframe").triggered.connect(lambda: self.delete(p))
+        m.addAction(tr("Vai a questo keyframe")).triggered.connect(lambda: self.select(p, jump=True))
+        m.addAction(tr("Elimina keyframe")).triggered.connect(lambda: self.delete(p))
         m.exec(e.globalPosition().toPoint())
 
 
@@ -340,7 +341,7 @@ class KeyframeBar(QWidget):
         row.addWidget(self.strip, 1)
         nav = QVBoxLayout()
         nav.setSpacing(2)
-        for text, tip, step in (("◀", "Marcatore precedente (Ctrl+←)", -1), ("▶", "Marcatore successivo (Ctrl+→)", 1)):
+        for text, tip, step in (("◀", tr("Marcatore precedente (Ctrl+←)"), -1), ("▶", tr("Marcatore successivo (Ctrl+→)"), 1)):
             b = QPushButton(text)
             b.setFixedWidth(30)
             b.setToolTip(tip)
@@ -349,11 +350,11 @@ class KeyframeBar(QWidget):
         row.addLayout(nav)
         if in_out:
             b_in = QPushButton("IN")
-            b_in.setToolTip("Vai all'inizio della cue")
+            b_in.setToolTip(tr("Vai all'inizio della cue"))
             b_in.setFixedWidth(40)
             b_in.clicked.connect(lambda: self.goto_time(0.0))
             b_out = QPushButton("OUT")
-            b_out.setToolTip("Vai alla fine della cue")
+            b_out.setToolTip(tr("Vai alla fine della cue"))
             b_out.setFixedWidth(46)
             b_out.clicked.connect(lambda: self.goto_time(self._out() or self.strip.hi / 10.0))
             row.addWidget(b_in)
@@ -371,7 +372,7 @@ class KeyframeBar(QWidget):
         self.preset_cb.setMinimumWidth(110)
         self.preset_cb.currentIndexChanged.connect(self._preset_changed)
         ed.addWidget(self.preset_cb)
-        ed.addWidget(QLabel("a"))
+        ed.addWidget(QLabel(tr("a")))
         self.t_spin = QDoubleSpinBox()
         self.t_spin.setRange(0, 360000)
         self.t_spin.setDecimals(1)
@@ -380,14 +381,13 @@ class KeyframeBar(QWidget):
         self.t_spin.setKeyboardTracking(False)
         self.t_spin.valueChanged.connect(self._t_changed)
         ed.addWidget(self.t_spin)
-        self.b_del = QPushButton("Elimina")
+        self.b_del = QPushButton(tr("Elimina"))
         self.b_del.clicked.connect(lambda: self.strip.delete(self.strip.selected))
         ed.addWidget(self.b_del)
         ed.addSpacing(6)
         for lane in self.lanes:
             b = QPushButton(f"+◆ {kf.KIND_LABELS[lane]}")
-            b.setToolTip(f"Nuovo keyframe {kf.KIND_LABELS[lane].lower()} al tempo del cursore "
-                         "(anche: doppio clic sulla corsia)")
+            b.setToolTip(tr("Nuovo keyframe {0} al tempo del cursore (anche: doppio clic sulla corsia)", kf.KIND_LABELS[lane].lower()))
             b.setStyleSheet(f"color:{LANE_COL[lane].name()};")
             b.clicked.connect(lambda _=False, lane=lane: self.add(lane, self.cue_time()))
             ed.addWidget(b)
@@ -438,14 +438,14 @@ class KeyframeBar(QWidget):
             out += [(m.t, m.label or MK.get(m.kind, m.kind), None) for m in cue_marks(self.cue, ax)
                     if m.kind not in ("visual", "audio", "loop")]
             for i, (a, b) in enumerate(unrolled_regions(ax, self.strip.hi / 10.0)):
-                rep = f" (ripetizione {i})" if i else ""
-                out += [(a, "inizio loop" + rep, None), (b, "fine loop" + rep, None)]
+                rep = tr(" (ripetizione {0})", i) if i else ""
+                out += [(a, tr("inizio loop") + rep, None), (b, tr("fine loop") + rep, None)]
         for p in self.cue.preset_points:
             try:
                 t = float(p.get("t", 0))
             except (TypeError, ValueError):
                 continue
-            out.append((t, f"keyframe {kf.KIND_LABELS.get(p.get('kind'), '')}: {kf.label(p.get('preset', ''))}", p))
+            out.append((t, tr("keyframe {0}: {1}", kf.KIND_LABELS.get(p.get('kind'), ''), kf.label(p.get('preset', ''))), p))
         out.sort(key=lambda x: x[0])
         return out
 
@@ -475,9 +475,9 @@ class KeyframeBar(QWidget):
         states = {lane: kf.names_at(self.cue, lane, T) for lane in self.lanes}
         parts = [f"<b style='color:{LANE_COL[l].name()}'>{kf.KIND_LABELS[l]}</b>: {kf.describe(states[l])}"
                  for l in self.lanes]
-        head = f"In uso a {fmt_time(T)}"
+        head = tr("In uso a {0}", fmt_time(T))
         if self._mark_here:
-            head = f"◆ {self._mark_here} — in uso a {fmt_time(T)}"
+            head = tr("◆ {0} — in uso a {1}", self._mark_here, fmt_time(T))
         self.use_lab.setText(head + ": " + " · ".join(parts))
         self.presetInUse.emit(states)
 
@@ -506,7 +506,7 @@ class KeyframeBar(QWidget):
 
     def _label(self):
         if self.cue.type in ("audio", "video"):
-            self.time_lab.setText(f"cue {fmt_time(self.cue_time())}\nfile {fmt_time(self.file_time())}")
+            self.time_lab.setText(tr("cue {0}\nfile {1}", fmt_time(self.cue_time()), fmt_time(self.file_time())))
         else:
             self.time_lab.setText(f"cue {fmt_time(self.cue_time())}")
 
@@ -538,7 +538,7 @@ class KeyframeBar(QWidget):
         if not ok:
             n = {l: sum(1 for q in self.cue.preset_points if q.get("kind") == l) for l in self.lanes}
             self.sel_lab.setText("◆ —")
-            self.sel_lab.setToolTip("Nessun keyframe selezionato · " +
+            self.sel_lab.setToolTip(tr("Nessun keyframe selezionato · ") +
                                     ", ".join(f"{kf.KIND_LABELS[l]}: {n[l]}" for l in self.lanes))
             self.sel_lab.setStyleSheet("font-weight:bold; color:#888;")
             self.preset_cb.blockSignals(True)
@@ -555,7 +555,7 @@ class KeyframeBar(QWidget):
             self.preset_cb.addItem(n, n)
         i = self.preset_cb.findData(p.get("preset"))
         if i < 0:
-            self.preset_cb.addItem(f"{p.get('preset')} (mancante)", p.get("preset"))
+            self.preset_cb.addItem(tr("{0} (mancante)", p.get('preset')), p.get("preset"))
             i = self.preset_cb.count() - 1
         self.preset_cb.setCurrentIndex(i)
         self.preset_cb.blockSignals(False)

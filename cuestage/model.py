@@ -1,4 +1,5 @@
 """Modello dati: cue e show, con salvataggio/caricamento JSON."""
+from .i18n import tr
 import copy
 import json
 import os
@@ -9,10 +10,10 @@ from .system import local_path, portable_rel
 CUE_TYPES = ["audio", "video", "image", "text", "group", "groupexit", "fade", "preset", "control", "stoppanel",
              "osc", "midiout", "projector", "mixer", "wait", "memo"]
 TYPE_LABELS = {
-    "audio": "Audio", "video": "Video", "image": "Immagine", "fade": "Fade",
-    "preset": "Cambia preset", "control": "Comando", "osc": "OSC", "projector": "Proiettore", "mixer": "Mixer",
-    "group": "Gruppo", "groupexit": "Esci dal gruppo", "text": "Testo", "midiout": "MIDI out",
-    "wait": "Attesa", "memo": "Memo", "stoppanel": "Stop panel",
+    "audio": tr("Audio"), "video": tr("Video"), "image": tr("Immagine"), "fade": tr("Fade"),
+    "preset": tr("Cambia preset"), "control": tr("Comando"), "osc": "OSC", "projector": tr("Proiettore"), "mixer": tr("Mixer"),
+    "group": tr("Gruppo"), "groupexit": tr("Esci dal gruppo"), "text": tr("Testo"), "midiout": tr("MIDI out"),
+    "wait": tr("Attesa"), "memo": tr("Memo"), "stoppanel": tr("Stop panel"),
 }
 TYPE_ICONS = {
     "audio": "♪", "video": "▶", "image": "▣", "fade": "◢", "preset": "⇢", "control": "⌘", "projector": "⌖",
@@ -25,25 +26,25 @@ PRESET_KINDS = {
     "audio": ["level_db", "fade_in", "fade_out", "matrix", "out_levels"],
     "visual": ["crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y", "scale", "warp", "opacity", "fit"],
 }
-PRESET_LABELS = {"audio": "Preset audio", "visual": "Preset crop / posizione"}
+PRESET_LABELS = {"audio": tr("Preset audio"), "visual": tr("Preset crop / posizione")}
 TRIGGERS = ["manual", "with_prev", "after_prev"]
 TRIGGER_LABELS = {
-    "manual": "Manuale (GO)",
-    "with_prev": "Insieme alla precedente",
-    "after_prev": "Alla fine della precedente",
+    "manual": tr("Manuale (GO)"),
+    "with_prev": tr("Insieme alla precedente"),
+    "after_prev": tr("Alla fine della precedente"),
 }
-TRIGGER_SHORT = {"manual": "GO", "with_prev": "⇉ con prec.", "after_prev": "↳ dopo prec."}
+TRIGGER_SHORT = {"manual": "GO", "with_prev": tr("⇉ con prec."), "after_prev": tr("↳ dopo prec.")}
 
 CONTROL_ACTIONS = ["start", "stop", "pause", "resume", "stop_all", "playhead"]
 CONTROL_LABELS = {
-    "start": "Play (avvia target)", "stop": "Stop target", "pause": "Pausa target",
-    "resume": "Riprendi target", "stop_all": "Stop tutto", "playhead": "Sposta playhead su target",
+    "start": tr("Play (avvia target)"), "stop": tr("Stop target"), "pause": tr("Pausa target"),
+    "resume": tr("Riprendi target"), "stop_all": tr("Stop tutto"), "playhead": tr("Sposta playhead su target"),
 }
 FADE_SHAPES = ["scurve", "linear", "db"]
-FADE_SHAPE_LABELS = {"scurve": "Curva S", "linear": "Lineare (guadagno)", "db": "Lineare in dB"}
+FADE_SHAPE_LABELS = {"scurve": tr("Curva S"), "linear": tr("Lineare (guadagno)"), "db": tr("Lineare in dB")}
 FIT_MODES = ["fit", "fill", "stretch", "native"]
-FIT_LABELS = {"fit": "Adatta (contenuto intero)", "fill": "Riempi (ritaglia)",
-              "stretch": "Deforma (riempi tutto)", "native": "Dimensione originale"}
+FIT_LABELS = {"fit": tr("Adatta (contenuto intero)"), "fill": tr("Riempi (ritaglia)"),
+              "stretch": tr("Deforma (riempi tutto)"), "native": tr("Dimensione originale")}
 
 MIN_DB = -60.0
 MAX_DB = 12.0
@@ -280,7 +281,7 @@ MAIN_ID = "main"
 class CueList:
     """Una lista di cue: la MAIN oppure un PANEL."""
 
-    GRID_DEFAULTS = {"kind": "list", "grid_rows": 4, "grid_cols": 6, "grid_pages": ["Pagina 1"],
+    GRID_DEFAULTS = {"kind": "list", "grid_rows": 4, "grid_cols": 6, "grid_pages": [tr("Pagina 1")],
                      "grid_click": "toggle",
                      "grid_solo": False,     # Solo: una cue che parte ferma le altre attive del GRID
                      "grid_fade": 0.5}       # fade out (s) degli stop del GRID (clic, Solo, STOP del PANEL)
@@ -307,7 +308,7 @@ class CueList:
         self.grid_rows = max(1, min(16, int(self.grid_rows or 4)))
         self.grid_cols = max(1, min(16, int(self.grid_cols or 6)))
         if not isinstance(self.grid_pages, list) or not self.grid_pages:
-            self.grid_pages = ["Pagina 1"]
+            self.grid_pages = [tr("Pagina 1")]
         self.grid_solo = bool(self.grid_solo)
         try:
             self.grid_fade = max(0.0, min(60.0, float(self.grid_fade)))

@@ -4,6 +4,7 @@ Ogni cue «di primo livello» (non membro di un gruppo) occupa una casella: cue.
 I membri di un gruppo stanno dentro la casella del loro gruppo. L'ordine della lista segue le caselle
 (pagina, riga, colonna), così il GO locale del PANEL avanza casella dopo casella.
 """
+from .i18n import tr
 
 
 def top_level(lst):
@@ -49,7 +50,7 @@ def free_cell(lst, page=0, taken=None, start=None):
         for i in range(0, i0):
             if (p0, i // C, i % C) not in taken:
                 return [p0, i // C, i % C]
-    lst.grid_pages.append(f"Pagina {pages + 1}")
+    lst.grid_pages.append(tr("Pagina {0}", pages + 1))
     return [pages, 0, 0]
 
 

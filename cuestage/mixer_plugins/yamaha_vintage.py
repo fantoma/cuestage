@@ -20,6 +20,7 @@ non si può leggere il livello dal mixer (si imposta a mano nella cue).
 Se sul mixer la tabella è stata cambiata, correggere FADER_CC / ON_CC qui sotto.
 La scala 0…127 ↔ dB è approssimata (0 = −∞, 103 ≈ 0 dB, 127 = +6 dB).
 """
+from cuestage.i18n import tr
 import threading
 
 from cuestage.mixers import MixerDriver, MixerError, interp, resolve_midi_port
@@ -75,15 +76,15 @@ class _YamahaCC(MixerDriver):
 
     def _out(self):
         if mido is None:
-            raise MixerError("mido/python-rtmidi non installati")
+            raise MixerError(tr("mido/python-rtmidi non installati"))
         if self.out is None:
             name = resolve_midi_port(self.conf.get("midi_out"), mido.get_output_names())
             if name is None:
-                raise MixerError(f"uscita MIDI «{self.conf.get('midi_out') or '—'}» non trovata")
+                raise MixerError(tr("uscita MIDI «{0}» non trovata", self.conf.get('midi_out') or '—'))
             try:
                 self.out = mido.open_output(name)
             except Exception as e:
-                raise MixerError(f"impossibile aprire l'uscita MIDI ({e})")
+                raise MixerError(tr("impossibile aprire l'uscita MIDI ({0})", e))
             self._listen()
         return self.out
 
@@ -107,7 +108,7 @@ class _YamahaCC(MixerDriver):
     def _cc(self, table, kind, n):
         lst = table.get(kind) or []
         if not 1 <= int(n) <= len(lst) or lst[int(n) - 1] is None:
-            raise MixerError("controllo non presente nella tabella del mixer")
+            raise MixerError(tr("controllo non presente nella tabella del mixer"))
         return lst[int(n) - 1]
 
     def _send(self, cc, value):
@@ -129,10 +130,10 @@ class _YamahaCC(MixerDriver):
             v = self.values.get(cc)
         if v is None:
             if not self.TRANSMITS_CC:
-                raise MixerError(f"il {self.NAME.split(' (')[0]} non trasmette i livelli: impostalo a mano nella cue")
+                raise MixerError(tr("il {0} non trasmette i livelli: impostalo a mano nella cue", self.NAME.split(' (')[0]))
             if not self.conf.get("midi_in"):
-                raise MixerError("per leggere serve l'ingresso MIDI collegato al MIDI OUT del mixer")
-            raise MixerError("valore non ancora ricevuto: muovi il fader sul mixer (Control Change Tx ON)")
+                raise MixerError(tr("per leggere serve l'ingresso MIDI collegato al MIDI OUT del mixer"))
+            raise MixerError(tr("valore non ancora ricevuto: muovi il fader sul mixer (Control Change Tx ON)"))
         return v
 
     def get_mute(self, kind, n):
@@ -146,7 +147,7 @@ class _YamahaCC(MixerDriver):
     def status(self):
         self._out()
         return {"uscita MIDI": self.out.name, "canale MIDI": self.ch + 1,
-                "ascolto dal mixer": "sì" if self.inp is not None else "no"}
+                "ascolto dal mixer": tr("sì") if self.inp is not None else "no"}
 
     def close(self):
         for p in (self.out, self.inp):
@@ -160,25 +161,25 @@ class _YamahaCC(MixerDriver):
 
 class Yamaha01V(_YamahaCC):
     ID = "yamaha_01v"
-    NAME = "Yamaha 01V (originale, MIDI CC)"
+    NAME = tr("Yamaha 01V (originale, MIDI CC)")
     FADER_CC = {"ch": list(range(1, 13)), "st": [13, 14], "fx": [15, 16], "aux": [17, 18, 19, 20],
                 "grp": [21, 22, 23, 24], "fxs": [25, 26], "main": [27]}
     ON_CC = {"ch": [28, 29, 30, 31, 33, 34, 35, 36, 37, 38, 39, 40], "st": [41, 42], "fx": [43, 44],
              "aux": [45, 46, 47, 48], "grp": [49, 50, 51, 52], "fxs": [53, 54], "main": [55]}
-    NOTES = ("Via MIDI Control Change, tabella iniziale del 01V. Canali stereo = CH13-14 e CH15-16; Ritorni FX = "
+    NOTES = (tr("Via MIDI Control Change, tabella iniziale del 01V. Canali stereo = CH13-14 e CH15-16; Ritorni FX = "
              "RETURN 1–2; Gruppi = BUS 1–4; Mandate FX = EFFECT 1–2 master; Master = ST OUT. Sul mixer: Control "
-             "Change Rx ON (e Tx ON per leggere i livelli) sul canale MIDI indicato. dB approssimati.")
+             "Change Rx ON (e Tx ON per leggere i livelli) sul canale MIDI indicato. dB approssimati."))
 
 
 class Yamaha02R(_YamahaCC):
     ID = "yamaha_02r"
-    NAME = "Yamaha 02R (originale, MIDI CC)"
+    NAME = tr("Yamaha 02R (originale, MIDI CC)")
     TRANSMITS_CC = False
     FADER_CC = {"ch": list(range(1, 17)), "st": [17, 18, 19, 20], "fx": [21, 22], "main": [23],
                 "aux": list(range(24, 32)), "grp": list(range(33, 41))}
     ON_CC = {"ch": list(range(41, 57)), "st": [57, 58, 59, 60], "fx": [61, 62], "main": [63]}
     FIELDS = ("midi_out", "midi_ch")
-    NOTES = ("Via MIDI Control Change, mappa «02R» di fabbrica. Canali = MIC 1–16; Canali stereo = LINE 17/18…23/24; "
+    NOTES = (tr("Via MIDI Control Change, mappa «02R» di fabbrica. Canali = MIC 1–16; Canali stereo = LINE 17/18…23/24; "
              "Ritorni FX = EFF 1–2; Master = ST MASTER; Aux 1–8 e Gruppi = BUS 1–8 (solo fader). Il 02R non "
              "trasmette Control Change: i livelli non si leggono dal mixer. Sul mixer: Control Change Rx ON. "
-             "dB approssimati.")
+             "dB approssimati."))

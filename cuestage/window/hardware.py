@@ -1,4 +1,5 @@
 """Proiettori, mixer e schede audio: pannelli e configurazione (parte di MainWindow)."""
+from ..i18n import tr
 import traceback
 
 
@@ -17,7 +18,7 @@ class HardwareMixin:
             self.mix_panel.rebuild()
         except Exception as e:
             traceback.print_exc()
-            self.status(f"✘ Pannello mixer: {e}")
+            self.status(tr("✘ Pannello mixer: {0}", e))
         if not has:
             self.mix_panel.hide()
 
@@ -63,7 +64,7 @@ class HardwareMixin:
     def _mixer_done(self, name, action, ok, msg):
         if not action:
             return
-        text = f"Mixer «{name}» – {action}: {msg}"
+        text = tr("Mixer «{0}» – {1}: {2}", name, action, msg)
         self.status(("✔ " if ok else "✘ ") + text)
         if not ok:
             print(text)
@@ -88,7 +89,7 @@ class HardwareMixin:
             self.proj_panel.rebuild()
         except Exception as e:
             traceback.print_exc()
-            self.status(f"✘ Pannello proiettori: errore nella costruzione ({e})")
+            self.status(tr("✘ Pannello proiettori: errore nella costruzione ({0})", e))
         if not has:
             self.proj_panel.hide()
 
@@ -108,10 +109,10 @@ class HardwareMixin:
                 self.proj_panel.hide()
         except Exception as e:
             traceback.print_exc()
-            self.status(f"✘ Pannello proiettori: {e}")
+            self.status(tr("✘ Pannello proiettori: {0}", e))
 
     def _projector_done(self, name, action, ok, msg):
-        text = f"Proiettore «{name}» – {action}: {msg}"
+        text = tr("Proiettore «{0}» – {1}: {2}", name, action, msg)
         self.status(("✔ " if ok else "✘ ") + text)
         if not ok:
             print(text)

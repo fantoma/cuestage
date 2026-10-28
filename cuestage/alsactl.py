@@ -4,6 +4,7 @@ Su Linux le funzioni delle schede che hanno un pannello di controllo proprio (Fo
 driver «scarlett2» del kernel, RME, MOTU, Behringer…) compaiono come controlli del mixer ALSA: qui si leggono
 con «amixer -c SCHEDA contents» e si scrivono con «amixer -c SCHEDA cset numid=N valore».
 """
+from .i18n import tr
 import os
 import re
 import shutil
@@ -23,14 +24,14 @@ def amixer_path():
 def _run(args, timeout=3.0):
     exe = amixer_path()
     if not exe:
-        raise AlsaError("«amixer» non trovato: installa il pacchetto alsa-utils (sudo apt install alsa-utils)")
+        raise AlsaError(tr("«amixer» non trovato: installa il pacchetto alsa-utils (sudo apt install alsa-utils)"))
     env = dict(os.environ, LANG="C", LC_ALL="C")
     try:
         r = subprocess.run([exe] + args, capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
-        raise AlsaError("amixer non risponde")
+        raise AlsaError(tr("amixer non risponde"))
     if r.returncode != 0:
-        raise AlsaError((r.stderr or r.stdout or "errore di amixer").strip().splitlines()[-1])
+        raise AlsaError((r.stderr or r.stdout or tr("errore di amixer")).strip().splitlines()[-1])
     return r.stdout
 
 
@@ -69,7 +70,7 @@ def resolve_card(card, hint=""):
                     return cid
     if not cards and card:
         return card                      # /proc non leggibile: prova comunque
-    raise AlsaError(f"scheda audio «{card or hint}» non collegata")
+    raise AlsaError(tr("scheda audio «{0}» non collegata", card or hint))
 
 
 # ------------------------------------------------------------------ controlli
@@ -122,12 +123,12 @@ class Control:
         if raw is None:
             return "?"
         if self.type == "bool":
-            return "acceso" if raw else "spento"
+            return tr("acceso") if raw else tr("spento")
         if self.type == "enum":
             return self.items[raw] if 0 <= raw < len(self.items) else str(raw)
         db = self.to_db(raw)
         if db is not None:
-            return "-∞ dB" if raw == self.min and self.db and self.db[0] != "minmax" and db <= -100 else f"{db:+.1f} dB"
+            return tr("-∞ dB") if raw == self.min and self.db and self.db[0] != "minmax" and db <= -100 else f"{db:+.1f} dB"
         return f"{raw} ({self.min}…{self.max})"
 
     def as_dict(self):
@@ -229,21 +230,21 @@ def group_of(name):
     n = name.lower()
     m = re.match(r"mix ([a-z]) input", n)
     if m:
-        return f"Mix {m.group(1).upper()}"
+        return tr("Mix {0}", m.group(1).upper())
     if "mixer" in n and "volume" in n:
-        return "Mix"
+        return tr("Mix")
     if n.endswith("enum") and "output" in n and "volume control" not in n:
-        return "Routing uscite"
+        return tr("Routing uscite")
     if n.endswith("enum") and ("capture enum" in n and "level" not in n or "mixer input" in n or "dsp input" in n
                                or n.startswith("pcm")):
-        return "Routing ingressi (PC e mixer)"
+        return tr("Routing ingressi (PC e mixer)")
     if any(k in n for k in ("line in", "input", "mic", "phantom", "air", "pad", "inst", "level capture", "gain",
                             "capture", "48v", "safe", "autogain")):
-        return "Ingressi"
+        return tr("Ingressi")
     if any(k in n for k in ("line ", "master", "headphone", "speaker", "playback", "dim", "mute", "monitor",
                             "talkback", "output")):
-        return "Uscite e monitor"
-    return "Altro"
+        return tr("Uscite e monitor")
+    return tr("Altro")
 
 
 def pretty_name(name):
@@ -253,7 +254,7 @@ def pretty_name(name):
     return n or name
 
 
-GROUP_ORDER = ["Ingressi", "Uscite e monitor", "Mix", "Routing uscite", "Routing ingressi (PC e mixer)", "Altro"]
+GROUP_ORDER = [tr("Ingressi"), tr("Uscite e monitor"), tr("Mix"), tr("Routing uscite"), tr("Routing ingressi (PC e mixer)"), tr("Altro")]
 
 
 def group_rank(g):

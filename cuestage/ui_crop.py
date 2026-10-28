@@ -1,5 +1,6 @@
 """Editor visivo del crop: fermo immagine del video (scelto con una piccola timeline) o immagine,
 con il riquadro di ritaglio da trascinare. I valori sono in pixel del sorgente."""
+from .i18n import tr
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (QCheckBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget)
@@ -97,7 +98,7 @@ class CropView(QWidget):
         r = self._img_rect()
         if r is None or self.cue is None:
             p.setPen(QColor(140, 140, 150))
-            p.drawText(self.rect(), Qt.AlignCenter, self.message or "Nessun file")
+            p.drawText(self.rect(), Qt.AlignCenter, self.message or tr("Nessun file"))
             p.end()
             return
         p.setRenderHint(QPainter.SmoothPixmapTransform)
@@ -106,7 +107,7 @@ class CropView(QWidget):
         else:
             p.fillRect(r, QColor(45, 45, 52))
             p.setPen(QColor(150, 150, 160))
-            p.drawText(r, Qt.AlignCenter, self.message or "Caricamento fotogramma…")
+            p.drawText(r, Qt.AlignCenter, self.message or tr("Caricamento fotogramma…"))
         cr = self._crop_rect(r)
         # zona esclusa scurita
         outside = QPainterPath()
@@ -139,11 +140,11 @@ class CropView(QWidget):
         f = QFont(self.font())
         f.setBold(True)
         p.setFont(f)
-        txt = f"{w} × {h} px"
-        tr = QRectF(cr.left() + 4, cr.top() + 4, 120, 18)
-        p.fillRect(tr, QColor(0, 0, 0, 150))
+        txt = tr("{0} × {1} px", w, h)
+        tr_rect = QRectF(cr.left() + 4, cr.top() + 4, 120, 18)
+        p.fillRect(tr_rect, QColor(0, 0, 0, 150))
         p.setPen(QColor(255, 220, 150))
-        p.drawText(tr, Qt.AlignCenter, txt)
+        p.drawText(tr_rect, Qt.AlignCenter, txt)
         _draw_lock_banner(p, self.rect(), self._locked())
         p.end()
 
@@ -279,7 +280,7 @@ class OutputFrameView(QWidget):
         lay = self._layer()
         if lay is None:
             p.setPen(QColor(140, 140, 150))
-            p.drawText(QRectF(ox, oy, w, h), Qt.AlignCenter, "Nessun fotogramma")
+            p.drawText(QRectF(ox, oy, w, h), Qt.AlignCenter, tr("Nessun fotogramma"))
             p.end()
             return
         # le altre cue attive restano visibili sotto/sopra, come sull'uscita reale
@@ -305,7 +306,7 @@ class OutputFrameView(QWidget):
         f = QFont(self.font())
         f.setPointSizeF(max(7.0, f.pointSizeF() * 0.85))
         p.setFont(f)
-        p.drawText(QRectF(ox + 4, oy + h - 16, w - 8, 14), Qt.AlignRight, f"uscita {ow}×{oh}")
+        p.drawText(QRectF(ox + 4, oy + h - 16, w - 8, 14), Qt.AlignRight, tr("uscita {0}×{1}", ow, oh))
         _draw_lock_banner(p, self.rect(), self.locked_fn())
         p.end()
 
@@ -412,15 +413,15 @@ class CropPanel(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
         top = QHBoxLayout()
-        title = QLabel("Sinistra: crop sul sorgente · Destra: uscita (angoli = prospettiva, "
-                       "interno = sposta, rotella = scala, doppio clic su un angolo = azzera)")
+        title = QLabel(tr("Sinistra: crop sul sorgente · Destra: uscita (angoli = prospettiva, "
+                       "interno = sposta, rotella = scala, doppio clic su un angolo = azzera)"))
         title.setStyleSheet("color:#999; font-size:10px;")
         title.setWordWrap(True)
         top.addWidget(title, 1)
-        self.blind = QCheckBox("Blind")
-        self.blind.setToolTip("Blind: le modifiche fatte qui NON vengono mostrate sull'uscita video.\n"
+        self.blind = QCheckBox(tr("Blind"))
+        self.blind.setToolTip(tr("Blind: le modifiche fatte qui NON vengono mostrate sull'uscita video.\n"
                               "Senza blind, aprendo questa scheda l'uscita mostra il fermo immagine "
-                              "con le impostazioni correnti (se la cue non è già in riproduzione).")
+                              "con le impostazioni correnti (se la cue non è già in riproduzione)."))
         self.blind.setChecked(bool(settings_fn().get("edit_blind", False)))
         self.blind.toggled.connect(self._blind_toggled)
         top.addWidget(self.blind)
@@ -451,7 +452,7 @@ class CropPanel(QWidget):
             self.t = float(cue.start or 0.0)
 
         views = QHBoxLayout()
-        for lab, wdg in (("Sorgente · crop", self.view), ("Uscita · rendering", self.out_view)):
+        for lab, wdg in ((tr("Sorgente · crop"), self.view), (tr("Uscita · rendering"), self.out_view)):
             col = QVBoxLayout()
             l = QLabel(lab)
             l.setStyleSheet("color:#bbb; font-weight:bold; font-size:11px;")
@@ -482,9 +483,8 @@ class CropPanel(QWidget):
             return None
         na, nb, f = getattr(st, "active", ("", "", 0))
         what = f"«{kf.label(na)}»" if (na == nb or f <= 0) else \
-            f"dissolvenza «{kf.label(na)}» → «{kf.label(nb)}» ({f * 100:.0f}%)"
-        return (f"Keyframe a {fmt_time(self.cue_time())}: {what}. Sola visualizzazione: modifica i valori "
-                f"base dove vale «base», oppure aggiorna il preset.")
+            tr("dissolvenza «{0}» → «{1}» ({2:.0f}%)", kf.label(na), kf.label(nb), f * 100)
+        return (tr("Keyframe a {0}: {1}. Sola visualizzazione: modifica i valori base dove vale «base», oppure aggiorna il preset.", fmt_time(self.cue_time()), what))
 
     def _kf_edited(self):
         if self.cue.type != "video":
@@ -521,14 +521,14 @@ class CropPanel(QWidget):
         c = self.cue
         self._full = None
         if not c.file:
-            self.view.message = "Nessun file"
+            self.view.message = tr("Nessun file")
             self.view.set_source(c, None, 0, 0)
             self._set_range()
             return
         if c.type == "image":
             img = self.image_fn(c.file)
             if img is None or img.isNull():
-                self.view.message = "Immagine non leggibile"
+                self.view.message = tr("Immagine non leggibile")
                 self.view.set_source(c, None, 0, 0)
             else:
                 self.view.set_source(c, img, img.width(), img.height())
@@ -536,11 +536,11 @@ class CropPanel(QWidget):
             return
         info = self.loader.get_info(c.file)
         if not info:
-            self.view.message = "Analisi del video…"
+            self.view.message = tr("Analisi del video…")
             self.view.set_source(c, None, 0, 0)
             return
         if not info.get("has_video"):
-            self.view.message = "Il file non contiene video"
+            self.view.message = tr("Il file non contiene video")
             self.view.set_source(c, None, 0, 0)
             return
         self.duration = float(info.get("duration") or 0.0)

@@ -5,6 +5,7 @@ MixerDriver e dichiara le SEZIONI del mixer (canali, aux, gruppi, effetti, DCA, 
 numero di elementi e cosa si può comandare (mute, fader). I comandi di ogni mixer passano da un suo
 thread (in ordine); i driver restano collegati (TCP/UDP/MIDI) tra un comando e l'altro.
 """
+from .i18n import tr
 import importlib.util
 import ipaddress
 import os
@@ -26,12 +27,12 @@ BUILTIN_MIXER_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mi
 
 # tipi di sezione: chiave -> etichetta
 KIND_LABELS = {
-    "ch": "Canali", "st": "Canali stereo", "auxin": "Aux in", "fx": "Ritorni effetti",
-    "aux": "Aux / Mix", "grp": "Gruppi", "fxs": "Mandate effetti", "mtx": "Matrici",
-    "main": "Master", "dca": "DCA", "mgrp": "Mute group", "ply": "Player USB", "out": "Uscite",
+    "ch": tr("Canali"), "st": tr("Canali stereo"), "auxin": tr("Aux in"), "fx": tr("Ritorni effetti"),
+    "aux": tr("Aux / Mix"), "grp": tr("Gruppi"), "fxs": tr("Mandate effetti"), "mtx": tr("Matrici"),
+    "main": tr("Master"), "dca": "DCA", "mgrp": tr("Mute group"), "ply": tr("Player USB"), "out": tr("Uscite"),
 }
-KIND_SHORT = {"ch": "Ch", "st": "ST", "auxin": "AuxIn", "fx": "FX", "aux": "Aux", "grp": "Grp", "fxs": "FXs",
-              "mtx": "Mtx", "main": "Main", "dca": "DCA", "mgrp": "MG", "ply": "Ply", "out": "Out"}
+KIND_SHORT = {"ch": tr("Ch"), "st": "ST", "auxin": tr("AuxIn"), "fx": "FX", "aux": tr("Aux"), "grp": tr("Grp"), "fxs": tr("FXs"),
+              "mtx": tr("Mtx"), "main": tr("Main"), "dca": "DCA", "mgrp": "MG", "ply": tr("Ply"), "out": tr("Out")}
 MIN_DB = -90.0
 
 
@@ -140,7 +141,7 @@ class OscLink:
         try:
             self.sock.sendto(osc_encode(address, *args), self.addr)
         except OSError as e:
-            raise MixerError(f"invio a {self.addr[0]}:{self.addr[1]} non riuscito ({e})")
+            raise MixerError(tr("invio a {0}:{1} non riuscito ({2})", self.addr[0], self.addr[1], e))
 
     def query(self, address, *args, match=None):
         """Invia e attende la risposta con lo stesso indirizzo (o «match»)."""
@@ -151,7 +152,7 @@ class OscLink:
         while True:
             left = end - time.monotonic()
             if left <= 0:
-                raise MixerError(f"nessuna risposta a {address} da {self.addr[0]}")
+                raise MixerError(tr("nessuna risposta a {0} da {1}", address, self.addr[0]))
             self.sock.settimeout(left)
             try:
                 pkt, _ = self.sock.recvfrom(65536)
@@ -249,7 +250,7 @@ class TcpMidiLink:
                 self.sock = socket.create_connection((self.host, self.port), timeout=self.timeout)
             except OSError as e:
                 self.sock = None
-                raise MixerError(f"connessione a {self.host}:{self.port} non riuscita ({e})")
+                raise MixerError(tr("connessione a {0}:{1} non riuscita ({2})", self.host, self.port, e))
         return self.sock
 
     def send(self, data):
@@ -261,7 +262,7 @@ class TcpMidiLink:
             except OSError:
                 self.close()
                 if attempt:
-                    raise MixerError(f"invio a {self.host}:{self.port} non riuscito")
+                    raise MixerError(tr("invio a {0}:{1} non riuscito", self.host, self.port))
 
     def read_for(self, seconds, parser, stop=None):
         """Legge per «seconds» passando i byte al parser; stop(): True per uscire prima."""
@@ -277,10 +278,10 @@ class TcpMidiLink:
                 continue
             except OSError:
                 self.close()
-                raise MixerError("connessione interrotta")
+                raise MixerError(tr("connessione interrotta"))
             if not data:
                 self.close()
-                raise MixerError("il mixer ha chiuso la connessione")
+                raise MixerError(tr("il mixer ha chiuso la connessione"))
             parser.feed(data)
 
     def drain(self):
@@ -364,15 +365,15 @@ class MixerDriver:
     def check(self, kind, n, what):
         sec = self.section(kind, self.conf)
         if sec is None or what not in sec[2]:
-            raise MixerError(f"{KIND_LABELS.get(kind, kind)}: {what} non disponibile su {self.NAME}")
+            raise MixerError(tr("{0}: {1} non disponibile su {2}", KIND_LABELS.get(kind, kind), what, self.NAME))
         if not 1 <= int(n) <= sec[1]:
-            raise MixerError(f"{KIND_LABELS.get(kind, kind)} {n} fuori intervallo (1–{sec[1]})")
+            raise MixerError(tr("{0} {1} fuori intervallo (1–{2})", KIND_LABELS.get(kind, kind), n, sec[1]))
 
     def set_mute(self, kind, n, muted):
-        raise MixerError("non supportato")
+        raise MixerError(tr("non supportato"))
 
     def get_mute(self, kind, n):
-        raise MixerError("lettura non supportata")
+        raise MixerError(tr("lettura non supportata"))
 
     def get_mutes(self, kind):
         sec = self.section(kind, self.conf)
@@ -385,13 +386,13 @@ class MixerDriver:
 
     def list_controls(self):
         """[dict(key, name, type «int»/«bool»/«enum», min, max, items, db, value, writable, group)]"""
-        raise MixerError("controlli non supportati")
+        raise MixerError(tr("controlli non supportati"))
 
     def set_control(self, key, value):
-        raise MixerError("controlli non supportati")
+        raise MixerError(tr("controlli non supportati"))
 
     def get_name(self, kind, n):
-        raise MixerError("lettura dei nomi non supportata")
+        raise MixerError(tr("lettura dei nomi non supportata"))
 
     def get_names(self, kind):
         sec = self.section(kind, self.conf)
@@ -408,13 +409,13 @@ class MixerDriver:
         return out
 
     def set_fader(self, kind, n, db):
-        raise MixerError("non supportato")
+        raise MixerError(tr("non supportato"))
 
     def get_fader(self, kind, n):
-        raise MixerError("lettura non supportata")
+        raise MixerError(tr("lettura non supportata"))
 
     def status(self):
-        return {"collegato": "sì"}
+        return {"collegato": tr("sì")}
 
     def close(self):
         pass
@@ -546,11 +547,11 @@ class MixerRegistry:
                     continue                 # es. schede audio ALSA: solo Linux
                 bad = [k for k, _n, _c in obj.SECTIONS if k not in KIND_LABELS]
                 if bad:
-                    raise MixerError(f"tipi di sezione sconosciuti: {', '.join(bad)}")
+                    raise MixerError(tr("tipi di sezione sconosciuti: {0}", ', '.join(bad)))
                 self.drivers[obj.ID] = obj
                 self.sources[obj.ID] = path
         if not found:
-            raise MixerError("nessuna classe MixerDriver con ID trovata")
+            raise MixerError(tr("nessuna classe MixerDriver con ID trovata"))
 
     def get(self, driver_id):
         return self.drivers.get(driver_id)
@@ -612,10 +613,10 @@ class MixerManager(QObject):
         if drv is None:
             conf = self.find(mid)
             if conf is None:
-                raise MixerError("mixer non configurato")
+                raise MixerError(tr("mixer non configurato"))
             cls = self.cls_for(conf)
             if cls is None:
-                raise MixerError(f"driver «{conf.get('driver')}» non disponibile")
+                raise MixerError(tr("driver «{0}» non disponibile", conf.get('driver')))
             drv = self._drivers[mid] = cls(conf)
         return drv
 
@@ -637,7 +638,7 @@ class MixerManager(QObject):
             try:
                 res = fn(self._driver(mid))
                 if report:
-                    msg = f"ok ({time.monotonic() - t0:.2f} s)" + (f": {res}" if isinstance(res, str) and res else "")
+                    msg = tr("ok ({0:.2f} s)", time.monotonic() - t0) + (f": {res}" if isinstance(res, str) and res else "")
                     self.finished.emit(self.name(mid), label, True, msg)
                 return res
             except MixerError as e:
@@ -648,7 +649,7 @@ class MixerManager(QObject):
                 traceback.print_exc()
                 self._drop_driver(mid)
                 if report:
-                    self.finished.emit(self.name(mid), label, False, f"errore nel driver: {e}")
+                    self.finished.emit(self.name(mid), label, False, tr("errore nel driver: {0}", e))
                 raise MixerError(str(e))
         return self._pool(mid).submit(job)
 
@@ -662,7 +663,7 @@ class MixerManager(QObject):
 
     def fader(self, mid, kind, n, db, fade=0.0, report=True):
         """Porta il fader a «db»; con fade > 0 legge la posizione attuale e ci arriva gradualmente."""
-        lab = f"{KIND_SHORT.get(kind, kind)} {n} → {fmt_db(db)}" + (f" in {fade:.1f} s" if fade > 0 else "")
+        lab = f"{KIND_SHORT.get(kind, kind)} {n} → {fmt_db(db)}" + (tr(" in {0:.1f} s", fade) if fade > 0 else "")
         self._stop_fade(mid, kind, n)
         if fade <= 0:
             return self.submit(mid, lambda d: d.set_fader(kind, n, db), lab, report)
@@ -696,7 +697,7 @@ class MixerManager(QObject):
                     self.finished.emit(self.name(mid), lab, False, str(e))
                     return
                 if x >= 1.0:
-                    self.finished.emit(self.name(mid), lab, True, f"ok ({time.monotonic() - t0:.1f} s)")
+                    self.finished.emit(self.name(mid), lab, True, tr("ok ({0:.1f} s)", time.monotonic() - t0))
                     break
                 stop.wait(1.0 / steps_per_s)
             if self._fades.get((mid, kind, n)) is stop:
@@ -743,7 +744,7 @@ class MixerManager(QObject):
         cls = self.cls_for(conf)
         if not (cls and cls.NAMES):
             if callback:
-                callback(False, "questo mixer non fornisce i nomi dei canali")
+                callback(False, tr("questo mixer non fornisce i nomi dei canali"))
             return None
         self._names_tried.add(mid)
 
@@ -782,7 +783,7 @@ class MixerManager(QObject):
     def read_controls(self, mid, callback=None):
         if not self.supports_controls(mid):
             if callback:
-                callback(False, "nessun controllo disponibile")
+                callback(False, tr("nessun controllo disponibile"))
             return None
 
         def done(f):
@@ -822,7 +823,7 @@ class MixerManager(QObject):
         def job():
             cls = self.cls_for(conf)
             if cls is None:
-                callback(False, "driver non disponibile")
+                callback(False, tr("driver non disponibile"))
                 return
             d = cls(conf)
             try:
@@ -923,7 +924,7 @@ def _result(fut):
 
 
 def fmt_db(db):
-    return "-∞ dB" if db is None or db <= MIN_DB + 0.01 else f"{db:+.1f} dB"
+    return tr("-∞ dB") if db is None or db <= MIN_DB + 0.01 else f"{db:+.1f} dB"
 
 
 def mute_states(cue):
@@ -976,7 +977,7 @@ def mute_summary(states, order=None):
                  for k in kinds if any(v is flag for v in states[k].values())]
         if items:
             parts.append(f"{lab} " + ", ".join(items))
-    return " · ".join(parts) or "nessun cambiamento"
+    return " · ".join(parts) or tr("nessun cambiamento")
 
 
 def fmt_numbers(nums):

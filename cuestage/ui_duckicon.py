@@ -1,5 +1,6 @@
 """Icona del microfono nelle barre di avanzamento: verde = la cue ha il ducking, rossa = il ducking interviene,
 grigia = la cue ha il ducking ma il ducking dello show è spento o l'ingresso non è disponibile."""
+from .i18n import tr
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QColor, QPainterPath, QPen
 
@@ -68,9 +69,9 @@ def duck_tooltip(inst, ctrl):
     if st is None:
         return ""
     db = inst.duck_db
-    return {"duck": f"Ducking: sta intervenendo (−{db:.1f} dB)",
-            "on": f"Ducking: −{db:.1f} dB quando l'ingresso supera la soglia",
-            "idle": f"Ducking −{db:.1f} dB impostato, ma il ducking è spento (Impostazioni › Ducking…)"}[st]
+    return {"duck": tr("Ducking: sta intervenendo (−{0:.1f} dB)", db),
+            "on": tr("Ducking: −{0:.1f} dB quando l'ingresso supera la soglia", db),
+            "idle": tr("Ducking −{0:.1f} dB impostato, ma il ducking è spento (Impostazioni › Ducking…)", db)}[st]
 
 
 def paint_pfl(p, bar, inst, left=True):

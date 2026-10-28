@@ -8,13 +8,14 @@ Area in percentuale dell'uscita; dimensione del carattere in pixel riferiti a un
   fit     riduci/allarga: il carattere più grande con cui il testo entra nell'area (e nelle righe massime)
   oneline una riga: niente a capo, il carattere si riduce per far stare la riga nella larghezza
 """
+from .i18n import tr
 import re
 
 from PySide6.QtCore import QPointF, QRectF, Qt
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetricsF, QImage, QPainter, QPainterPath, QPen
 
-FIT_MODES = {"wrap": "A capo (dimensione fissa)", "shrink": "A capo e riduci se non entra",
-             "fit": "Riduci / allarga per riempire l'area", "oneline": "Una riga, riduci per farla stare"}
+FIT_MODES = {"wrap": tr("A capo (dimensione fissa)"), "shrink": tr("A capo e riduci se non entra"),
+             "fit": tr("Riduci / allarga per riempire l'area"), "oneline": tr("Una riga, riduci per farla stare")}
 BLANK = ("_", "[vuoto]", "[blank]")
 
 
