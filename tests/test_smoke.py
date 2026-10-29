@@ -425,6 +425,48 @@ def t_history_versions(w):
     assert len(h.steps) <= MAX_STEPS
 
 
+def t_notice_and_addresses():
+    """Avviso iniziale in tutte le lingue (con l'autore) e indirizzi di tutte le interfacce per il web."""
+    from PySide6.QtCore import QTimer
+    from PySide6.QtWidgets import QDialog, QLabel
+    from cuestage.ui_disclaimer import AUTHOR, NOTICE, DisclaimerDialog
+    from cuestage.webserver import local_addresses, local_interfaces
+    d = DisclaimerDialog("en", "1.2.3")
+    text = " ".join(lab.text() for lab in d.findChildren(QLabel))
+    assert AUTHOR == "Designed by Diego Fantoma" and AUTHOR in text and "1.2.3" in text
+    for code, _name, title, _body, ok, quit_ in NOTICE:
+        assert d.findChild(QLabel, f"notice_{code}") is not None and title in text, code
+        assert ok in d.ok_btn.text() and quit_ in d.quit_btn.text()
+    assert d.ok_btn.text().startswith("I understand")             # prima la lingua dell'interfaccia
+    QTimer.singleShot(50, d.ok_btn.click)
+    assert d.exec() == QDialog.Accepted
+    d2 = DisclaimerDialog("sl")
+    QTimer.singleShot(50, d2.quit_btn.click)
+    assert d2.exec() == QDialog.Rejected
+    ifs = local_interfaces()
+    assert all(not ip.startswith("127.") for ip, _n in ifs)
+    assert local_addresses() == ([ip for ip, _n in ifs] or ["127.0.0.1"])
+    # impostazioni: tutte le interfacce nella tendina, le altre sotto il QR code
+    import cuestage.webserver as ws
+    from cuestage.ui_dialogs import SettingsDialog
+    from cuestage.model import DEFAULT_SETTINGS
+    import copy
+    orig = ws.local_interfaces
+    ws.local_interfaces = lambda: [("192.168.1.20", "eth0"), ("10.0.0.5", "wlan0")]
+    try:
+        sd = SettingsDialog(copy.deepcopy(DEFAULT_SETTINGS), lambda *a, **k: None, None)
+    finally:
+        ws.local_interfaces = orig
+    items = [sd.web_ip.itemData(i) for i in range(sd.web_ip.count())]
+    assert items == ["192.168.1.20", "10.0.0.5", "127.0.0.1"], items
+    assert "wlan0" in sd.web_ip.itemText(1)
+    assert sd.web_address(False) == "http://192.168.1.20:8080/"
+    assert "http://10.0.0.5:8080/" in sd.web_url.text(), sd.web_url.text()
+    sd.web_ip.setCurrentIndex(1)
+    assert sd.web_address(False) == "http://10.0.0.5:8080/" and "http://192.168.1.20:8080/" in sd.web_url.text()
+    sd.deleteLater()
+
+
 def t_languages():
     """File di lingua: completi, con gli stessi segnaposto {0}… dell'italiano; cambio di lingua e ritorno."""
     import importlib.util
@@ -962,6 +1004,7 @@ if __name__ == "__main__":
     check("lettura dei controlli ALSA", t_alsa_parser)
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
+    check("avviso iniziale e indirizzi dell'interfaccia web", t_notice_and_addresses)
     check("annulla / ripeti, cronologia e versioni dello show", lambda: t_history_versions(w))
     w.show_data.dirty = False
     w.close()

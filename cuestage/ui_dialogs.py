@@ -185,11 +185,13 @@ class SettingsDialog(QDialog):
         self.web_proj = QCheckBox(tr("Mostra il controllo dei proiettori nell'interfaccia web"))
         self.web_proj.setChecked(bool(self.s.get("web_projectors", True)))
         fw.addRow(self.web_proj)
-        from .webserver import local_addresses
+        from .webserver import local_interfaces
         self.web_ip = QComboBox()
-        for ip in local_addresses():
-            self.web_ip.addItem(ip)
-        self.web_ip.setToolTip(tr("Indirizzo della rete a cui è collegato il telefono"))
+        for ip, name in local_interfaces():
+            self.web_ip.addItem(f"{ip}  ({name})" if name else ip, ip)
+        self.web_ip.addItem(tr("127.0.0.1  (solo questo computer)"), "127.0.0.1")
+        self.web_ip.setToolTip(tr("Indirizzo della rete a cui è collegato il telefono: il server risponde su "
+                                  "tutti gli indirizzi elencati, la scelta serve solo per il QR code"))
         fw.addRow(tr("Indirizzo"), self.web_ip)
         self.web_qr_pin = QCheckBox(tr("Includi il PIN nel QR code (accesso diretto senza digitarlo)"))
         self.web_qr_pin.setChecked(True)
@@ -578,7 +580,7 @@ class SettingsDialog(QDialog):
 
     def web_address(self, with_pin=None):
         from urllib.parse import quote
-        url = f"http://{self.web_ip.currentText()}:{self.web_port.value()}/"
+        url = f"http://{self.web_ip.currentData() or self.web_ip.currentText()}:{self.web_port.value()}/"
         pin = self.web_pin.text().strip()
         if pin and (self.web_qr_pin.isChecked() if with_pin is None else with_pin):
             url += "#pin=" + quote(pin)
@@ -599,10 +601,14 @@ class SettingsDialog(QDialog):
         if self.web_pin.text().strip():
             txt += (tr("<br>Il QR contiene anche il PIN: chi lo inquadra entra direttamente.")
                     if self.web_qr_pin.isChecked() else tr("<br>Il browser chiederà il PIN."))
+        others = [self.web_ip.itemData(i) for i in range(self.web_ip.count())
+                  if i != self.web_ip.currentIndex() and self.web_ip.itemData(i) != "127.0.0.1"]
+        if others:
+            txt += "<br>" + tr("Anche:") + " " + ", ".join(f"http://{ip}:{self.web_port.value()}/" for ip in others)
         if not on:
-            txt += "<br><span style='color:#c90'>Abilita l'interfaccia web e conferma con OK.</span>"
+            txt += "<br><span style='color:#c90'>" + tr("Abilita l'interfaccia web e conferma con OK.") + "</span>"
         else:
-            txt += "<br><span style='color:#888'>Telefono e computer devono essere sulla stessa rete.</span>"
+            txt += "<br><span style='color:#888'>" + tr("Telefono e computer devono essere sulla stessa rete.") + "</span>"
         self.web_url.setText(txt)
 
     def _rescan(self):

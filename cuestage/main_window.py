@@ -593,9 +593,17 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
 
         m = mb.addMenu(tr("&Aiuto"))
         add(m, tr("Comandi OSC / MIDI / tastiera"), lambda: HelpDialog(self).exec())
-        add(m, tr("Informazioni"), lambda: QMessageBox.about(
-            self, "CueStage", tr("<b>CueStage</b><br>Sistema di cue per spettacolo: audio, video, immagini, "
-            "fade, comandi, OSC e MIDI.<br>Python + Qt6 (PySide6) · motore audio PortAudio.")))
+        add(m, tr("Informazioni"), self._about)
+
+    def _about(self):
+        from . import __version__
+        from .ui_disclaimer import AUTHOR
+        QMessageBox.about(
+            self, "CueStage",
+            tr("<b>CueStage</b><br>Sistema di cue per spettacolo: audio, video, immagini, "
+               "fade, comandi, OSC e MIDI.<br>Python + Qt6 (PySide6) · motore audio PortAudio.")
+            + f"<br><br>{tr('Versione {0}', __version__)}<br><b>{AUTHOR}</b><br><br>"
+            + tr("⚠ Software sperimentale: non usarlo in produzione."))
 
     def _build_shortcuts(self, widget=None):
         """Scorciatoie di regia, installate sia sulla finestra principale che sull'uscita."""

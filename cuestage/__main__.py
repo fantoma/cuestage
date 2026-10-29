@@ -65,6 +65,12 @@ def main():
     pal.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(110, 110, 118))
     app.setPalette(pal)
 
+    # avviso iniziale (in tutte le lingue): software sperimentale, da non usare in produzione
+    from . import __version__
+    from .ui_disclaimer import accept_notice
+    if not accept_notice(i18n.language(), __version__):
+        sys.exit(0)
+
     path = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else None
     w = MainWindow(path)
     app.window = w

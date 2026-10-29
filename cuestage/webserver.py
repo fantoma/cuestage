@@ -12,6 +12,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from .i18n import tr
+
 COMMANDS = {"go", "go_list", "stop_list", "xfade", "stop_all", "pause_all", "resume_all", "stop_cue", "pause_cue", "playhead",
             "proj", "proj_status", "proj_corners_read", "proj_corner"}
 
@@ -21,24 +23,57 @@ class ProjRelay(QObject):
     result = Signal(str, str, bool, object)     # id proiettore, tipo ("status"/"corners"), ok, dati
 
 
-def local_addresses():
-    """Indirizzi IPv4 della macchina (per mostrare l'URL nelle impostazioni)."""
-    out = []
+def _default_ip():
+    """IPv4 della rete predefinita (quella con la route verso l'esterno), senza inviare nulla."""
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("10.255.255.255", 1))
-        out.append(s.getsockname()[0])
-        s.close()
+        try:
+            s.connect(("10.255.255.255", 1))
+            return s.getsockname()[0]
+        finally:
+            s.close()
     except OSError:
-        pass
+        return None
+
+
+def local_interfaces():
+    """[(ip, nome dell'interfaccia)] IPv4 di tutte le interfacce di rete attive (cavo, Wi-Fi, USB…),
+    prima quella della rete predefinita; i link-local 169.254.x.x in fondo. Senza il loopback."""
+    out = []
     try:
+        from PySide6.QtNetwork import QAbstractSocket, QNetworkInterface
+        F = QNetworkInterface.InterfaceFlag
+        for iface in QNetworkInterface.allInterfaces():
+            fl = iface.flags()
+            if not (fl & F.IsUp) or not (fl & F.IsRunning) or (fl & F.IsLoopBack):
+                continue
+            for e in iface.addressEntries():
+                a = e.ip()
+                if a.protocol() != QAbstractSocket.NetworkLayerProtocol.IPv4Protocol or a.isLoopback():
+                    continue
+                ip = a.toString()
+                if ip and all(ip != x for x, _n in out):
+                    out.append((ip, iface.humanReadableName() or iface.name()))
+    except Exception:
+        pass
+    try:                                     # ripiego (o aggiunta) senza Qt Network
         for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
             ip = info[4][0]
-            if ip not in out and not ip.startswith("127."):
-                out.append(ip)
+            if not ip.startswith("127.") and all(ip != x for x, _n in out):
+                out.append((ip, ""))
     except OSError:
         pass
-    return out or ["127.0.0.1"]
+    d = _default_ip()
+    if d and not d.startswith("127."):
+        name = next((n for x, n in out if x == d), "")
+        out = [(d, name)] + [(x, n) for x, n in out if x != d]
+    out.sort(key=lambda xn: (xn[0] != d, xn[0].startswith("169.254.")))
+    return out
+
+
+def local_addresses():
+    """Indirizzi IPv4 della macchina (tutte le interfacce attive; 127.0.0.1 se non c'è rete)."""
+    return [ip for ip, _n in local_interfaces()] or ["127.0.0.1"]
 
 
 class _Handler(BaseHTTPRequestHandler):
@@ -122,7 +157,7 @@ class WebServer(QObject):
             self.server = ThreadingHTTPServer(("0.0.0.0", int(port)), _Handler)
         except OSError as e:
             self.server = None
-            self.status.emit(f"Web: porta {port} non disponibile ({e})")
+            self.status.emit(tr("Web: porta {0} non disponibile ({1})", port, e))
             return False
         self.server.daemon_threads = True
         self.server.web = self
@@ -131,8 +166,8 @@ class WebServer(QObject):
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.timer.start()
-        ips = ", ".join(f"http://{ip}:{port}" for ip in local_addresses())
-        self.status.emit(f"Interfaccia web attiva: {ips}")
+        ips = "  ·  ".join(f"http://{ip}:{port}" for ip in local_addresses())
+        self.status.emit(tr("Interfaccia web attiva: {0}", ips))
         return True
 
     def stop(self):
