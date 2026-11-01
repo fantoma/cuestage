@@ -687,13 +687,22 @@ class CropPanel(QWidget):
 
     # ------------------------------------------------ stato al tempo scelto
     def state(self):
-        from .engine import state_at
-        return state_at(self.cue, self.cue_time())
+        from .engine import markers_state, state_at
+        st = state_at(self.cue, self.cue_time())
+        if self.cue.type == "video":           # anche i marker «Recall Preset» passati (o in fade) al cursore
+            st = markers_state(self.cue, st, float(self.t or 0), self.duration)
+        return st
 
     def locked(self):
         st = self.state()
         if st is self.cue:
             return None
+        mk = getattr(st, "marker", None)
+        if mk is not None:
+            m, f = mk
+            return tr("Marker «{0}» (Recall Preset «{1}», {2:.0f}%) a {3}. Sola visualizzazione: sposta il cursore prima "
+                      "del marker per modificare i valori base, oppure aggiorna il preset.", m.get("name") or "M",
+                      m.get("preset"), f * 100, fmt_time(float(self.t or 0)))
         na, nb, f = getattr(st, "active", ("", "", 0))
         what = f"«{kf.label(na)}»" if (na == nb or f <= 0) else \
             tr("dissolvenza «{0}» → «{1}» ({2:.0f}%)", kf.label(na), kf.label(nb), f * 100)

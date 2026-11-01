@@ -197,6 +197,16 @@ class MarkersPanel(QWidget):
             tgt.blockSignals(False)
         tgt.currentIndexChanged.connect(lambda i: (m.__setitem__("target", tgt.itemData(i) or ""), self.changed.emit()))
         fade_lab = QLabel(tr("fade"))
+        fmode = QComboBox()
+        for k, txt in (("after", tr("dopo il marker")), ("before", tr("prima del marker")),
+                       ("prev", tr("dal marker precedente (o IN)")), ("next", tr("fino al marker successivo (o OUT)"))):
+            fmode.addItem(txt, k)
+        fmode.setCurrentIndex(max(0, fmode.findData(m.get("fade_mode") or "after")))
+        fmode.setToolTip(tr("Dove sta il fade rispetto al marker:\n"
+                            "dopo il marker: parte dal marker e dura i secondi indicati\n"
+                            "prima del marker: finisce sul marker\n"
+                            "dal marker precedente: dal marker prima (o dall'IN) fino a questo\n"
+                            "fino al marker successivo: da questo al marker dopo (o all'OUT)"))
         shape = QComboBox()
         from .model import FADE_SHAPE_LABELS, FADE_SHAPES
         for k in FADE_SHAPES:
@@ -207,6 +217,7 @@ class MarkersPanel(QWidget):
         ph.addWidget(pre)
         ph.addWidget(tgt)
         ph.addWidget(fade_lab)
+        ph.addWidget(fmode)
         ph.addWidget(fade)
         ph.addWidget(shape)
 
@@ -215,6 +226,9 @@ class MarkersPanel(QWidget):
             pre.setVisible(k == "preset")
             fade.setVisible(k in ("preset", "stop"))
             fade_lab.setVisible(k in ("preset", "stop"))
+            fmode.setVisible(k in ("preset", "stop"))
+            if k in ("preset", "stop"):
+                fade.setVisible(fmode.currentData() in ("after", "before"))
             shape.setVisible(k == "preset")         # lo stop usa la sua curva di fade
             fade.setToolTip(tr("Tempo di transizione verso il preset") if k == "preset" else
                             tr("Tempo di fade dello stop"))
@@ -232,6 +246,12 @@ class MarkersPanel(QWidget):
             show_params()
             self.changed.emit()
         act.currentIndexChanged.connect(act_changed)
+
+        def fmode_changed(_i):
+            m["fade_mode"] = fmode.currentData()
+            show_params()
+            self.changed.emit()
+        fmode.currentIndexChanged.connect(fmode_changed)
         show_params()
 
         rm = QToolButton()

@@ -262,17 +262,40 @@ def marks_tooltip(marks, ax, t_hover, width_px):
     return "\n".join(f"{fmt_time(m.t)}  {m.label or KIND_LABELS.get(m.kind, m.kind)}" for m in near)
 
 
-def due_markers(markers, prev, pos):
-    """Marker superati passando dalla posizione prev alla pos del file (anche al giro del loop)."""
+FADE_MODES = ("after", "before", "prev", "next")
+
+
+def marker_window(markers, m, start, end):
+    """(tempo di partenza dell'azione, durata del fade) nel file per il marker m.
+
+    after  = il fade parte dal marker e dura «fade» secondi
+    before = il fade finisce sul marker (parte «fade» secondi prima)
+    prev   = dal marker precedente (o dall'IN) a questo
+    next   = da questo marker al successivo (o all'OUT)"""
+    t = float(m.get("t", 0))
+    mode = m.get("fade_mode") or "after"
+    dur = max(0.0, float(m.get("fade", 0) or 0))
+    if (m.get("action") or "none") not in ("preset", "stop"):
+        return t, 0.0
+    if mode == "before":
+        return max(float(start), t - dur), min(dur, max(0.0, t - float(start)))
+    if mode == "prev":
+        prev = max([float(x.get("t", 0)) for x in markers if x is not m and float(x.get("t", 0)) < t] or [float(start)])
+        return prev, max(0.0, t - prev)
+    if mode == "next":
+        nxt = min([float(x.get("t", 0)) for x in markers if x is not m and float(x.get("t", 0)) > t] or [float(end)])
+        return t, max(0.0, nxt - t)
+    return t, dur
+
+
+def due_markers(items, prev, pos):
+    """Azioni da eseguire passando dalla posizione prev alla pos del file (anche al giro del loop).
+    items: [(tempo di partenza, durata, marker)]; restituisce [(marker, durata)] in ordine."""
     out = []
-    for m in markers or ():
-        try:
-            t = float(m.get("t", 0))
-        except (TypeError, ValueError, AttributeError):
-            continue
+    for t, dur, m in items or ():
         if pos >= prev:
             if prev < t <= pos:
-                out.append((t, m))
+                out.append((t, m, dur))
         elif t > prev or t <= pos:       # il loop è ripartito
-            out.append((t if t > prev else t + 1e9, m))
-    return [m for _t, m in sorted(out, key=lambda x: x[0])]
+            out.append((t if t > prev else t + 1e9, m, dur))
+    return [(m, dur) for _t, m, dur in sorted(out, key=lambda x: x[0])]

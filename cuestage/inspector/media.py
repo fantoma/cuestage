@@ -498,6 +498,21 @@ class MediaTabsMixin:
             grp_pts.setExclusive(True)
             grp_pts.buttonClicked.connect(lambda b: self.timeline.set_point_mode(b.property("mode")))
             self._pts_group = grp_pts
+        from PySide6.QtCore import QSettings
+        qs = QSettings("CueStage", "CueStage")
+        sn = QToolButton()
+        sn.setText(tr("Snap"))
+        sn.setCheckable(True)
+        sn.setChecked(str(qs.value("timeline_snap", "true")).lower() != "false")
+        sn.setToolTip(tr("Trascinando un punto, un marker o un keyframe si aggancia ai punti delle altre curve, ai "
+                         "marker e a IN/OUT vicini (tieni premuto Alt per non agganciare)"))
+        self.timeline.set_snap(sn.isChecked())
+
+        def snap_toggled(on):
+            self.timeline.set_snap(on)
+            QSettings("CueStage", "CueStage").setValue("timeline_snap", "true" if on else "false")
+        sn.toggled.connect(snap_toggled)
+        row.addWidget(sn)
         bc = QToolButton()
         bc.setText(tr("✕ curva volume"))
         bc.setToolTip(tr("Cancella curva volume"))

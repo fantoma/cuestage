@@ -374,7 +374,10 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   **None**, **Recall Preset** (the cue goes to one of its presets, audio and video, with a **fade** of the given time and
   shape: S curve, linear, linear in dB) or
   **Call Cue** (starts another cue of any list) or **Stop Cue** (stops this cue, or a chosen one, with the given
-  fade time). Actions also work in loops, every time the marker is passed, and on
+  fade time). For Recall Preset and Stop Cue the **fade** can be **after the marker** (starts at the marker, for
+  the given seconds), **before the marker** (ends at the marker), **from the previous marker** (or from IN) or **to the
+  next marker** (or to OUT); a cyan band on the graph shows where the fade is. The output preview at the cursor shows
+  the effect of the Recall Preset markers already passed (or fading). Actions also work in loops, every time the marker is passed, and on
   redundant instances each one runs them by itself;
 - **keyframes**: right-click › “Add audio keyframe here” (video also “image keyframe”) with the preset to use; drag the
   ◆ to move it, right-click it to change preset or delete it;
@@ -388,6 +391,8 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   cue's opacity; fades and keyframes still apply. With opacity points the orange line follows the curve (with the
   fades): it is the opacity that goes to the output, and the output preview at the cursor shows it. The buttons **✕ volume curve** and **✕ opacity curve** on the marker row (and the right-click menu)
   clear them;
+- **Snap** (button on the marker row, on by default): a dragged point, marker or keyframe snaps to nearby points of the
+  other curves, markers, IN/OUT and keyframes (a dotted white line shows it); hold **Alt** not to snap;
 - double-click or Ctrl+click adds a volume curve point; wheel = zoom, Shift+wheel or middle-button drag = scroll.
 
 The keyframe timeline with lanes is no longer shown (neither here nor in the “Video / Image” tab): keyframes, markers

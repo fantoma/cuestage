@@ -42,6 +42,8 @@ class TimelineEditor(QWidget):
         self.cursor_t = None          # cursore della timeline dei keyframe (tempo del file)
         self.thumbs = None            # (QImage striscia, n) miniature del video
         self.point_mode = "volume"    # doppio clic / Ctrl+clic: punto di «volume» o di «opacity» (video)
+        self.snap = True              # trascinando un punto si aggancia a quelli delle altre curve e ai marker
+        self._snap_x = None
         self.setMinimumHeight(102)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.ClickFocus)
@@ -303,7 +305,18 @@ class TimelineEditor(QWidget):
         f2.setBold(True)
         p.setFont(f2)
         fm = p.fontMetrics()
-        for i, m in enumerate(self._user_markers()):
+        from .markers import marker_window
+        ms_all = self._user_markers()
+        end_t = c.end if c.end > 0 else self.duration
+        for m in ms_all:                         # durata del fade delle azioni (fascia azzurra)
+            try:
+                at, dur = marker_window(ms_all, m, float(c.start or 0), end_t)
+            except (TypeError, ValueError, AttributeError):
+                continue
+            if dur > 0:
+                xa, xb = self.t2x(at), self.t2x(at + dur)
+                p.fillRect(QRectF(xa, r.top() + 15, max(1.0, xb - xa), 5), QColor(90, 220, 230, 120))
+        for i, m in enumerate(ms_all):
             x = self.t2x(float(m.get("t", 0)))
             if x < -40 or x > W + 2:
                 continue
@@ -338,6 +351,10 @@ class TimelineEditor(QWidget):
                 if rep:
                     tip += tr(" (ripetizione {0} del loop)", rep)
                 self._kf_hits.append((x, y, tip, pt, ft))
+        # guida dell'aggancio (snap) durante il trascinamento
+        if self._snap_x is not None and self.drag is not None:
+            p.setPen(QPen(QColor(255, 255, 255, 220), 1, Qt.DotLine))
+            p.drawLine(QPointF(self._snap_x, HANDLE_H), QPointF(self._snap_x, r.bottom()))
         # cursore dei keyframe
         if self.cursor_t is not None:
             x = self.t2x(self.cursor_t)
@@ -529,6 +546,36 @@ class TimelineEditor(QWidget):
         self.update()
         self.cursorMoved.emit(t)
 
+    def _snap_targets(self, kind, drag):
+        """Tempi (del file) a cui agganciarsi: punti delle altre curve, marker, IN/OUT, loop, keyframe."""
+        c = self.cue
+        out = []
+        if kind != "point":
+            out += [float(t) for t, _d in c.curve]
+        if kind != "opoint" and self._video_mode():
+            out += [float(t) for t, _v in self._op_points()]
+        for i, m in enumerate(self._user_markers()):
+            if not (kind == "umark" and drag[1] == i):
+                out.append(float(m.get("t", 0)))
+        out += [t for (t, _col, _lab) in self._markers().values()]
+        for _x, _y, _tip, pt, ft in getattr(self, "_kf_hits", []):
+            if not (kind == "kf" and pt is drag[1]):
+                out.append(float(ft))
+        return out
+
+    def _snap(self, t, kind, drag):
+        tol = 6 * (self.v1 - self.v0) / max(1, self.width())         # 6 pixel
+        best, bd = None, tol
+        for s in self._snap_targets(kind, drag):
+            d = abs(s - t)
+            if d <= bd:
+                best, bd = s, d
+        self._snap_x = self.t2x(best) if best is not None else None
+        return round(best, 3) if best is not None else t
+
+    def set_snap(self, on):
+        self.snap = bool(on)
+
     def keyPressEvent(self, e):
         if self.cue is not None and e.key() == Qt.Key_M and not e.modifiers():
             t = self.cursor_t if self.cursor_t is not None else (self.playhead or float(self.cue.start or 0))
@@ -664,6 +711,8 @@ class TimelineEditor(QWidget):
             return
         t = round(self.x2t(pos.x()), 3)
         c = self.cue
+        if kind in ("point", "opoint", "umark", "kf") and self.snap and not (e.modifiers() & Qt.AltModifier):
+            t = self._snap(t, kind, self.drag)
         if kind == "umark":
             ms = self._user_markers()
             i = self.drag[1]
@@ -736,6 +785,9 @@ class TimelineEditor(QWidget):
     def mouseReleaseEvent(self, e):
         d = self.drag
         self.drag = None
+        if self._snap_x is not None:
+            self._snap_x = None
+            self.update()
         if not d:
             return
         if d[0] == "point":

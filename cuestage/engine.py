@@ -259,6 +259,55 @@ def opacity_at(cue, state, pos, duration=0.0):
     return max(0.0, min(1.0, op))
 
 
+def markers_state(cue, base, pos, duration=0.0):
+    """Stato visivo al tempo pos del file con gli effetti dei marker «Recall Preset» già passati (o in corso
+    di fade), sopra lo stato dei keyframe «base». Per l'anteprima al cursore, come in riproduzione."""
+    from .markers import marker_window
+    from .media import fade_shape
+    ms = [m for m in (getattr(cue, "markers", None) or []) if (m.get("action") == "preset" and m.get("preset")
+                                                                  and m["preset"] in cue.preset_dict("visual"))]
+    if not ms or cue.type != "video":
+        return base
+    start = float(cue.start or 0)
+    end = float(cue.end) if cue.end and cue.end > 0 else (float(duration) if duration else pos + 1e6)
+    allm = getattr(cue, "markers", None) or []
+    wins = []
+    for m in ms:
+        try:
+            at, dur = marker_window(allm, m, start, end)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if at <= pos + 1e-9:
+            wins.append((at, dur, m))
+    if not wins:
+        return base
+    vals = {k: float(getattr(base, k)) for k in kf.VIS_NUM}
+    warp = [list(map(float, p)) for p in (getattr(base, "warp", None) or [[0, 0]] * 4)]
+    fit = base.fit
+    last = None
+    for at, dur, m in sorted(wins, key=lambda w: w[0]):
+        pv = cue.preset_dict("visual")[m["preset"]]
+        f = 1.0 if dur <= 0 else max(0.0, min(1.0, (pos - at) / dur))
+        f = float(fade_shape(f, "linear" if m.get("shape") == "db" else (m.get("shape") or "scurve")))
+        for k in kf.VIS_NUM:
+            if k in pv:
+                vals[k] = vals[k] + (float(pv[k]) - vals[k]) * f
+        if "warp" in pv:
+            w1 = [list(map(float, p)) for p in pv["warp"]]
+            warp = [[a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f] for a, b in zip(warp, w1)]
+        if "fit" in pv and f >= 1.0:
+            fit = pv["fit"]
+        last = (m, f)
+    view = CueView(cue)
+    for k in kf.VIS_NUM:
+        view.override(k, vals[k])
+    view.override("warp", warp)
+    view.override("fit", fit)
+    view.active = getattr(base, "active", ("", "", 0))
+    view.marker = last
+    return view
+
+
 def state_at(cue, T):
     """Stato visivo della cue al tempo T secondo i keyframe (per l'anteprima nella scheda crop: è lo
     stesso calcolo della riproduzione). Restituisce la cue se a quel tempo valgono i valori base."""
@@ -308,11 +357,24 @@ class KeyframeMixin:
         if prev is None:
             prev = float(self.cue.start or 0) - 0.001          # un marker sull'IN scatta all'avvio
         self._mk_pos = pos
-        from .markers import due_markers
-        for m in due_markers(ms, prev, pos):
-            self._marker_action(m)
+        from .markers import due_markers, marker_window
+        c = self.cue
+        start = float(c.start or 0)
+        end = float(c.end) if c.end and c.end > 0 else float(
+            (self.ctrl.loader.info.get(c.file) or {}).get("duration") or 0) or pos + 1e6
+        items = []
+        for m in ms:
+            try:
+                at, dur = marker_window(ms, m, start, end)
+            except (TypeError, ValueError, AttributeError):
+                continue
+            items.append((at, dur, m))
+        for m, dur in due_markers(items, prev, pos):
+            self._marker_action(m, dur)
 
-    def _marker_action(self, m):
+    def _marker_action(self, m, dur=None):
+        if dur is None:
+            dur = float(m.get("fade", 0) or 0)
         act = m.get("action") or "none"
         c = self.cue
         if act == "preset" and m.get("preset"):
@@ -320,7 +382,7 @@ class KeyframeMixin:
             aud = n if n in c.preset_dict("audio") else ""
             vis = n if n in c.preset_dict("visual") else ""
             if aud or vis:
-                start_preset(self, c, vis, aud, float(m.get("fade", 0) or 0), m.get("shape") or "scurve")
+                start_preset(self, c, vis, aud, dur, m.get("shape") or "scurve")
             else:
                 self.ctrl.message.emit(tr("Marker «{0}»: la cue non ha il preset «{1}»", m.get("name") or "M", n))
         elif act == "stop":
@@ -329,7 +391,7 @@ class KeyframeMixin:
             if tg is None:
                 self.ctrl.message.emit(tr("Marker «{0}»: cue «{1}» non trovata", m.get("name") or "M", m["target"]))
             else:
-                self.ctrl.stop_cue(tg.id, float(m.get("fade", 0) or 0))
+                self.ctrl.stop_cue(tg.id, dur)
         elif act == "cue" and m.get("target"):
             tg = self.ctrl.show.resolve_target(m["target"])
             if tg is None:

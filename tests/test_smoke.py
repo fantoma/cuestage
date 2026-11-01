@@ -760,6 +760,38 @@ def t_inspector_layout(w):
     assert abs(tl.cursor_t - 1.2) < 0.05 and abs(ins.audio_kbar.cue_time() - 1.2) < 0.15, tl.cursor_t
     tl.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, QPointF(tl.t2x(1.2), y0), QPointF(0, 0),
                                      Qt.LeftButton, Qt.NoButton, Qt.NoModifier))
+    # snap: trascinando un punto di volume vicino a un marker si aggancia al suo tempo
+    tl.set_snap(True)
+    saved_markers = a.markers
+    a.markers = [{"t": 1.0, "name": "S"}]
+    a.curve = [[0.5, 0.0]]
+    tl.update()
+    run(0.05)
+    tl.drag = ("point", 0)
+    tl.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(tl.t2x(1.0) + 3, tl.db2y(-3)), QPointF(0, 0),
+                                  Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+    tl.drag = None
+    assert abs(a.curve[0][0] - 1.0) < 1e-6, a.curve
+    tl.drag = ("point", 0)
+    tl.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(tl.t2x(1.0) + 3, tl.db2y(-3)), QPointF(0, 0),
+                                  Qt.NoButton, Qt.LeftButton, Qt.AltModifier))           # Alt: niente snap
+    tl.drag = None
+    assert abs(a.curve[0][0] - 1.0) > 1e-4, a.curve
+    a.markers, a.curve = saved_markers, []
+    ins.markers_panel.reload()
+    run(0.1)
+    # fade delle azioni: dopo / prima del marker, dal precedente, fino al successivo (o IN / OUT)
+    from cuestage.markers import marker_window
+    ms_ = [{"t": 1.0, "action": "preset", "fade": 0.4}, {"t": 2.0, "action": "stop"}]
+    assert marker_window(ms_, ms_[0], 0.0, 3.0) == (1.0, 0.4)
+    ms_[0]["fade_mode"] = "before"
+    assert marker_window(ms_, ms_[0], 0.0, 3.0) == (0.6, 0.4)
+    ms_[0]["fade_mode"] = "prev"
+    assert marker_window(ms_, ms_[0], 0.25, 3.0) == (0.25, 0.75)      # nessun marker prima: dall'IN
+    ms_[0]["fade_mode"] = "next"
+    assert marker_window(ms_, ms_[0], 0.0, 3.0) == (1.0, 1.0)
+    ms_[1]["fade_mode"] = "next"
+    assert marker_window(ms_, ms_[1], 0.0, 3.0) == (2.0, 1.0)         # nessun marker dopo: fino all'OUT
     # campo «Volume»: con la curva mostra livello + curva al cursore e crea il punto al cursore
     page = ins.tabs.widget(2)
     vols = [x for x in page.findChildren(QDoubleSpinBox) if x.suffix() == " dB" and x.minimum() < -50]
@@ -794,7 +826,8 @@ def t_inspector_layout(w):
     # in riproduzione: «Call Cue» al marker avvia l'altra cue, «Recall Preset» porta la cue al preset
     a.markers[0]["target"] = t.id
     a.markers.append({"t": 0.6, "name": "P", "action": "preset", "preset": "piano", "fade": 0.0})
-    a.markers.append({"t": 1.0, "name": "S", "action": "stop", "target": "", "fade": 0.0})   # Stop Cue: questa
+    a.markers.append({"t": 1.6, "name": "S", "action": "stop", "target": "", "fade": 0.6,
+                      "fade_mode": "before"})                   # Stop Cue con fade che finisce sul marker
     a.preset_dict("audio")["piano"] = dict(a.preset_values("audio"), level_db=-20.0)
     a.preset_points = []
     w.ctrl.start_cue(a, cascade=False)
