@@ -493,6 +493,9 @@ class MediaTabsMixin:
                 b.setCheckable(True)
                 b.setChecked(mode == "opacity")      # video: di serie punti di opacità
                 b.setProperty("mode", mode)
+                col = "#ff8cdc" if mode == "volume" else "#ffa528"        # colori delle curve sul grafico
+                b.setStyleSheet(f"QToolButton:checked{{background:{col};color:#111;font-weight:bold;"
+                                f"border:1px solid {col};border-radius:3px;}}")
                 grp_pts.addButton(b)
                 row.addWidget(b)
             grp_pts.setExclusive(True)
@@ -504,6 +507,8 @@ class MediaTabsMixin:
         sn.setText(tr("Snap"))
         sn.setCheckable(True)
         sn.setChecked(str(qs.value("timeline_snap", "true")).lower() != "false")
+        sn.setStyleSheet("QToolButton:checked{background:#3478d0;color:white;font-weight:bold;"
+                         "border:1px solid #3478d0;border-radius:3px;}")
         sn.setToolTip(tr("Trascinando un punto, un marker o un keyframe si aggancia ai punti delle altre curve, ai "
                          "marker e a IN/OUT vicini (tieni premuto Alt per non agganciare)"))
         self.timeline.set_snap(sn.isChecked())
