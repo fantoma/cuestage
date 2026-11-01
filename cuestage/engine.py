@@ -1661,6 +1661,14 @@ class Controller(QObject):
         i = self.playhead_of(lst)
         if not (0 <= i < len(cues)):
             return
+        if cues[i].trigger == "trigger":          # «Solo trigger»: il GO la salta e avvia la prossima manuale
+            j = i + 1
+            while j < len(cues) and cues[j].trigger != "manual":
+                j += 1
+            if j >= len(cues):
+                return
+            i = j
+            self.set_playhead(i, lst)
         for g in self.group_instances(lst):       # il GO successivo esce dai loop a tempo
             if g.timed and g.cue is not cues[i]:
                 g.exit()
@@ -1718,6 +1726,10 @@ class Controller(QObject):
         """Avvia la cue in standby (e le sue «con la precedente») a volume/opacità zero."""
         cues = lst.cues
         i = self.playhead_of(lst)
+        while 0 <= i < len(cues) and cues[i].trigger == "trigger":     # «Solo trigger»: il crossfade la salta
+            i += 1
+            while i < len(cues) and cues[i].trigger != "manual":
+                i += 1
         if not (0 <= i < len(cues)):
             return None
         group = [cues[i]]

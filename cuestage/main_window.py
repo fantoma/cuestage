@@ -362,7 +362,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.table.setItemDelegateForColumn(C_PFL, PflDelegate(lambda: self.show_data, self.toggle_pfl, self.table))
         self.table.setColumnHidden(C_PFL, True)          # compare quando il preascolto è configurato
         hh = self.table.horizontalHeader()
-        for col, w in enumerate([24, 50, 125, 230, 220, 70, 70, 110, 190, 50]):
+        for col, w in enumerate([30, 50, 125, 230, 220, 70, 70, 110, 190, 50]):
             self.table.setColumnWidth(col, w)
         hh.setSectionResizeMode(3, QHeaderView.Stretch)
         self.table.selectionModel().selectionChanged.connect(self._selection_changed)

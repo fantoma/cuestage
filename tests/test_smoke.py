@@ -467,6 +467,94 @@ def t_notice_and_addresses():
     sd.deleteLater()
 
 
+def t_inspector_layout(w):
+    """Ispettore: tab Base/Trigger/Tempi e loop/Audio/Video, preset audio+video insieme, «Solo trigger»,
+    file modificabile, dimensione e zoom della vista del crop."""
+    from PySide6.QtCore import QPointF, Qt
+    from PySide6.QtWidgets import QInputDialog, QLineEdit
+    from cuestage.i18n import tr
+    from cuestage.inspector.presets import CuePresetBar
+    from cuestage.ui_cuelist import C_PLAYHEAD
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    vid = make_video("insp.mp4", sec=3)
+    a = Cue("audio", number="1", name="A", file=tone("insp.wav", sec=3))
+    t = Cue("audio", number="2", name="Solo T", file=tone("insp2.wav", sec=3), trigger="trigger")
+    b = Cue("memo", number="3", name="B")
+    v = Cue("video", number="4", name="V", file=vid)
+    sh.main.cues[:] = [a, t, b, v]
+    w._set_show(sh)
+    wait_until(lambda: w.loader.get_info(vid) is not None and w.loader.get_info(a.file) is not None, 10)
+    ins = w.inspector
+    tabs = lambda: [ins.tabs.tabText(i) for i in range(ins.tabs.count())]
+    ins.set_cue(v)
+    run(0.3)
+    assert tabs() == [tr("Base"), tr("Trigger"), tr("Tempi e loop"), tr("Audio"), tr("Video / Immagine")], tabs()
+    assert isinstance(ins.tabs.cornerWidget(Qt.TopRightCorner), CuePresetBar)
+    ins.set_cue(b)
+    assert tabs() == [tr("Base"), tr("Trigger")] and ins.tabs.cornerWidget(Qt.TopRightCorner) is None
+    # «Solo trigger»: «T» nella prima colonna, il GO la salta
+    assert w.model.data(w.model.index(1, C_PLAYHEAD)) == "T"
+    w.ctrl.set_playhead(0)
+    w.go()
+    run(0.2)
+    assert a.id in w.ctrl.instances and t.id not in w.ctrl.instances
+    assert w.ctrl.playhead == 2, w.ctrl.playhead              # dopo «A» la prossima manuale è «B»
+    w.ctrl.set_playhead(1)                                     # in standby la cue «Solo trigger»: GO avvia «B»
+    w.go()
+    run(0.2)
+    assert t.id not in w.ctrl.instances and w.ctrl.playhead == 3
+    w.ctrl.trigger(t, cascade=True)                            # parte con un trigger
+    run(0.2)
+    assert t.id in w.ctrl.instances
+    w.ctrl.stop_all(0)
+    run(0.2)
+    # preset unico: salva audio e video insieme, li applica insieme
+    ins.set_cue(v)
+    run(0.3)
+    bar = ins.preset_bar
+    v.level_db, v.scale = -6.0, 150.0
+    QInputDialog.getText = staticmethod(lambda *a_, **k: ("scena", True))
+    bar.save_new()
+    assert v.preset_dict("audio")["scena"]["level_db"] == -6.0 and v.preset_dict("visual")["scena"]["scale"] == 150.0
+    v.level_db, v.scale = 0.0, 100.0
+    bar.combo.setCurrentText("scena")
+    bar.apply()
+    assert v.level_db == -6.0 and v.scale == 150.0
+    QInputDialog.getText = staticmethod(lambda *a_, **k: ("scena 2", True))
+    v.preset_points = [{"t": 1.0, "kind": "visual", "preset": "scena"}]
+    bar.rename()
+    assert "scena 2" in v.preset_dict("audio") and "scena 2" in v.preset_dict("visual")
+    assert v.preset_points[0]["preset"] == "scena 2"
+    # dimensione nel tab Video / Immagine
+    from PySide6.QtWidgets import QSlider
+    ins.tabs.setCurrentIndex(4)
+    run(0.3)
+    sl = [x for x in ins.findChildren(QSlider) if x.isVisible() and x.maximum() == 400][0]
+    sl.setValue(200)
+    assert v.scale == 200.0
+    # zoom della vista del crop con la rotella (la cue non cambia)
+    cv = ins.crop_panel.view
+    r0 = cv._img_rect()
+    cv.set_zoom(2.0, QPointF(cv.width() / 2, cv.height() / 2))
+    r1 = cv._img_rect()
+    assert abs(r1.width() - 2 * r0.width()) < 1 and v.crop_l == 0 and v.scale == 200.0
+    cv.fit_view()
+    assert cv.zoom == 1.0
+    # percorso del file modificabile nel tab Base (IN/OUT restano)
+    ins.set_cue(a)
+    ins.tabs.setCurrentIndex(0)
+    run(0.2)
+    a.start = 0.5
+    le = ins.file_edit
+    assert isinstance(le, QLineEdit) and le.text() == a.file
+    le.setText(t.file)
+    le.editingFinished.emit()
+    run(0.2)
+    assert a.file == t.file and a.start == 0.5
+    sh.dirty = False
+
+
 def t_languages():
     """File di lingua: completi, con gli stessi segnaposto {0}… dell'italiano; cambio di lingua e ritorno."""
     import importlib.util
@@ -1004,6 +1092,7 @@ if __name__ == "__main__":
     check("lettura dei controlli ALSA", t_alsa_parser)
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
+    check("ispettore: tab, preset audio+video, Solo trigger, dimensione, zoom del crop", lambda: t_inspector_layout(w))
     check("avviso iniziale e indirizzi dell'interfaccia web", t_notice_and_addresses)
     check("annulla / ripeti, cronologia e versioni dello show", lambda: t_history_versions(w))
     w.show_data.dirty = False

@@ -118,9 +118,9 @@ The web interface for phones and tablets and the start-up self-test messages are
 | Type | What it does |
 |---|---|
 | **Audio** | WAV, MP3, FLAC, OGG, AIFF, M4A… IN/OUT, loop (region and number of repetitions, 0 = infinite), volume, automatic fade in/out, volume curve drawn on the waveform |
-| **Video** | MP4, MOV, MKV, WebM… same options as audio + layer, opacity, fit, **crop**, **position** and **scale** |
-| **Image** | PNG, JPG, … duration (0 = until stopped), fade in/out, layer, opacity, crop, position and scale |
-| **Change preset** | Takes a running cue to one of its audio presets (volume) and/or crop/position presets (crop, offset, scale, perspective, opacity) over the chosen transition time. It only applies to that run: the saved cue does not change |
+| **Video** | MP4, MOV, MKV, WebM… same options as audio + layer, opacity, fit, **crop**, **position** and **size** |
+| **Image** | PNG, JPG, … duration (0 = until stopped), fade in/out, layer, opacity, crop, position and size |
+| **Change preset** | Takes a running cue to one of its presets (audio: volume, matrix, output volumes; video: crop, offset, size, perspective, opacity) over the chosen transition time. It only applies to that run: the saved cue does not change |
 | **Fade** | Takes the volume and/or opacity of another cue to a value, with duration and shape (S, linear, dB). Presets “Fade OUT + stop” and “Fade IN” (starts the target from silence) |
 | **Command** | Play, Stop (with fade), Pause, Resume, Stop all, Move playhead |
 | **OSC** | Sends an OSC message (host, port, address, automatically typed arguments) |
@@ -180,8 +180,8 @@ PANEL › “Show as grid” (and “Show as list” to go back: the cues stay t
   double-click an empty tile = new cue · drag audio/video files from the file manager onto a tile = new cues
   starting from there.
 - **Colour** of each tile: right-click › Colour (12 ready-made colours or “Other colour…”), or from the
-  inspector's “Basic” tab. The colour also tints the cue's row in the lists.
-- **Keyboard shortcuts**: right-click › “Learn keyboard shortcut…” (or “Learn…” in the Basic tab) and press the
+  inspector's “Base” tab (“Colour” button). The colour also tints the cue's row in the lists.
+- **Keyboard shortcuts**: right-click › “Learn keyboard shortcut…” (or “Learn…” in the Trigger tab) and press the
   key or combination (F5, 1, Q, Ctrl+1…). It works for any cue, also in the MAIN or in a list PANEL, while the
   CueStage window is active but not while typing in a text field. Keys already used by CueStage (Space, Esc,
   menu commands…) cannot be assigned; if the key already belongs to another cue, it moves to the new one. The
@@ -318,11 +318,30 @@ How it behaves (and where it makes no sense):
 **When leaving** a Loop/Random loop/Playlist: the current cue fades with the crossfade time, or it is left to
 finish. A running group appears among the “Active cues”: its ■ (or STOP ALL) stops it.
 
+## Inspector
+
+Under the list, the inspector of the selected cue has these tabs (each cue type adds its own after them):
+
+- **Base**: **Number** and **Name** on one row, with **▶ Test this cue** and **■ Stop**; for audio, video and image
+  cues the **File** with its full path (it can be edited by hand, e.g. after moving the files: IN, OUT and loop are
+  kept), **Browse…** and **Open folder**; **Start**, **Delay** and **Colour** on one row; **Notes**.
+- **Trigger**: MIDI trigger, MIDI volume and transparency faders, OSC trigger, keyboard shortcut.
+- **Times and loop** (audio, video): waveform with IN/OUT, loop, volume, fades and curve, keyframe timeline;
+  **Times** for images (duration, fade in/out).
+- **Audio** (audio, video): sound card, ducking, audio of the video, channel matrix.
+- **Video / Image** (video, image): size, layer, opacity, fit, crop, position, perspective and the visual editor.
+
+On the right of the tab row there is the cue's **preset** bar (see “Presets”). Moving from one cue to another the
+inspector stays on the same tab.
+
 ## How each cue starts
 
 - **Manual (GO)** – starts with GO (Space).
 - **With previous** – starts when the cue above starts, after the *delay*.
 - **After previous** – starts when the cue above ends naturally, after the *delay*.
+- **Trigger only** – GO never starts it: the playhead skips it, and if it is in standby GO starts the next manual
+  cue. It starts with its MIDI/OSC trigger, its keyboard shortcut, a Command cue, `/cue/<n>/start` or a click on
+  its GRID tile. In the list its first column shows a yellow **T**.
 
 After a GO the playhead (and the selection) jumps to the next manual cue; if the list has only one cue it stays
 on it, so GO restarts it. A click on a row always puts it in standby. The state of each cue (waiting, progress,
@@ -339,37 +358,41 @@ clear curve). Wheel = zoom, Shift+wheel or dragging = scroll.
 
 ## Crop, position and perspective
 
-“Video / image · crop” tab (video and images). Two views side by side:
+“Video / Image” tab (video and images). Two views side by side:
 - **Source · crop**: the still frame with the crop rectangle (drag edges, corners or the rectangle;
-  double-click = reset). For **videos** a timeline above the views (with IN/OUT) chooses the still frame.
-- **Output · rendering**: the frame as it reaches the projector (crop, position, scale, perspective and 4-corner
+  double-click = reset). The **wheel zooms the view** (around the mouse pointer) to crop precisely; drag with
+  the middle or right button to scroll; “⤢ Whole view” (or a middle/right double-click) goes back to 100%.
+  The view zoom does not change the cue. For **videos** a timeline above the views (with IN/OUT) chooses the still frame.
+- **Output · rendering**: the frame as it reaches the projector (crop, position, size, perspective and 4-corner
   correction, together with the other active cues). Drag a **corner** for the **perspective distortion**, the
-  inside to move, wheel to scale, double-click a corner to reset it.
+  inside to move, wheel to change the size, double-click a corner to reset it.
 
 While the tab is open, **the video output shows the still frame with the current settings** (if the cue is not
 already playing), so you can adjust while looking at the projector. The **Blind** box turns this off (it stays
 saved in the show).
 
-In the fields column: crop in source pixels, X/Y offset in output pixels (0,0 = centred), scale in %,
+In the fields column: **Size** (slider, value in %, − / + and 100%) to enlarge or shrink the picture, crop in
+source pixels, X/Y offset in output pixels (0,0 = centred),
 perspective as the offset in pixels of the 4 corners. The cue's perspective adds to the 4-corner correction of
 the whole output.
 
 ## Presets
 
-Presets belong **to the single cue**: each cue has its own. In the “Times, loop and audio” tab (**audio**
-presets: volume, fade in, fade out, matrix and output volumes) and “Video / image · crop” (**crop / position**
-presets: crop, offset, scale, perspective, opacity, fit) there is the cue's preset bar: **Apply**, **Save as…**,
-**Update**, **Rename…**, **Delete**. Duplicating a cue duplicates its presets too.
+Presets belong **to the single cue**: each cue has its own. A preset saves **all the audio and video settings
+together**: audio (volume, fade in, fade out, matrix and output volumes) and video (crop, offset, size,
+perspective, opacity, fit). The preset bar is on the inspector's tab row, on the right, for audio, video and image
+cues: **Preset** list, **Apply**, **Save as…**, **Update** and **⋯** (Rename…, Delete). Renaming a preset also
+renames it in the cue's keyframes and in the Change preset cues that use it. Duplicating a cue duplicates its
+presets too.
 
-A **Change preset** cue chooses the target cue and then one of *its* presets (the lists update when the target
+A **Change preset** cue chooses the target cue and then one of *its* presets (the list updates when the target
 changes). Shows saved with the previous version (global presets) are converted when opened: each preset goes to
 the cue that used it.
 
 ### Preset keyframes
 
-The timeline above the views of the “Video / image · crop” tab and the one at the bottom of the “Times, loop and
-audio” tab contain the **keyframes**, on two lanes:
-- **Image** (orange): crop/position presets — crop, offset, scale, perspective, opacity;
+The timeline above the views of the “Video / Image” tab and the one at the bottom of the “Times and loop” tab contain the **keyframes**, on two lanes:
+- **Image** (orange): the video part of the presets — crop, offset, size, perspective, opacity;
 - **Audio** (light blue): audio presets — volume, **matrix** and **output volumes**.
 
 Each keyframe uses a preset of the cue or the cue's **base values**. Between two consecutive keyframes of the
@@ -449,8 +472,7 @@ the keyframes), starting from the value it has at that moment.
 
 ## Sound cards and matrix
 
-All the audio handling of an audio or video cue is in the **Times, loop and audio** tab (“Audio output” box,
-under the times):
+All the audio handling of an audio or video cue is in the inspector's **Audio** tab:
 - **Sound card**: “Project default” (by default the one chosen in the Ubuntu audio settings) or any connected
   card. Several cues can play at the same time through different cards; the cards used by the cues are opened
   when the show is opened.
@@ -572,9 +594,9 @@ All the markers of a cue are visible everywhere, with the same colours: IN (gree
 the repetitions), fade in/out (ramps and dashed lines), volume curve points (pink), image keyframes (orange ◆)
 and audio keyframes (light blue ◆; hollow = “base”).
 
-- **Waveform** (“Times, loop and audio” tab): IN/OUT, loop, fades, curve and also the keyframes, placed at the
+- **Waveform** (“Times and loop” tab): IN/OUT, loop, fades, curve and also the keyframes, placed at the
   file position (a keyframe that falls in a loop repetition is marked as such).
-- **Keyframe timeline** (“Times, loop and audio” and crop tabs), in cue time: “Markers” lane with IN/OUT, loop
+- **Keyframe timeline** (“Times and loop” and “Video / Image” tabs), in cue time: “Markers” lane with IN/OUT, loop
   with its repetitions, fades and curve points, above the keyframe lanes; ◀ / ▶ arrows to move from one marker
   to another. The timeline cursor also appears on the waveform as a dashed line.
 - **Progress bars** during playback (“Status” column and “Active cues” panel): real cue time with the loop
@@ -868,7 +890,7 @@ pitch bend of motorised faders (`pb 1`, 14 bit), or a program change used as a v
 - **Transparency of the selected cue** (video and images): 0…100%, live or on the programmed value;
 - **Crossfader**: see “Crossfade”.
 
-Each cue can also have its **own** controls: “Basic” tab › **MIDI volume fader** (audio, video) and **MIDI
+Each cue can also have its **own** controls: “Trigger” tab › **MIDI volume fader** (audio, video) and **MIDI
 transparency fader** (video, images), with Learn and ✕ to remove them. They apply even if the cue is not selected.
 The fader is “absolute”: on the first movement the value jumps to the fader position.
 

@@ -153,7 +153,8 @@ class CueTableModel(QAbstractTableModel):
         col = idx.column()
         if role == Qt.DisplayRole or role == Qt.EditRole:
             if col == C_PLAYHEAD:
-                return "▶" if idx.row() == self.ctrl.playhead else ""
+                t = "T" if cue.trigger == "trigger" else ""      # «Solo trigger»: non parte col GO
+                return ("▶" + t) if idx.row() == self.ctrl.playhead else t
             if col == C_NUM:
                 return cue.number
             if col == C_TYPE:
@@ -288,6 +289,8 @@ class CueTableModel(QAbstractTableModel):
             f = QFont()
             f.setBold(True)
             return f
+        if role == Qt.ToolTipRole and col == C_PLAYHEAD and cue.trigger == "trigger":
+            return tr("Solo trigger: il GO non la avvia (parte con MIDI, OSC, scorciatoia, cue Comando o clic nel GRID)")
         if role == Qt.ToolTipRole and cue.type == "group" and col in (C_TYPE, C_NAME):
             return tr("Clic sulla colonna «Tipo» (o Ctrl+E): espandi / compatta il gruppo")
         if role == Qt.FontRole and col in (C_PLAYHEAD, C_NUM):
@@ -296,7 +299,7 @@ class CueTableModel(QAbstractTableModel):
             return f
         if role == Qt.ForegroundRole:
             if col == C_PLAYHEAD:
-                return QColor(80, 220, 120)
+                return QColor(80, 220, 120) if idx.row() == self.ctrl.playhead else QColor(240, 190, 60)
             if col == C_TRIG and cue.trigger != "manual":
                 return QColor(240, 190, 60)
             if col == C_TARGET and cue.is_media() and not cue.file:

@@ -3,7 +3,7 @@ con il riquadro di ritaglio da trascinare. I valori sono in pixel del sorgente."
 from .i18n import tr
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import (QCheckBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QCheckBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget)
 
 from . import keyframes as kf
 from .media import fmt_time
@@ -38,6 +38,9 @@ class CropView(QWidget):
         self.message = ""
         self.state_fn = None    # -> cue (o vista) da disegnare al tempo scelto
         self.locked_fn = None   # -> messaggio se la modifica è bloccata, altrimenti None
+        self.zoom = 1.0         # zoom della vista (rotella): non cambia la cue
+        self.pan = QPointF(0, 0)
+        self._pan_drag = None
         self.setMinimumSize(300, 150)
         self.setMouseTracking(True)
 
@@ -53,9 +56,38 @@ class CropView(QWidget):
             return None
         m = 12
         W, H = self.width() - 2 * m, self.height() - 2 * m
-        s = min(W / self.src_w, H / self.src_h)
+        s = min(W / self.src_w, H / self.src_h) * self.zoom
         w, h = self.src_w * s, self.src_h * s
-        return QRectF((self.width() - w) / 2, (self.height() - h) / 2, w, h)
+        return QRectF((self.width() - w) / 2 + self.pan.x(), (self.height() - h) / 2 + self.pan.y(), w, h)
+
+    # -------------------------------------------------- zoom della vista
+    def set_zoom(self, z, anchor=None):
+        """Zoom della vista (1 = immagine intera), mantenendo fermo il punto sotto «anchor»."""
+        r = self._img_rect()
+        z = max(1.0, min(16.0, float(z)))
+        if r is None or z <= 1.0:
+            self.zoom, self.pan = 1.0, QPointF(0, 0)
+            self.update()
+            return
+        anchor = anchor if anchor is not None else QPointF(self.width() / 2, self.height() / 2)
+        ux = (anchor.x() - r.left()) / r.width()
+        uy = (anchor.y() - r.top()) / r.height()
+        k = z / self.zoom
+        nw, nh = r.width() * k, r.height() * k
+        cx = anchor.x() - ux * nw + nw / 2
+        cy = anchor.y() - uy * nh + nh / 2
+        self.zoom = z
+        self.pan = QPointF(cx - self.width() / 2, cy - self.height() / 2)
+        self.update()
+
+    def fit_view(self):
+        self.set_zoom(1.0)
+
+    def wheelEvent(self, e):
+        if self._img_rect() is None:
+            return
+        f = 1.15 if e.angleDelta().y() > 0 else 1 / 1.15
+        self.set_zoom(self.zoom * f, e.position())
 
     def _disp(self):
         return self.state_fn() if self.state_fn else self.cue
@@ -145,11 +177,20 @@ class CropView(QWidget):
         p.fillRect(tr_rect, QColor(0, 0, 0, 150))
         p.setPen(QColor(255, 220, 150))
         p.drawText(tr_rect, Qt.AlignCenter, txt)
+        if self.zoom > 1.0:
+            zr = QRectF(self.width() - 64, self.height() - 22, 60, 18)
+            p.fillRect(zr, QColor(0, 0, 0, 160))
+            p.setPen(QColor(220, 220, 230))
+            p.drawText(zr, Qt.AlignCenter, f"🔍 {self.zoom * 100:.0f}%")
         _draw_lock_banner(p, self.rect(), self._locked())
         p.end()
 
     # -------------------------------------------------- interazione
     def mousePressEvent(self, e):
+        if e.button() in (Qt.MiddleButton, Qt.RightButton) and self.zoom > 1.0:
+            self._pan_drag = (e.position(), QPointF(self.pan))
+            self.setCursor(Qt.ClosedHandCursor)
+            return
         r = self._img_rect()
         if r is None or self.cue is None or e.button() != Qt.LeftButton or self._locked():
             return
@@ -159,6 +200,11 @@ class CropView(QWidget):
             self.drag = (mode, e.position(), (c.crop_l, c.crop_t, c.crop_r, c.crop_b))
 
     def mouseMoveEvent(self, e):
+        if self._pan_drag is not None:
+            start, pan0 = self._pan_drag
+            self.pan = pan0 + (e.position() - start)
+            self.update()
+            return
         r = self._img_rect()
         if r is None or self.cue is None:
             return
@@ -199,8 +245,16 @@ class CropView(QWidget):
 
     def mouseReleaseEvent(self, e):
         self.drag = None
+        if self._pan_drag is not None:
+            self._pan_drag = None
+            self.setCursor(Qt.ArrowCursor)
 
     def mouseDoubleClickEvent(self, e):
+        if e.button() in (Qt.MiddleButton, Qt.RightButton):    # doppio clic centrale/destro: vista intera
+            self.fit_view()
+            return
+        if e.button() != Qt.LeftButton:
+            return
         # doppio clic: nessun crop
         if self.cue is not None and not self._locked():
             c = self.cue
@@ -413,8 +467,9 @@ class CropPanel(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
         top = QHBoxLayout()
-        title = QLabel(tr("Sinistra: crop sul sorgente · Destra: uscita (angoli = prospettiva, "
-                       "interno = sposta, rotella = scala, doppio clic su un angolo = azzera)"))
+        title = QLabel(tr("Sinistra: crop sul sorgente (rotella = zoom della vista, tasto centrale o destro = "
+                          "scorri) · Destra: uscita (angoli = prospettiva, interno = sposta, rotella = dimensione, "
+                          "doppio clic su un angolo = azzera)"))
         title.setStyleSheet("color:#999; font-size:10px;")
         title.setWordWrap(True)
         top.addWidget(title, 1)
@@ -424,10 +479,14 @@ class CropPanel(QWidget):
                               "con le impostazioni correnti (se la cue non è già in riproduzione)."))
         self.blind.setChecked(bool(settings_fn().get("edit_blind", False)))
         self.blind.toggled.connect(self._blind_toggled)
+        self.fit_btn = QPushButton(tr("⤢ Vista intera"))
+        self.fit_btn.setToolTip(tr("Riporta la vista «Sorgente · crop» all'immagine intera (zoom 100%)"))
+        top.addWidget(self.fit_btn)
         top.addWidget(self.blind)
         v.addLayout(top)
 
         self.view = CropView()
+        self.fit_btn.clicked.connect(lambda: self.view.fit_view())
         self.view.state_fn = self.state
         self.view.locked_fn = self.locked
         self.view.changed.connect(self._crop_changed)

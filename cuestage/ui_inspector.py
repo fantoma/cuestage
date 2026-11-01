@@ -1,7 +1,7 @@
 """Ispettore: modifica delle proprietà della cue selezionata."""
 
 from .i18n import tr
-from PySide6.QtCore import Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
     QScrollArea, QSpinBox,
@@ -40,6 +40,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         self.info_label = None
         self.src_label = self.out_label = None
         self.crop_panel = None
+        self.file_edit = self.file_state = self.preset_bar = None
         self.size_fn = None       # cue -> (w, h) del sorgente
         self.out_size_fn = None   # -> (w, h) dell'uscita
         self.hotkey_fn = None     # cue -> «impara» la scorciatoia (finestra principale)
@@ -186,7 +187,10 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         return w
 
     def refresh_fields(self):
-        for bar in self.findChildren(PresetBar):     # più barre per lo stesso tipo di preset
+        bars = list(self.findChildren(PresetBar))   # anche quella accanto ai tab
+        if self.preset_bar is not None and self.preset_bar not in bars:
+            bars.append(self.preset_bar)
+        for bar in bars:
             try:
                 bar.reload()
             except RuntimeError:
@@ -214,18 +218,25 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         self.rebuild()
 
     def rebuild(self):
-        cur_tab = self.tabs.currentIndex()
+        cur_title = self.tabs.tabText(self.tabs.currentIndex()) if self.tabs.count() else ""
         old_pages = [self.tabs.widget(i) for i in range(self.tabs.count())]
         self._text_redraw = None
         self.tabs.clear()
         for pg in old_pages:   # clear() non le distrugge: evita editor orfani ancora collegati
             pg.deleteLater()
+        old_corner = self.tabs.cornerWidget(Qt.TopRightCorner)
+        if old_corner is not None:
+            self.tabs.setCornerWidget(None, Qt.TopRightCorner)
+            old_corner.deleteLater()
         self.bound = []
         self.timeline = None
         self.info_label = None
+        self.file_edit = None
+        self.file_state = None
         self.src_label = self.out_label = None
         self.crop_panel = None
         self.audio_kbar = None
+        self.preset_bar = None
         cue = self.cue
         if cue is None:
             self.header.setText(tr("Nessuna cue selezionata"))
@@ -239,11 +250,20 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
             self.tabs.addTab(widget, title)
 
         add(self._tab_base(), tr("Base"))
+        add(self._tab_trigger(), tr("Trigger"))
         t = cue.type
         if t in ("audio", "video"):
-            add(self._tab_media_time(), tr("Tempi, loop e audio"))
+            add(self._tab_media_time(), tr("Tempi e loop"))
+            add(self._tab_audio(), tr("Audio"))
+        if t == "image":
+            add(self._tab_image_time(), tr("Tempi"))
         if t in ("video", "image"):
-            add(self._tab_visual(), tr("Video / immagine · crop"), scroll=False)
+            add(self._tab_visual(), tr("Video / Immagine"), scroll=False)
+        if t in ("audio", "video", "image"):
+            # preset della cue (audio e video insieme), sulla riga dei tab
+            self.preset_bar = self._preset_bar()
+            self.tabs.setCornerWidget(self.preset_bar, Qt.TopRightCorner)
+            self.preset_bar.show()
         if t == "fade":
             add(self._tab_fade(), tr("Fade"))
         if t == "preset":
@@ -268,10 +288,14 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
             add(self._tab_stoppanel(), tr("Stop panel"))
         if t == "wait":
             add(self._tab_wait(), tr("Attesa"))
-        if 0 <= cur_tab < self.tabs.count():
-            self.tabs.setCurrentIndex(cur_tab)
-        elif self.tabs.count() > 1:
-            self.tabs.setCurrentIndex(1)
+        # resta sulla stessa scheda (per nome) passando da una cue all'altra; altrimenti la prima propria del tipo
+        titles = [self.tabs.tabText(i) for i in range(self.tabs.count())]
+        if cur_title in titles:
+            self.tabs.setCurrentIndex(titles.index(cur_title))
+        elif self.tabs.count() > 2:
+            self.tabs.setCurrentIndex(2)
+        else:
+            self.tabs.setCurrentIndex(0)
 
     def _hotkey_row(self, cue):
         from PySide6.QtGui import QKeySequence
@@ -296,37 +320,49 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         h.addStretch(1)
         return w
 
-    def _color_row(self, cue):
-        from PySide6.QtWidgets import QColorDialog
+    def _color_button(self, cue):
+        """Pulsante col colore della cue: il menu ha i 12 colori, «Altro…» e «Nessun colore»."""
+        from PySide6.QtGui import QColor
+        from PySide6.QtWidgets import QColorDialog, QGridLayout, QMenu, QToolButton, QWidgetAction
         from .grid import PALETTE
-        w = QWidget()
-        h = QHBoxLayout(w)
-        h.setContentsMargins(0, 0, 0, 0)
-        h.setSpacing(3)
-        for col in PALETTE:
-            b = QPushButton()
-            b.setFixedSize(20, 20)
-            b.setToolTip(col)
+        b = QToolButton()
+        b.setPopupMode(QToolButton.InstantPopup)
+        b.setToolTip(tr("Colore della cue (casella del GRID e riga della lista)"))
+        b.setText("    " if cue.color else tr("nessuno"))
+        if cue.color:
+            b.setStyleSheet(f"QToolButton{{background:{cue.color};border:1px solid #777;border-radius:3px;"
+                            f"min-width:44px;}}")
+        menu = QMenu(b)
+        grid_w = QWidget()
+        g = QGridLayout(grid_w)
+        g.setContentsMargins(6, 6, 6, 6)
+        g.setSpacing(3)
+
+        def pick(col):
+            menu.close()
+            if self.color_fn:
+                self.color_fn(cue, col)
+        for i, col in enumerate(PALETTE):
+            sw = QPushButton()
+            sw.setFixedSize(22, 22)
+            sw.setToolTip(col)
             border = "2px solid white" if cue.color == col else "1px solid #555"
-            b.setStyleSheet(f"background:{col};border:{border};border-radius:3px;")
-            b.clicked.connect(lambda _=False, col=col: self.color_fn and self.color_fn(cue, col))
-            h.addWidget(b)
+            sw.setStyleSheet(f"background:{col};border:{border};border-radius:3px;")
+            sw.clicked.connect(lambda _=False, col=col: pick(col))
+            g.addWidget(sw, i // 6, i % 6)
+        wa = QWidgetAction(menu)
+        wa.setDefaultWidget(grid_w)
+        menu.addAction(wa)
+        menu.addSeparator()
 
         def other():
-            from PySide6.QtGui import QColor
             c = QColorDialog.getColor(QColor(cue.color or "#2f3440"), self, tr("Colore della cue"))
             if c.isValid() and self.color_fn:
                 self.color_fn(cue, c.name())
-        o = QPushButton(tr("Altro…"))
-        o.clicked.connect(other)
-        h.addWidget(o)
-        x = QPushButton("✕")
-        x.setFixedWidth(28)
-        x.setToolTip(tr("Nessun colore"))
-        x.clicked.connect(lambda: self.color_fn and self.color_fn(cue, ""))
-        h.addWidget(x)
-        h.addStretch(1)
-        return w
+        menu.addAction(tr("Altro…"), other)
+        menu.addAction(tr("Nessun colore"), lambda: self.color_fn and self.color_fn(cue, ""))
+        b.setMenu(menu)
+        return b
 
     @staticmethod
     def _scrolled(widget):
@@ -338,6 +374,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
 
     def _test_buttons(self):
         row = QHBoxLayout()
+        row.setSpacing(4)
         b1 = QPushButton(tr("▶ Prova questa cue"))
         b1.setToolTip(tr("Avvia solo questa cue (senza catena e senza spostare il playhead)"))
         b1.clicked.connect(lambda: self.testRequested.emit(self.cue.id))
@@ -345,25 +382,67 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         b2.clicked.connect(lambda: self.stopRequested.emit(self.cue.id))
         row.addWidget(b1)
         row.addWidget(b2)
-        row.addStretch(1)
         return row
 
     def _tab_base(self):
+        """Numero, nome, prova/stop · file (cue con file) · avvio, ritardo, colore · note."""
+        cue = self.cue
         w = QWidget()
-        f = QFormLayout(w)
-        f.addRow(tr("Numero"), self._line("number"))
-        f.addRow(tr("Nome"), self._line("name"))
+        v = QVBoxLayout(w)
+        row = QHBoxLayout()
+        row.addWidget(QLabel(tr("Numero")))
+        num = self._line("number")
+        num.setMaximumWidth(64)
+        num.setToolTip(tr("Numero della cue (unico nello show)"))
+        row.addWidget(num)
+        row.addSpacing(8)
+        row.addWidget(QLabel(tr("Nome")))
+        row.addWidget(self._line("name"), 1)
+        row.addSpacing(8)
+        row.addLayout(self._test_buttons())
+        v.addLayout(row)
+        if cue.is_media():
+            v.addLayout(self._file_row([cue.type]))
+            self.file_state = QLabel()
+            self.file_state.setStyleSheet("color:#e66;")
+            self.file_state.setVisible(False)
+            v.addWidget(self.file_state)
+            self._update_file_state()
+        row = QHBoxLayout()
+        row.addWidget(QLabel(tr("Avvio")))
         trig = self._combo("trigger", TRIGGERS, TRIGGER_LABELS)
         trig.setToolTip(tr("Manuale: parte con GO.\nInsieme alla precedente: parte quando parte la cue "
-                        "sopra, dopo il ritardo.\nAlla fine della precedente: parte quando la cue sopra "
-                        "termina, dopo il ritardo."))
-        f.addRow(tr("Avvio"), trig)
-        f.addRow(tr("Ritardo (pre-wait)"), self._dspin("delay", 0, 36000, 0.1, 2))
+                           "sopra, dopo il ritardo.\nAlla fine della precedente: parte quando la cue sopra "
+                           "termina, dopo il ritardo.\nSolo trigger: il GO non la avvia (la salta); parte "
+                           "con il suo trigger MIDI/OSC, la scorciatoia, una cue Comando o un clic nel GRID. "
+                           "Nella lista è segnata con «T»."))
+        row.addWidget(trig, 1)
+        row.addSpacing(8)
+        row.addWidget(QLabel(tr("Ritardo")))
+        dl = self._dspin("delay", 0, 36000, 0.1, 2)
+        dl.setToolTip(tr("Ritardo (pre-wait): attesa tra il comando e la partenza della cue"))
+        row.addWidget(dl)
+        row.addSpacing(8)
+        row.addWidget(QLabel(tr("Colore")))
+        row.addWidget(self._color_button(cue))
+        v.addLayout(row)
+        v.addWidget(QLabel(tr("Note")))
+        notes = QPlainTextEdit(cue.notes)
+        notes.setMaximumHeight(90)
+        notes.textChanged.connect(lambda: (setattr(cue, "notes", notes.toPlainText()), self._emit()))
+        v.addWidget(notes)
+        v.addStretch(1)
+        return w
+
+    def _tab_trigger(self):
+        """Comandi che avviano o regolano la cue: MIDI, fader MIDI, OSC, tastiera."""
+        cue = self.cue
+        w = QWidget()
+        f = QFormLayout(w)
         midi_row = QHBoxLayout()
         ml = self._line("midi", tr("es. note 1 60  /  cc 1 20  /  pc 1 5  (canale 0 = tutti)"))
         midi_row.addWidget(ml)
         lb = QPushButton(tr("Impara"))
-        cue = self.cue
 
         def learned(spec):
             cue.midi = spec
@@ -380,13 +459,13 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
             le = QLineEdit(getattr(cue, field, ""))
             le.setPlaceholderText(tr("es. cc 1 7  /  pb 1  /  pc 1 *  (canale 0 = tutti)"))
             le.setToolTip(tr("Controllo continuo (fader/potenziometro) per questa cue: dal vivo se è in "
-                          "riproduzione, altrimenti modifica il valore programmato"))
+                             "riproduzione, altrimenti modifica il valore programmato"))
 
             def typed(le=le, field=field):
                 from .remote import normalize_control
-                v = normalize_control(le.text())
-                setattr(cue, field, v)
-                if le.text().strip() and not v:
+                val = normalize_control(le.text())
+                setattr(cue, field, val)
+                if le.text().strip() and not val:
                     le.setStyleSheet("color:#e66;")
                 else:
                     le.setStyleSheet("")
@@ -410,12 +489,13 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
             f.addRow(label, row)
         f.addRow(tr("Trigger OSC"), self._line("osc_trigger", tr("es. /scena/1  (oltre a /cue/<numero>/start)")))
         f.addRow(tr("Scorciatoia"), self._hotkey_row(cue))
-        f.addRow(tr("Colore"), self._color_row(cue))
-        notes = QPlainTextEdit(cue.notes)
-        notes.setMaximumHeight(70)
-        notes.textChanged.connect(lambda: (setattr(cue, "notes", notes.toPlainText()), self._emit()))
-        f.addRow(tr("Note"), notes)
-        f.addRow(self._test_buttons())
+        if cue.trigger == "trigger":
+            note = QLabel(tr("Questa cue è «Solo trigger»: il GO non la avvia, parte solo con i comandi di questa scheda, "
+                             "una cue Comando o un clic nel GRID."))
+        else:
+            note = QLabel(tr("Questi comandi avviano la cue in qualsiasi momento, oltre al GO. Con «Avvio: Solo trigger» "
+                             "(scheda Base) il GO la salta."))
+        note.setWordWrap(True)
+        note.setStyleSheet("color:#888; font-size:10px;")
+        f.addRow(note)
         return w
-
-

@@ -27,13 +27,17 @@ PRESET_KINDS = {
     "visual": ["crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y", "scale", "warp", "opacity", "fit"],
 }
 PRESET_LABELS = {"audio": tr("Preset audio"), "visual": tr("Preset crop / posizione")}
-TRIGGERS = ["manual", "with_prev", "after_prev"]
+TRIGGERS = ["manual", "with_prev", "after_prev", "trigger"]
 TRIGGER_LABELS = {
     "manual": tr("Manuale (GO)"),
     "with_prev": tr("Insieme alla precedente"),
     "after_prev": tr("Alla fine della precedente"),
+    "trigger": tr("Solo trigger (non parte col GO)"),
 }
-TRIGGER_SHORT = {"manual": "GO", "with_prev": tr("⇉ con prec."), "after_prev": tr("↳ dopo prec.")}
+TRIGGER_SHORT = {"manual": "GO", "with_prev": tr("⇉ con prec."), "after_prev": tr("↳ dopo prec."),
+                 "trigger": tr("T solo trigger")}
+# preset di una cue: tipi di valori salvati insieme in ogni preset (audio e/o video)
+PRESET_KINDS_FOR = {"audio": ("audio",), "video": ("audio", "visual"), "image": ("visual",)}
 
 CONTROL_ACTIONS = ["start", "stop", "pause", "resume", "stop_all", "playhead"]
 CONTROL_LABELS = {

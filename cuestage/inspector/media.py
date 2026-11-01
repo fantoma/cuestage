@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
 
 from ..media import fmt_time
 from ..model import (
-    PRESET_LABELS,
     FADE_SHAPE_LABELS, FADE_SHAPES, FIT_LABELS, FIT_MODES,
     MAX_DB, MEDIA_EXT, MIN_DB, )
 from ..ui_crop import CropPanel
@@ -203,15 +202,25 @@ class MediaTabsMixin:
         return w
 
     def _show_in_use(self, states):
-        for bar in self.findChildren(PresetBar):
+        bars = list(self.findChildren(PresetBar))
+        pb = getattr(self, "preset_bar", None)
+        if pb is not None and pb not in bars:
+            bars.append(pb)
+        for bar in bars:
             try:
-                if bar.cue is self.cue and bar.kind in states:
+                if bar.cue is not self.cue:
+                    continue
+                if bar.kind == "all":
+                    bar.set_in_use(states)
+                elif bar.kind in states:
                     bar.set_in_use(states[bar.kind])
             except RuntimeError:
                 pass
 
-    def _preset_bar(self, kind):
-        bar = PresetBar(kind, self.show_fn, self.cue)
+    def _preset_bar(self, kind="all"):
+        """Barra dei preset della cue: «all» = audio e video insieme (accanto ai tab)."""
+        from .presets import CuePresetBar
+        bar = CuePresetBar(self.show_fn, self.cue) if kind == "all" else PresetBar(kind, self.show_fn, self.cue)
 
         def applied():
             self.refresh_fields()
@@ -230,29 +239,44 @@ class MediaTabsMixin:
         f.addRow(tr("Cue target (in esecuzione)"),
                  self._target_combo(on_change=lambda: QTimer.singleShot(0, self.rebuild)))
         target = self.show_fn().resolve_target(cue.target)
-        compatible = {"audio": ("audio", "video"), "visual": ("video", "image")}
-        for kind, attr in (("audio", "preset_audio"), ("visual", "preset_visual")):
-            cb = QComboBox()
-            cb.addItem(tr("(non cambiare)"), "")
-            names = []
-            if target is not None and target.type in compatible[kind]:
-                names = sorted(target.preset_dict(kind), key=str.lower)
-            for n in names:
-                cb.addItem(n, n)
-            cur = getattr(cue, attr)
+        from ..model import PRESET_KINDS_FOR
+        kinds = PRESET_KINDS_FOR.get(target.type, ()) if target is not None else ()
+        names = sorted({n for k in kinds for n in target.preset_dict(k)}, key=str.lower) if kinds else []
+        cb = QComboBox()
+        cb.addItem(tr("(nessuno)"), "")
+        for n in names:
+            cb.addItem(n, n)
+        cur_a, cur_v = cue.preset_audio or "", cue.preset_visual or ""
+        cur = cur_a or cur_v
+        if cur_a and cur_v and cur_a != cur_v:      # show di versioni precedenti: due preset diversi
+            cb.addItem(tr("{0} (audio) + {1} (video)", cur_a, cur_v), "\0legacy")
+            i = cb.count() - 1
+        else:
             i = cb.findData(cur)
             if i < 0 and cur:
                 cb.addItem(tr("{0} (non presente nella cue target)", cur), cur)
                 i = cb.count() - 1
-            cb.setCurrentIndex(max(0, i))
-            cb.setEnabled(target is not None and target.type in compatible[kind])
-            cb.currentIndexChanged.connect(
-                lambda i, cb=cb, attr=attr: (setattr(cue, attr, cb.itemData(i) or ""), self._emit()))
-            f.addRow(PRESET_LABELS[kind], cb)
+        cb.setCurrentIndex(max(0, i))
+        cb.setEnabled(bool(kinds))
+
+        def chosen(i):
+            n = cb.itemData(i) or ""
+            if n == "\0legacy":
+                return
+            # il nome vale per ogni tipo di valori che il preset ha nella cue target
+            has = lambda k: target is not None and k in kinds and n in target.preset_dict(k)
+            cue.preset_audio = n if has("audio") else ""
+            cue.preset_visual = n if has("visual") else ""
+            if n and not (cue.preset_audio or cue.preset_visual):
+                cue.preset_audio = n if "audio" in kinds else ""
+                cue.preset_visual = n if "visual" in kinds else ""
+            self._emit()
+        cb.currentIndexChanged.connect(chosen)
+        f.addRow(tr("Preset"), cb)
         if target is None:
-            msg = tr("Scegli la cue target: gli elenchi mostreranno i suoi preset.")
-        elif not any(target.preset_dict(k) for k in ("audio", "visual")):
-            msg = (tr("La cue «{0}» non ha ancora preset: creali nelle sue schede «Tempi, loop e volume» e «Video / immagine · crop».", target.label()))
+            msg = tr("Scegli la cue target: l'elenco mostrerà i suoi preset.")
+        elif not names:
+            msg = tr("La cue «{0}» non ha ancora preset: creali con la barra «Preset» accanto ai suoi tab.", target.label())
         else:
             msg = ""
         if msg:
@@ -298,11 +322,17 @@ class MediaTabsMixin:
         return w
 
     def _file_row(self, kinds):
+        """File della cue con il percorso (modificabile), «Sfoglia…» e «Apri cartella»."""
         row = QHBoxLayout()
-        le = QLineEdit(self.cue.file)
-        le.setReadOnly(True)
-        b = QPushButton(tr("Sfoglia…"))
         cue = self.cue
+        row.addWidget(QLabel(tr("File")))
+        le = QLineEdit(cue.file)
+        le.setPlaceholderText(tr("percorso del file (scrivilo o usa «Sfoglia…»)"))
+        le.setToolTip(cue.file or "")
+        self.file_edit = le
+        b = QPushButton(tr("Sfoglia…"))
+        of = QPushButton(tr("Apri cartella"))
+        of.setToolTip(tr("Apre la cartella del file nel gestore dei file del sistema"))
 
         def browse():
             exts = set()
@@ -312,28 +342,65 @@ class MediaTabsMixin:
             start = os.path.dirname(cue.file) if cue.file else os.path.expanduser("~")
             path, _ = QFileDialog.getOpenFileName(self, tr("Scegli file"), start, tr("Media ({0});;Tutti (*)", pat))
             if path:
-                cue.file = path
-                if not cue.name:
-                    cue.name = os.path.splitext(os.path.basename(path))[0]
-                cue.start = cue.end = cue.loop_start = cue.loop_end = 0.0
-                cue.curve = []
-                le.setText(path)
-                self._emit(True)
-                self.rebuild()
+                self._set_file(path, reset=True)
+
+        def typed():
+            path = os.path.expanduser(le.text().strip())
+            if path != cue.file:
+                # percorso corretto a mano (es. file spostato): IN, OUT e loop restano quelli di prima
+                self._set_file(path, reset=False)
+
+        def open_folder():
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+            d = os.path.dirname(cue.file) if cue.file else ""
+            if d and os.path.isdir(d):
+                QDesktopServices.openUrl(QUrl.fromLocalFile(d))
         b.clicked.connect(browse)
+        le.editingFinished.connect(typed)
+        of.clicked.connect(open_folder)
+        of.setEnabled(bool(cue.file) and os.path.isdir(os.path.dirname(cue.file)))
         row.addWidget(le, 1)
         row.addWidget(b)
+        row.addWidget(of)
         return row
+
+    def _set_file(self, path, reset):
+        cue = self.cue
+        cue.file = path
+        if path and not cue.name:
+            cue.name = os.path.splitext(os.path.basename(path))[0]
+        if reset:
+            cue.start = cue.end = cue.loop_start = cue.loop_end = 0.0
+            cue.curve = []
+        self._emit(True)
+        QTimer.singleShot(0, self.rebuild)
+
+    def _update_file_state(self):
+        lab = getattr(self, "file_state", None)
+        cue = self.cue
+        if lab is None or cue is None:
+            return
+        try:
+            if not cue.file:
+                lab.setText(tr("Nessun file: usa «Sfoglia…» o trascina un file nella lista"))
+            elif not os.path.exists(cue.file):
+                lab.setText(tr("⚠ File non trovato"))
+            else:
+                lab.setText("")
+            lab.setVisible(bool(lab.text()))
+            if self.file_edit is not None:
+                self.file_edit.setStyleSheet("" if cue.file and os.path.exists(cue.file) else "color:#e66;")
+        except RuntimeError:
+            self.file_state = None
 
     def _tab_media_time(self):
         cue = self.cue
         w = QWidget()
         v = QVBoxLayout(w)
-        v.addLayout(self._file_row([cue.type]))
         self.info_label = QLabel()
         self.info_label.setStyleSheet("color:#999;")
         v.addWidget(self.info_label)
-        v.addWidget(self._preset_bar("audio"))
         self.timeline = TimelineEditor()
         self.timeline.setMinimumHeight(190)
         self.timeline.changed.connect(self._timeline_changed)
@@ -399,12 +466,70 @@ class MediaTabsMixin:
         row.addWidget(bz)
         v.addLayout(top)
         v.addLayout(row)
-        v.addLayout(self._test_buttons())
-        v.addWidget(self._audio_out_section(kbar, info))
+        self._media_info = info
         self._load_media()
         if kbar is not None:
             self.timeline.set_cursor(kbar.file_time())
             QTimer.singleShot(0, kbar.update_in_use)
+        return w
+
+    def _tab_audio(self):
+        """Scheda audio della cue, ducking e matrice dei canali (al tempo del cursore della timeline dei keyframe)."""
+        w = QWidget()
+        v = QVBoxLayout(w)
+        v.addWidget(self._audio_out_section(self.audio_kbar, getattr(self, "_media_info", None)))
+        v.addStretch(1)
+        return w
+
+    def _tab_image_time(self):
+        w = QWidget()
+        f = QFormLayout(w)
+        f.addRow(tr("Durata"), self._dspin("duration", 0, 360000, 1, 1, special=tr("fino allo stop")))
+        f.addRow(tr("Fade in"), self._dspin("fade_in", 0, 3600, 0.1, 2))
+        f.addRow(tr("Fade out (prima della fine)"), self._dspin("fade_out", 0, 3600, 0.1, 2))
+        return w
+
+    def _size_row(self):
+        """Dimensione dell'immagine in uscita (% rispetto all'adattamento): cursore, valore, −, +, 100%."""
+        from PySide6.QtWidgets import QSlider
+        cue = self.cue
+        w = QWidget()
+        h = QHBoxLayout(w)
+        h.setContentsMargins(0, 0, 0, 0)
+        sl = QSlider(Qt.Horizontal)
+        sl.setRange(10, 400)
+        sl.setMinimumWidth(120)
+        sl.setToolTip(tr("Ingrandisce o rimpicciolisce l'immagine in uscita (anche con la rotella sull'anteprima "
+                         "dell'uscita)"))
+        sp = self._dspin("scale", 1, 1000, 1, 1, " %")
+
+        def sync_slider():
+            sl.blockSignals(True)
+            sl.setValue(int(round(max(10.0, min(400.0, float(cue.scale or 100))))))
+            sl.blockSignals(False)
+        sync_slider()
+        sl.valueChanged.connect(lambda val: sp.setValue(float(val)))
+        sp.valueChanged.connect(lambda _v: sync_slider())
+        self.bound.append((sl, sync_slider))
+
+        def step(f):
+            sp.setValue(round(max(1.0, min(1000.0, float(cue.scale or 100) * f)), 1))
+        bm = QPushButton("−")
+        bm.setFixedWidth(28)
+        bm.setToolTip(tr("Rimpicciolisci (−10%)"))
+        bm.clicked.connect(lambda: step(1 / 1.1))
+        bp = QPushButton("+")
+        bp.setFixedWidth(28)
+        bp.setToolTip(tr("Ingrandisci (+10%)"))
+        bp.clicked.connect(lambda: step(1.1))
+        b1 = QPushButton("100%")
+        b1.setToolTip(tr("Dimensione originale dell'adattamento"))
+        b1.clicked.connect(lambda: sp.setValue(100.0))
+        h.addWidget(bm)
+        h.addWidget(sl, 1)
+        h.addWidget(bp)
+        h.addWidget(sp)
+        h.addWidget(b1)
         return w
 
     def _tab_visual(self):
@@ -414,13 +539,7 @@ class MediaTabsMixin:
         h.setContentsMargins(0, 0, 0, 0)
         w = QWidget()
         f = QFormLayout(w)
-        pb = self._preset_bar("visual")
-        f.addRow(pb)
-        if cue.type == "image":
-            f.addRow(tr("File"), self._file_row(["image"]))
-            f.addRow(tr("Durata"), self._dspin("duration", 0, 360000, 1, 1, special=tr("fino allo stop")))
-            f.addRow(tr("Fade in"), self._dspin("fade_in", 0, 3600, 0.1, 2))
-            f.addRow(tr("Fade out (prima della fine)"), self._dspin("fade_out", 0, 3600, 0.1, 2))
+        f.addRow(tr("Dimensione"), self._size_row())
         f.addRow(tr("Layer (più alto = sopra)"), self._ispin("layer", 0, 99))
         op = QDoubleSpinBox()
         op.setRange(0, 100)
@@ -447,11 +566,9 @@ class MediaTabsMixin:
         pos.addWidget(self._ispin("off_x", -16384, 16384, suffix=" px"), 0, 1)
         pos.addWidget(QLabel("Y"), 0, 2)
         pos.addWidget(self._ispin("off_y", -16384, 16384, suffix=" px"), 0, 3)
-        pos.addWidget(QLabel(tr("Scala")), 1, 0)
-        pos.addWidget(self._dspin("scale", 1, 1000, 1, 1, " %"), 1, 1)
         self.out_label = QLabel()
         self.out_label.setStyleSheet("color:#888;")
-        pos.addWidget(self.out_label, 1, 2, 1, 2)
+        pos.addWidget(self.out_label, 1, 0, 1, 4)
         f.addRow(tr("Spostamento (px uscita)"), pos)
         self._update_px_labels()
 
@@ -464,24 +581,23 @@ class MediaTabsMixin:
                 warp.addWidget(self._warp_spin(i, j), i, 2 + j * 2)
         f.addRow(tr("Prospettiva (px uscita)"), warp)
 
-        reset = QPushButton(tr("Reimposta crop, posizione e prospettiva"))
+        reset = QPushButton(tr("Reimposta crop, posizione, dimensione e prospettiva"))
 
         def do_reset():
             for a in ("crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y"):
                 setattr(cue, a, 0)
-            cue.scale = 100.0
+            cue.scale = 100.0           # dimensione
             cue.warp = [[0, 0], [0, 0], [0, 0], [0, 0]]
             self.refresh_fields()
             self._emit()
         reset.clicked.connect(do_reset)
-        hint = QLabel(tr("Spostamento: 0,0 = centrato secondo l'adattamento. Nell'anteprima dell'uscita: "
-                      "trascina = sposta, rotella = scala, Maiusc+trascina = crop. Le modifiche valgono "
-                      "anche durante la riproduzione."))
+        hint = QLabel(tr("Spostamento: 0,0 = centrato secondo l'adattamento. Anteprima dell'uscita: trascina = "
+                         "sposta, rotella = dimensione. Sorgente · crop: rotella = zoom della vista, tasto "
+                         "centrale o destro trascinato = scorri. Le modifiche valgono anche durante la riproduzione."))
         hint.setWordWrap(True)
         hint.setStyleSheet("color:#888; font-size:10px;")
         f.addRow(reset)
         f.addRow(hint)
-        f.addRow(self._test_buttons())
         left = self._scrolled(w)   # scorre solo la colonna dei campi
         left.setMinimumWidth(w.sizeHint().width() + 20)
         left.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -563,6 +679,7 @@ class MediaTabsMixin:
 
     # ------------------------------------------------------------ media
     def _load_media(self):
+        self._update_file_state()
         if not self.timeline or not self.cue:
             return
         path = self.cue.file
