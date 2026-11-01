@@ -2,7 +2,7 @@
 
 Azioni: «Nessuna», «Recall Preset» (porta la cue in esecuzione a un suo preset, con un tempo di
 transizione) e «Call Cue» (avvia un'altra cue). Le esegue il motore quando la riproduzione passa sul marker."""
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox, QDoubleSpinBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QToolButton, QWidget,
 )
@@ -220,6 +220,7 @@ class MarkersPanel(QWidget):
         ph.addWidget(fmode)
         ph.addWidget(fade)
         ph.addWidget(shape)
+        ph.addStretch(1)                  # parametri sempre allineati a sinistra, anche con campi nascosti
 
         def show_params():
             k = act.currentData()
@@ -228,7 +229,14 @@ class MarkersPanel(QWidget):
             fade_lab.setVisible(k in ("preset", "stop"))
             fmode.setVisible(k in ("preset", "stop"))
             if k in ("preset", "stop"):
-                fade.setVisible(fmode.currentData() in ("after", "before"))
+                # dal marker precedente / al successivo la durata è automatica: il campo resta al suo posto
+                # (così le caselle non si spostano) ma disattivato, con «auto»
+                auto = fmode.currentData() in ("prev", "next")
+                fade.blockSignals(True)
+                fade.setSpecialValueText(tr("auto") if auto else "")
+                fade.setValue(0.0 if auto else float(m.get("fade", 0) or 0))
+                fade.setEnabled(not auto)
+                fade.blockSignals(False)
             shape.setVisible(k == "preset")         # lo stop usa la sua curva di fade
             fade.setToolTip(tr("Tempo di transizione verso il preset") if k == "preset" else
                             tr("Tempo di fade dello stop"))
@@ -266,7 +274,7 @@ class MarkersPanel(QWidget):
         rm.clicked.connect(remove)
 
         for c, w in enumerate((name, tw, notes, act, pw, rm)):
-            g.addWidget(w, r, c)
+            g.addWidget(w, r, c, Qt.AlignLeft | Qt.AlignVCenter) if c == 4 else g.addWidget(w, r, c)
 
         def sync():
             for w, val in ((name, str(m.get("name") or "")), (notes, str(m.get("notes") or ""))):

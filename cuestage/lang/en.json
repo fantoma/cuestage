@@ -1307,6 +1307,7 @@
   "— scegli la cue —": "— choose the cue —",
   "Tempo di fade dello stop": "Fade time of the stop",
   "{0} (non trovata)": "{0} (not found)",
+  "auto": "auto",
   "Vol. out": "Out vol.",
   "Volume uscita {0}": "Output {0} volume",
   "{0} → Out {1}": "{0} → Out {1}",
