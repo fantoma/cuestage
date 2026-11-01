@@ -532,32 +532,6 @@ class MediaTabsMixin:
         h.addWidget(b1)
         return w
 
-    def _stretch_row(self):
-        """Larghezza e altezza in % della dimensione (100/100 = proporzioni originali)."""
-        cue = self.cue
-        w = QWidget()
-        h = QHBoxLayout(w)
-        h.setContentsMargins(0, 0, 0, 0)
-        h.addWidget(QLabel(tr("larghezza")))
-        sx = self._dspin("scale_x", 1, 1000, 1, 1, " %")
-        h.addWidget(sx)
-        h.addWidget(QLabel(tr("altezza")))
-        sy = self._dspin("scale_y", 1, 1000, 1, 1, " %")
-        h.addWidget(sy)
-        b = QPushButton(tr("Proporzioni originali"))
-        b.setToolTip(tr("Larghezza e altezza al 100%: niente deformazione"))
-
-        def reset():
-            cue.scale_x = cue.scale_y = 100.0
-            self.refresh_fields()
-            self._emit()
-        b.clicked.connect(reset)
-        h.addWidget(b)
-        h.addStretch(1)
-        w.setToolTip(tr("Deformazione: con «Mantieni proporzioni» spento i quadratini della vista «Sorgente · crop» "
-                        "cambiano larghezza e altezza separatamente"))
-        return w
-
     def _tab_visual(self):
         cue = self.cue
         outer = QWidget()
@@ -566,7 +540,6 @@ class MediaTabsMixin:
         w = QWidget()
         f = QFormLayout(w)
         f.addRow(tr("Dimensione"), self._size_row())
-        f.addRow(tr("Deformazione"), self._stretch_row())
         f.addRow(tr("Layer (più alto = sopra)"), self._ispin("layer", 0, 99))
         op = QDoubleSpinBox()
         op.setRange(0, 100)
@@ -619,7 +592,7 @@ class MediaTabsMixin:
             self._emit()
         reset.clicked.connect(do_reset)
         hint = QLabel(tr("Spostamento: 0,0 = centrato secondo l'adattamento. Sorgente · crop: trascina i quadratini = "
-                         "dimensione (con «Mantieni proporzioni» spento: deformazione), Ctrl+trascina = crop, "
+                         "dimensione, Alt+trascina = proporzioni (deformazione), Ctrl+trascina = crop, "
                          "Maiusc = simmetrico, rotella = dimensione. Anteprima dell'uscita: trascina = sposta, "
                          "rotella = dimensione. Le modifiche valgono anche durante la riproduzione."))
         hint.setWordWrap(True)

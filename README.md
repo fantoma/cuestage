@@ -364,6 +364,9 @@ clear curve). Wheel = zoom, Shift+wheel or dragging = scroll.
   - **Drag a handle** = **size**: the opposite side stays still, also on the output. With **Keep proportions**
     (check box above the views, on by default) width and height change together; with it off the picture is
     **distorted**: a side handle changes only the width or the height, a corner both.
+  - **Alt + drag** = **proportions**: the picture is distorted (a side handle changes only the width or the
+    height), whatever the check box says. **⟲ Proportions** restores the original proportions. On Linux desktops
+    where Alt+drag moves windows, turn off **Keep proportions** instead.
   - **Ctrl + drag** = **crop** (Ctrl + drag inside the rectangle moves the crop area).
   - **Shift** while dragging = **symmetric**: the size changes around the centre, the crop changes on both
     opposite sides.
@@ -376,8 +379,8 @@ While the tab is open, **the video output shows the still frame with the current
 already playing), so you can adjust while looking at the projector. The **Blind** box turns this off (it stays
 saved in the show).
 
-In the fields column: **Size** (slider, value in %, − / + and 100%) to enlarge or shrink the picture,
-**Distortion** (width and height in % of the size, “Original proportions” resets them), crop in source pixels, X/Y offset in output pixels (0,0 = centred),
+In the fields column: **Size** (slider, value in %, − / + and 100%) to enlarge or shrink the picture, crop in
+source pixels, X/Y offset in output pixels (0,0 = centred),
 perspective as the offset in pixels of the 4 corners. The cue's perspective adds to the 4-corner correction of
 the whole output.
 

@@ -595,6 +595,14 @@ def t_inspector_layout(w):
     v.scale_x, v.off_x = 100.0, 0
     run(0.05)
     cr = cv._crop_rect(cv._img_rect())
+    bottom = QPointF(cr.center().x(), cr.bottom())
+    drag(bottom, bottom + QPointF(0, cr.height() / 2), Qt.AltModifier)    # Alt: proporzioni (solo l'altezza)
+    assert v.scale == 100.0 and v.scale_y > 140 and v.scale_x == 100.0, (v.scale, v.scale_x, v.scale_y)
+    ins.crop_panel.ratio_btn.click()                           # ⟲ Proporzioni
+    assert v.scale_x == 100.0 and v.scale_y == 100.0
+    v.off_y = 0
+    run(0.05)
+    cr = cv._crop_rect(cv._img_rect())
     left = QPointF(cr.left(), cr.center().y())
     drag(left, left + QPointF(cr.width() / 4, 0), Qt.ControlModifier)     # Ctrl: crop
     assert v.crop_l > 0 and v.crop_r == 0 and v.scale == 100.0, (v.crop_l, v.crop_r)

@@ -3,7 +3,7 @@ con il riquadro di ritaglio da trascinare. I valori sono in pixel del sorgente."
 from .i18n import tr
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import (QCheckBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QCheckBox, QHBoxLayout, QLabel, QToolButton, QVBoxLayout, QWidget)
 
 from . import keyframes as kf
 from .media import fmt_time
@@ -64,8 +64,8 @@ class CropView(QWidget):
         self._frozen = None                   # durante un trascinamento: (k della vista, centro)
         self.setMinimumSize(300, 150)
         self.setMouseTracking(True)
-        self.setToolTip(tr("Trascina i quadratini: dimensione · Ctrl+trascina: crop · Maiusc: simmetrico · "
-                           "rotella: dimensione · doppio clic: togli il crop"))
+        self.setToolTip(tr("Trascina i quadratini: dimensione · Alt+trascina: cambia le proporzioni · "
+                           "Ctrl+trascina: crop · Maiusc: simmetrico · rotella: dimensione · doppio clic: togli il crop"))
 
     def set_source(self, cue, img, src_w, src_h):
         self.cue = cue
@@ -252,11 +252,11 @@ class CropView(QWidget):
                             float(getattr(c, "scale_y", 100) or 100), float(c.off_x), float(c.off_y)),
                      "r0": QRectF(r), "cr0": QRectF(cr), "f0": self._factors(c)}
 
-    def _size_drag(self, pos, shift):
+    def _size_drag(self, pos, shift, alt=False):
         d = self.drag
         mode, start, cr0 = d["mode"], d["start"], d["cr0"]
         s0, sx0, sy0, ox0, oy0 = d["v0"]
-        keep = bool(self.keep_aspect_fn())
+        keep = bool(self.keep_aspect_fn()) and not alt     # Alt: cambia le proporzioni (deformazione)
         # punto fermo: lato opposto (o il centro con Maiusc); asse non trascinato: centro
         ax = ay = None
         if "l" in mode or "r" in mode:
@@ -377,7 +377,7 @@ class CropView(QWidget):
         if self.drag["crop"]:
             self._crop_drag(pos, shift)
         else:
-            self._size_drag(pos, shift)
+            self._size_drag(pos, shift, bool(e.modifiers() & Qt.AltModifier))
         self.changed.emit()
         self.update()
 
@@ -608,9 +608,9 @@ class CropPanel(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
         top = QHBoxLayout()
-        title = QLabel(tr("Sinistra: quadratini = dimensione, Ctrl = crop, Maiusc = simmetrico, rotella = "
-                          "dimensione · Destra: uscita (angoli = prospettiva, interno = sposta, rotella = dimensione, "
-                          "doppio clic su un angolo = azzera)"))
+        title = QLabel(tr("Sinistra: quadratini = dimensione, Alt = proporzioni, Ctrl = crop, Maiusc = simmetrico, "
+                          "rotella = dimensione · Destra: uscita (angoli = prospettiva, interno = sposta, rotella = "
+                          "dimensione, doppio clic su un angolo = azzera)"))
         title.setStyleSheet("color:#999; font-size:10px;")
         title.setWordWrap(True)
         top.addWidget(title, 1)
@@ -621,11 +621,17 @@ class CropPanel(QWidget):
         self.blind.setChecked(bool(settings_fn().get("edit_blind", False)))
         self.blind.toggled.connect(self._blind_toggled)
         self.keep = QCheckBox(tr("Mantieni proporzioni"))
-        self.keep.setToolTip(tr("Acceso: i quadratini cambiano la dimensione mantenendo le proporzioni.\n"
-                                "Spento: deformazione, larghezza e altezza cambiano separatamente."))
+        self.keep.setToolTip(tr("Acceso: i quadratini cambiano la dimensione mantenendo le proporzioni "
+                                "(con Alt le cambiano).\nSpento: deformazione, larghezza e altezza cambiano "
+                                "separatamente."))
         self.keep.setChecked(bool(settings_fn().get("edit_keep_aspect", True)))
         self.keep.toggled.connect(lambda on: settings_fn().__setitem__("edit_keep_aspect", bool(on)))
         top.addWidget(self.keep)
+        self.ratio_btn = QToolButton()
+        self.ratio_btn.setText(tr("⟲ Proporzioni"))
+        self.ratio_btn.setToolTip(tr("Riporta le proporzioni originali (toglie la deformazione, la dimensione resta)"))
+        self.ratio_btn.clicked.connect(self._reset_ratio)
+        top.addWidget(self.ratio_btn)
         top.addWidget(self.blind)
         v.addLayout(top)
 
@@ -716,6 +722,13 @@ class CropPanel(QWidget):
 
     def _blind_toggled(self, on):
         self.settings_fn()["edit_blind"] = bool(on)
+
+    def _reset_ratio(self):
+        if self.locked():
+            return
+        self.cue.scale_x = self.cue.scale_y = 100.0
+        self.view.update()
+        self._crop_changed()
 
     def _crop_changed(self):
         self.out_view.update()
