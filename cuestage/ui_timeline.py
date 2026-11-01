@@ -421,6 +421,14 @@ class TimelineEditor(QWidget):
             a.triggered.connect(lambda _=False, n=n: fn(n))
             m.addAction(a)
 
+    def _move_cursor(self, x):
+        t = self.x2t(max(0.0, min(float(self.width()), x)))
+        if t == self.cursor_t:
+            return
+        self.cursor_t = t
+        self.update()
+        self.cursorMoved.emit(t)
+
     def keyPressEvent(self, e):
         if self.cue is not None and e.key() == Qt.Key_M and not e.modifiers():
             t = self.cursor_t if self.cursor_t is not None else (self.playhead or float(self.cue.start or 0))
@@ -458,7 +466,7 @@ class TimelineEditor(QWidget):
             return
         pos = e.position()
         if e.button() == Qt.MiddleButton:
-            self.drag = ("pan", pos.x(), self.v0, self.v1)
+            self.drag = ("pan", pos.x(), self.v0, self.v1, [True])
             return
         hit = self._hit(pos)
         if e.button() == Qt.RightButton:
@@ -482,8 +490,9 @@ class TimelineEditor(QWidget):
                 if e.modifiers() & Qt.ControlModifier:
                     self._add_point(pos)
                 else:
-                    # trascinare = scorrere; un clic senza trascinare sposta il cursore
-                    self.drag = ("pan", pos.x(), self.v0, self.v1, [False])
+                    # clic o trascinamento: sposta il cursore (per scorrere: tasto centrale o Maiusc+rotella)
+                    self.drag = ("cursor",)
+                    self._move_cursor(pos.x())
 
     def mouseDoubleClickEvent(self, e):
         if self.cue is None or e.button() != Qt.LeftButton:
@@ -516,6 +525,10 @@ class TimelineEditor(QWidget):
                            else Qt.PointingHandCursor if hit else Qt.ArrowCursor)
             return
         kind = self.drag[0]
+        if kind == "cursor":
+            self._move_cursor(pos.x())
+            QToolTip.showText(e.globalPosition().toPoint(), fmt_time(self.cursor_t), self)
+            return
         if kind == "pan":
             _, x0, v0, v1, moved = self.drag
             if abs(pos.x() - x0) > 3:
@@ -602,9 +615,7 @@ class TimelineEditor(QWidget):
             self.cue.preset_points.sort(key=lambda p: float(p.get("t", 0)))
             self.changed.emit()
         elif d[0] == "pan" and not d[4][0]:
-            self.cursor_t = self.x2t(e.position().x())
-            self.update()
-            self.cursorMoved.emit(self.cursor_t)
+            self._move_cursor(e.position().x())
 
     def wheelEvent(self, e):
         if self.cue is None:

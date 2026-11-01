@@ -368,13 +368,14 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
 - below it the **marker table**: for each marker its **name**, **time** (seconds in the file, editable; ⌖ moves the
   cursor there), a short **notes** field and the **action** performed when playback reaches the marker:
   **None**, **Recall Preset** (the cue goes to one of its presets, audio and video, in the given transition time) or
-  **Call Cue** (starts another cue of any list). Actions also work in loops, every time the marker is passed, and on
+  **Call Cue** (starts another cue of any list) or **Stop Cue** (stops this cue, or a chosen one, with the given
+  fade time). Actions also work in loops, every time the marker is passed, and on
   redundant instances each one runs them by itself;
 - **keyframes**: right-click › “Add audio keyframe here” (video also “image keyframe”) with the preset to use; drag the
   ◆ to move it, right-click it to change preset or delete it;
-- a **click** (without dragging) moves the cursor, which also sets the time shown by the Audio tab matrix (and the
+- a **click** or a **drag** moves the cursor, which also sets the time shown by the Audio tab matrix (and the
   frame of the Video / Image tab);
-- double-click or Ctrl+click adds a volume curve point; wheel = zoom, Shift+wheel or drag = scroll.
+- double-click or Ctrl+click adds a volume curve point; wheel = zoom, Shift+wheel or middle-button drag = scroll.
 
 The keyframe timeline with lanes is no longer in this tab: for video cues it is in the “Video / Image” tab.
 

@@ -406,8 +406,9 @@ class MediaTabsMixin:
         self.timeline.changed.connect(self._timeline_changed)
         v.addWidget(self.timeline)
         hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · quadratini arancioni = fade in e fade out · linea "
-                         "arancione = {0} · clic = cursore · tasto destro: marker e keyframe · M = marker al cursore · "
-                         "doppio clic o Ctrl+clic: punto di volume · rotella: zoom · Maiusc+rotella o trascina: scorri",
+                         "arancione = {0} · clic o trascina = cursore · tasto destro: marker e keyframe · M = marker al "
+                         "cursore · doppio clic o Ctrl+clic: punto di volume · rotella: zoom · Maiusc+rotella o tasto "
+                         "centrale: scorri",
                          tr("opacità (trasparenza)") if cue.type == "video" else tr("volume")))
         hint.setStyleSheet("color:#888; font-size:10px;")
         hint.setWordWrap(True)

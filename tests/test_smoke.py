@@ -698,6 +698,15 @@ def t_inspector_layout(w):
     tl.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, QPointF(px, tl._plot().bottom() - 3), QPointF(0, 0),
                                      Qt.LeftButton, Qt.NoButton, Qt.NoModifier))
     assert abs(ins.audio_kbar.cue_time() - 2.0) < 0.15, ins.audio_kbar.cue_time()
+    # trascinando, il cursore segue il mouse
+    y0 = tl._plot().bottom() - 3
+    tl.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, QPointF(tl.t2x(0.5), y0), QPointF(0, 0),
+                                   Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    tl.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(tl.t2x(1.2), y0), QPointF(0, 0), Qt.NoButton,
+                                  Qt.LeftButton, Qt.NoModifier))
+    assert abs(tl.cursor_t - 1.2) < 0.05 and abs(ins.audio_kbar.cue_time() - 1.2) < 0.15, tl.cursor_t
+    tl.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, QPointF(tl.t2x(1.2), y0), QPointF(0, 0),
+                                     Qt.LeftButton, Qt.NoButton, Qt.NoModifier))
     sh2 = Show.from_data(sh.to_data(None), None)
     assert sh2.by_id(a.id).markers[0]["name"] == "M1"         # i marker si salvano con lo show
     # tabella dei marker sotto la riga di IN/OUT/fade/loop: nome, tempo, note, azione
@@ -719,12 +728,15 @@ def t_inspector_layout(w):
     # in riproduzione: «Call Cue» al marker avvia l'altra cue, «Recall Preset» porta la cue al preset
     a.markers[0]["target"] = t.id
     a.markers.append({"t": 0.6, "name": "P", "action": "preset", "preset": "piano", "fade": 0.0})
+    a.markers.append({"t": 1.0, "name": "S", "action": "stop", "target": "", "fade": 0.0})   # Stop Cue: questa
     a.preset_dict("audio")["piano"] = dict(a.preset_values("audio"), level_db=-20.0)
     a.preset_points = []
     w.ctrl.start_cue(a, cascade=False)
     assert wait_until(lambda: t.id in w.ctrl.instances, 3), "Call Cue non eseguita"
     inst = w.ctrl.instances.get(a.id)
     assert wait_until(lambda: inst._aud_override is not None, 3), "Recall Preset non eseguito"
+    assert wait_until(lambda: a.id not in w.ctrl.instances, 4), "Stop Cue non eseguito"
+    assert t.id in w.ctrl.instances                            # lo stop riguarda solo questa cue
     w.ctrl.stop_all(0)
     run(0.2)
     a.markers, a.preset_points, a.level_db = [], [], 0.0

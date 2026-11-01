@@ -303,6 +303,13 @@ class KeyframeMixin:
                 start_preset(self, c, vis, aud, float(m.get("fade", 0) or 0), "scurve")
             else:
                 self.ctrl.message.emit(tr("Marker «{0}»: la cue non ha il preset «{1}»", m.get("name") or "M", n))
+        elif act == "stop":
+            # «Stop Cue»: ferma questa cue (destinazione vuota) o quella scelta, con il fade indicato
+            tg = self.ctrl.show.resolve_target(m["target"]) if m.get("target") else c
+            if tg is None:
+                self.ctrl.message.emit(tr("Marker «{0}»: cue «{1}» non trovata", m.get("name") or "M", m["target"]))
+            else:
+                self.ctrl.stop_cue(tg.id, float(m.get("fade", 0) or 0))
         elif act == "cue" and m.get("target"):
             tg = self.ctrl.show.resolve_target(m["target"])
             if tg is None:

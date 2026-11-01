@@ -10,11 +10,11 @@ from PySide6.QtWidgets import (
 from .i18n import tr
 from .model import PRESET_KINDS_FOR, TYPE_LABELS
 
-ACTIONS = ("none", "preset", "cue")
+ACTIONS = ("none", "preset", "cue", "stop")
 
 
 def action_labels():
-    return {"none": tr("Nessuna"), "preset": tr("Recall Preset"), "cue": tr("Call Cue")}
+    return {"none": tr("Nessuna"), "preset": tr("Recall Preset"), "cue": tr("Call Cue"), "stop": tr("Stop Cue")}
 
 
 def preset_names(cue):
@@ -158,7 +158,8 @@ class MarkersPanel(QWidget):
         act.setCurrentIndex(max(0, act.findData(m.get("action") or "none")))
         act.setToolTip(tr("Cosa succede quando la riproduzione arriva al marker:\n"
                           "Recall Preset: la cue va a un suo preset (audio e video) nel tempo indicato\n"
-                          "Call Cue: avvia un'altra cue"))
+                          "Call Cue: avvia un'altra cue\n"
+                          "Stop Cue: ferma questa cue (o quella scelta) con il fade indicato"))
 
         # parametri dell'azione
         pw = QWidget()
@@ -187,20 +188,34 @@ class MarkersPanel(QWidget):
         fade.valueChanged.connect(lambda v: (m.__setitem__("fade", round(float(v), 2)), self.changed.emit()))
         tgt = QComboBox()
         tgt.setMinimumWidth(200)
-        self._fill_targets(tgt, m)
+
+        def fill_targets():
+            tgt.blockSignals(True)
+            tgt.clear()
+            self._fill_targets(tgt, m, this_cue=act.currentData() == "stop")
+            tgt.blockSignals(False)
         tgt.currentIndexChanged.connect(lambda i: (m.__setitem__("target", tgt.itemData(i) or ""), self.changed.emit()))
         ph.addWidget(pre)
-        ph.addWidget(fade)
         ph.addWidget(tgt)
+        ph.addWidget(fade)
 
         def show_params():
             k = act.currentData()
             pre.setVisible(k == "preset")
-            fade.setVisible(k == "preset")
-            tgt.setVisible(k == "cue")
+            fade.setVisible(k in ("preset", "stop"))
+            fade.setToolTip(tr("Tempo di transizione verso il preset") if k == "preset" else
+                            tr("Tempo di fade dello stop"))
+            tgt.setVisible(k in ("cue", "stop"))
+            if k in ("cue", "stop"):
+                fill_targets()
 
         def act_changed(_i):
-            m["action"] = act.currentData()
+            k = act.currentData()
+            if k == "stop" and m.get("action") == "cue":
+                pass                              # la cue scelta per Call Cue resta, se c'era
+            elif k == "stop":
+                m["target"] = ""                  # di serie: ferma questa cue
+            m["action"] = k
             show_params()
             self.changed.emit()
         act.currentIndexChanged.connect(act_changed)
@@ -230,8 +245,8 @@ class MarkersPanel(QWidget):
                 tm.blockSignals(False)
         self._rows.append({"marker": m, "sync": sync})
 
-    def _fill_targets(self, w, m):
-        w.addItem(tr("— scegli la cue —"), "")
+    def _fill_targets(self, w, m, this_cue=False):
+        w.addItem(tr("— questa cue —") if this_cue else tr("— scegli la cue —"), "")
         show = self.show_fn()
         cue = self.cue
         nums = {}
