@@ -621,6 +621,33 @@ def t_inspector_layout(w):
     assert wait_until(lambda: w.loader.thumbs.get(vid) is not None, 20), "miniature non create"
     run(0.2)
     assert ins.timeline.thumbs is not None and ins.timeline.thumbs[1] == md.thumb_count(3.0)
+    # video: niente timeline dei keyframe nella scheda; fade e opacità si trascinano sulle miniature
+    from cuestage.ui_keyframes import KeyframeBar
+    page = ins.tabs.widget(2)
+    assert not [k for k in page.findChildren(KeyframeBar)], "timeline dei keyframe ancora sotto le miniature"
+    tl = ins.timeline
+    v.start = v.end = 0.0
+    v.fade_in = v.fade_out = 0.0
+    v.opacity = 1.0
+    tl.zoom_all()
+    tl.update()
+    xs, xfi, xfo, xe, y = tl._env_points()
+    assert tl._hit(QPointF(xfi, y)) == ("fade_in",)
+    tl.drag = ("fade_in",)
+    tl.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(tl.t2x(1.0), y), QPointF(0, 0), Qt.NoButton,
+                                  Qt.LeftButton, Qt.NoModifier))
+    tl.drag = None
+    assert abs(v.fade_in - 1.0) < 0.05, v.fade_in
+    xs, xfi, xfo, xe, y = tl._env_points()
+    mid = QPointF((xfi + xfo) / 2, y)
+    assert tl._hit(mid) == ("opacity",), tl._hit(mid)
+    r = tl._plot()
+    tl.drag = ("opacity",)
+    tl.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(mid.x(), r.top() + r.height() / 2), QPointF(0, 0),
+                                  Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+    tl.drag = None
+    assert abs(v.opacity - 0.5) < 0.03, v.opacity
+    v.fade_in, v.opacity = 0.0, 1.0
     cache = md._thumb_cache_path(vid, md.thumb_count(3.0))
     assert cache and os.path.isfile(cache)
     orig_ff = md.FFMPEG

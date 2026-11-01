@@ -253,13 +253,16 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         add(self._tab_base(), tr("Base"))
         add(self._tab_trigger(), tr("Trigger"))
         t = cue.type
+        # video: la scheda Video / Immagine si costruisce prima, perché la sua timeline dei keyframe serve
+        # anche alle schede Tempi e loop (cursore sulle miniature) e Audio (matrice al tempo del cursore)
+        visual = self._tab_visual() if t in ("video", "image") else None
         if t in ("audio", "video"):
             add(self._tab_media_time(), tr("Tempi e loop"))
             add(self._tab_audio(), tr("Audio"))
         if t == "image":
             add(self._tab_image_time(), tr("Tempi"))
-        if t in ("video", "image"):
-            add(self._tab_visual(), tr("Video / Immagine"), scroll=False)
+        if visual is not None:
+            add(visual, tr("Video / Immagine"), scroll=False)
         if t in ("audio", "video", "image"):
             # preset della cue (audio e video insieme), sulla riga dei tab
             self.preset_bar = self._preset_bar()

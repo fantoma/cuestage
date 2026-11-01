@@ -352,7 +352,11 @@ measures the cue's audio with level, fades, live trim and master volume.
 
 ## Waveform editor
 
-For **video** cues the waveform is drawn in transparency over a strip of **thumbnails** of the video. The thumbnails
+For **video** cues the strip shows the **thumbnails** of the video with the audio as a white upper half-wave along the
+bottom, and the **orange envelope** of the cue: drag its squares to set **fade in** and **fade out** (audio and
+picture together) and its horizontal line to set the **opacity** (transparency). IN/OUT and loop markers are dragged on
+the thumbnails too. The keyframe timeline of a video cue is in the “Video / Image” tab; its cursor is shown on the
+thumbnails as a dashed line. For audio cues the fades are the white squares at the top of the waveform. The thumbnails
 are made in the background the first time (only the key frames when possible, so it is quick even for long videos)
 and kept in a disk cache (`cache/thumbs` in the user data folder, at most 400 videos): they are made again only if
 the file changes.

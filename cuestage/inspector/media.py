@@ -405,9 +405,15 @@ class MediaTabsMixin:
         self.timeline.setFixedHeight(114)
         self.timeline.changed.connect(self._timeline_changed)
         v.addWidget(self.timeline)
-        hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · doppio clic o Ctrl+clic: aggiungi punto "
-                      "di volume · tasto destro su un punto: elimina · rotella: zoom · Maiusc+rotella o "
-                      "trascina: scorri"))
+        if cue.type == "video":
+            hint = QLabel(tr("Sulle miniature: trascina IN/OUT e i marcatori del loop · quadratini arancioni = fade in "
+                             "e fade out (audio e video) · linea arancione = trasparenza (opacità) · doppio clic o "
+                             "Ctrl+clic: punto di volume · tasto destro su un punto: elimina · rotella: zoom · "
+                             "Maiusc+rotella o trascina: scorri · keyframe nella scheda Video / Immagine"))
+        else:
+            hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · quadratini bianchi = fade in e fade out · "
+                             "doppio clic o Ctrl+clic: aggiungi punto di volume · tasto destro su un punto: elimina · "
+                             "rotella: zoom · Maiusc+rotella o trascina: scorri"))
         hint.setStyleSheet("color:#888; font-size:10px;")
         hint.setWordWrap(True)
         v.addWidget(hint)
@@ -415,7 +421,14 @@ class MediaTabsMixin:
         info = self.loader.get_info(cue.file) if cue.file else None
         kbar = None
         self._waiting_src = bool(cue.file) and info is None
-        if info is not None and float(info.get("duration") or 0) > 0:
+        if cue.type == "video" and self.crop_panel is not None:
+            # video: niente timeline dei keyframe qui (è nella scheda Video / Immagine), il suo cursore si
+            # vede sulle miniature
+            kbar = self.crop_panel.kbar
+            kbar.timeChanged.connect(lambda t: self.timeline.set_cursor(t) if self.timeline else None)
+            kbar.edited.connect(lambda: self.timeline.update() if self.timeline else None)
+            self.audio_kbar = kbar
+        elif info is not None and float(info.get("duration") or 0) > 0:
             from ..ui_keyframes import KeyframeBar
             dur = float(info.get("duration") or 0.0)
             kbar = KeyframeBar(cue, duration_fn=lambda: dur, in_out=True)
@@ -435,6 +448,9 @@ class MediaTabsMixin:
         top.addWidget(self._dspin("fade_in", 0, 3600, 0.1, 2))
         top.addWidget(QLabel(tr("Fade out")))
         top.addWidget(self._dspin("fade_out", 0, 3600, 0.1, 2))
+        if cue.type == "video":
+            top.addWidget(QLabel(tr("Opacità")))
+            top.addWidget(self._opacity_spin())
         top.addStretch(1)
         row = QHBoxLayout()
         lc = self._check("loop", tr("Loop"))
@@ -466,6 +482,7 @@ class MediaTabsMixin:
         row.addWidget(bz)
         v.addLayout(top)
         v.addLayout(row)
+        v.addStretch(1)
         self._media_info = info
         self._load_media()
         if kbar is not None:
@@ -532,6 +549,23 @@ class MediaTabsMixin:
         h.addWidget(b1)
         return w
 
+    def _opacity_spin(self):
+        cue = self.cue
+        op = QDoubleSpinBox()
+        op.setRange(0, 100)
+        op.setSuffix(" %")
+        op.setKeyboardTracking(False)
+        op.setValue(float(cue.opacity) * 100)
+
+        def changed(val):
+            cue.opacity = val / 100.0
+            self._emit()
+            if self.timeline is not None:
+                self.timeline.update()
+        op.valueChanged.connect(changed)
+        self.bound.append((op, lambda: op.setValue(float(cue.opacity) * 100)))
+        return op
+
     def _tab_visual(self):
         cue = self.cue
         outer = QWidget()
@@ -541,12 +575,7 @@ class MediaTabsMixin:
         f = QFormLayout(w)
         f.addRow(tr("Dimensione"), self._size_row())
         f.addRow(tr("Layer (più alto = sopra)"), self._ispin("layer", 0, 99))
-        op = QDoubleSpinBox()
-        op.setRange(0, 100)
-        op.setSuffix(" %")
-        op.setValue(float(cue.opacity) * 100)
-        op.valueChanged.connect(lambda v: (setattr(cue, "opacity", v / 100.0), self._emit()))
-        f.addRow(tr("Opacità"), op)
+        f.addRow(tr("Opacità"), self._opacity_spin())
         f.addRow(tr("Adattamento"), self._combo("fit", FIT_MODES, FIT_LABELS))
 
         # --- crop in pixel del sorgente

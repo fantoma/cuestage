@@ -16,6 +16,7 @@ C_END = QColor(235, 70, 70)
 C_LOOP = QColor(240, 190, 40)
 C_CURVE = QColor(255, 140, 220)
 C_HEAD = QColor(255, 255, 255)
+C_ENV = QColor(255, 165, 40)          # inviluppo del video: fade e opacità
 
 HANDLE_H = 16
 
@@ -178,18 +179,27 @@ class TimelineEditor(QWidget):
             i0 = np.clip((self.v0 + np.arange(cols) / cols * (self.v1 - self.v0)) * PEAK_RATE, 0, n).astype(int)
             i1 = np.clip((self.v0 + (np.arange(cols) + 1) / cols * (self.v1 - self.v0)) * PEAK_RATE, 0, n).astype(int)
             i1 = np.maximum(i1, i0 + 1)
-            wave = QColor(C_WAVE)
-            if self.thumbs is not None:
-                wave.setAlpha(150)                   # in trasparenza sopra le miniature del video
-            p.setPen(QPen(wave, 1))
             mins, maxs = self.peaks[:, 0], self.peaks[:, 1]
-            for x in range(cols):
-                a, b = i0[x], min(i1[x], n)
-                if a >= n:
-                    break
-                lo = float(mins[a:b].min())
-                hi = float(maxs[a:b].max())
-                p.drawLine(QPointF(x, mid - hi * amp), QPointF(x, mid - lo * amp))
+            if self._video_mode():
+                # video: solo la semionda superiore, appoggiata in basso, bianca in trasparenza sulle miniature
+                p.setPen(QPen(QColor(255, 255, 255, 150), 1))
+                full = r.height() * 0.9
+                for x in range(cols):
+                    a, b = i0[x], min(i1[x], n)
+                    if a >= n:
+                        break
+                    v = max(abs(float(mins[a:b].min())), abs(float(maxs[a:b].max())))
+                    if v > 0.002:
+                        p.drawLine(QPointF(x, r.bottom()), QPointF(x, r.bottom() - min(1.0, v) * full))
+            else:
+                p.setPen(QPen(C_WAVE, 1))
+                for x in range(cols):
+                    a, b = i0[x], min(i1[x], n)
+                    if a >= n:
+                        break
+                    lo = float(mins[a:b].min())
+                    hi = float(maxs[a:b].max())
+                    p.drawLine(QPointF(x, mid - hi * amp), QPointF(x, mid - lo * amp))
         elif self.duration <= 0:
             p.setPen(QColor(140, 140, 150))
             p.drawText(r, Qt.AlignCenter, tr("Caricamento media…") if self.cue.file else tr("Nessun file"))
@@ -201,12 +211,7 @@ class TimelineEditor(QWidget):
         # fade in/out automatici
         p.setRenderHint(QPainter.Antialiasing, True)
         c = self.cue
-        if c.fade_in > 0:
-            p.setPen(QPen(QColor(255, 255, 255, 120), 1, Qt.DashLine))
-            p.drawLine(QPointF(xs, r.bottom()), QPointF(self.t2x(c.start + c.fade_in), r.top()))
-        if c.fade_out > 0:
-            p.setPen(QPen(QColor(255, 255, 255, 120), 1, Qt.DashLine))
-            p.drawLine(QPointF(self.t2x(mk["end"][0] - c.fade_out), r.top()), QPointF(xe, r.bottom()))
+        self._draw_envelope(p, r)
         # curva di volume
         pts = sorted(c.curve)
         if pts:
@@ -281,6 +286,68 @@ class TimelineEditor(QWidget):
             t += step
         p.end()
 
+    # ------------------------------------------------------------ inviluppo: fade e opacità
+    def _video_mode(self):
+        return self.cue is not None and self.cue.type == "video"
+
+    def _env_points(self):
+        """Angoli dell'inviluppo: (x IN, x fine fade in, x inizio fade out, x OUT, y del livello)."""
+        c = self.cue
+        r = self._plot()
+        end = c.end if c.end > 0 else self.duration
+        fi = max(0.0, float(c.fade_in or 0))
+        fo = max(0.0, float(c.fade_out or 0))
+        if self._video_mode():
+            y = r.top() + (1.0 - max(0.0, min(1.0, float(c.opacity)))) * r.height()
+        else:
+            y = r.top() + 6
+        return self.t2x(c.start), self.t2x(c.start + fi), self.t2x(end - fo), self.t2x(end), y
+
+    def _draw_envelope(self, p, r):
+        c = self.cue
+        if self.duration <= 0:
+            return
+        xs, xfi, xfo, xe, y = self._env_points()
+        video = self._video_mode()
+        col = C_ENV if video else QColor(255, 255, 255, 170)
+        if video or c.fade_in > 0 or c.fade_out > 0:
+            path = QPainterPath()
+            path.moveTo(xs, r.bottom())
+            path.lineTo(xfi, y)
+            path.lineTo(xfo, y)
+            path.lineTo(xe, r.bottom())
+            p.setPen(QPen(col, 1.6 if video else 1.2, Qt.SolidLine if video else Qt.DashLine))
+            p.setBrush(Qt.NoBrush)
+            p.drawPath(path)
+        p.setPen(QPen(QColor(0, 0, 0, 160), 1))
+        p.setBrush(QBrush(col))
+        for x in (xfi, xfo):                       # quadratini dei fade
+            p.drawRect(QRectF(x - 4, y - 4, 8, 8))
+        if video:
+            f = QFont()
+            f.setPixelSize(10)
+            f.setBold(True)
+            p.setFont(f)
+            txt = tr("opacità {0:.0f}%", float(c.opacity) * 100)
+            ty = y + 12 if y + 14 < r.bottom() else y - 4
+            p.setPen(QColor(0, 0, 0, 200))
+            p.drawText(QPointF(xfi + 7, ty + 1), txt)
+            p.setPen(C_ENV)
+            p.drawText(QPointF(xfi + 6, ty), txt)
+
+    def _env_hit(self, pos):
+        if self.cue is None or self.duration <= 0:
+            return None
+        xs, xfi, xfo, xe, y = self._env_points()
+        if abs(pos.y() - y) < 7:
+            if abs(pos.x() - xfi) < 7:
+                return ("fade_in",)
+            if abs(pos.x() - xfo) < 7:
+                return ("fade_out",)
+        if self._video_mode() and abs(pos.y() - y) < 5 and xfi + 7 <= pos.x() <= xfo - 7:
+            return ("opacity",)
+        return None
+
     # ------------------------------------------------------------ interazione
     def _hit(self, pos):
         if self.cue is None:
@@ -288,6 +355,9 @@ class TimelineEditor(QWidget):
         for i, (t, db) in enumerate(self.cue.curve):
             if abs(self.t2x(t) - pos.x()) < 7 and abs(self.db2y(db) - pos.y()) < 7:
                 return ("point", i)
+        env = self._env_hit(pos)
+        if env is not None:
+            return env
         best, bd = None, 7
         for name, (t, col, lab) in self._markers().items():
             d = abs(self.t2x(t) - pos.x())
@@ -343,7 +413,8 @@ class TimelineEditor(QWidget):
                     QToolTip.showText(e.globalPosition().toPoint(), tip, self)
                     break
             hit = self._hit(pos)
-            self.setCursor(Qt.SizeHorCursor if hit and hit[0] == "marker"
+            self.setCursor(Qt.SizeHorCursor if hit and hit[0] in ("marker", "fade_in", "fade_out")
+                           else Qt.SizeVerCursor if hit and hit[0] == "opacity"
                            else Qt.PointingHandCursor if hit else Qt.ArrowCursor)
             return
         kind = self.drag[0]
@@ -357,6 +428,23 @@ class TimelineEditor(QWidget):
             return
         t = round(self.x2t(pos.x()), 3)
         c = self.cue
+        if kind in ("fade_in", "fade_out", "opacity"):
+            end = c.end if c.end > 0 else self.duration
+            span = max(0.0, end - c.start)
+            if kind == "fade_in":
+                c.fade_in = round(max(0.0, min(t - c.start, span - float(c.fade_out or 0))), 2)
+                tip = tr("Fade in {0:.2f} s", c.fade_in)
+            elif kind == "fade_out":
+                c.fade_out = round(max(0.0, min(end - t, span - float(c.fade_in or 0))), 2)
+                tip = tr("Fade out {0:.2f} s", c.fade_out)
+            else:
+                r = self._plot()
+                c.opacity = round(max(0.0, min(1.0, 1.0 - (pos.y() - r.top()) / max(1.0, r.height()))), 2)
+                tip = tr("Opacità {0:.0f}%", c.opacity * 100)
+            QToolTip.showText(e.globalPosition().toPoint(), tip, self)
+            self.changed.emit()
+            self.update()
+            return
         if kind == "point":
             i = self.drag[1]
             if i < len(c.curve):
