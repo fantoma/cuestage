@@ -382,7 +382,8 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   opacity line; **Shift+double-click** adds a volume point instead. The **◐ Opacity** / **∿ Volume** buttons on the
   marker row choose which kind double-click adds (video cues start with Opacity). An opacity point (yellow squares, dashed line), dragged like the volume
   points and deleted with a right-click. The curve gives the opacity of the picture at each moment, in place of the
-  cue's opacity; fades and keyframes still apply. The buttons **✕ volume curve** and **✕ opacity curve** on the marker row (and the right-click menu)
+  cue's opacity; fades and keyframes still apply. With opacity points the orange line follows the curve (with the
+  fades): it is the opacity that goes to the output, and the output preview at the cursor shows it. The buttons **✕ volume curve** and **✕ opacity curve** on the marker row (and the right-click menu)
   clear them;
 - double-click or Ctrl+click adds a volume curve point; wheel = zoom, Shift+wheel or middle-button drag = scroll.
 

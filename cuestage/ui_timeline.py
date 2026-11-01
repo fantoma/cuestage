@@ -276,7 +276,7 @@ class TimelineEditor(QWidget):
             for t, v in ops:
                 path.lineTo(self.t2x(t), self.op2y(v))
             path.lineTo(W, self.op2y(ops[-1][1]))
-            p.setPen(QPen(QColor(255, 220, 120), 2, Qt.DashLine))
+            p.setPen(QPen(QColor(255, 220, 120, 150), 1, Qt.DotLine))
             p.setBrush(Qt.NoBrush)
             p.drawPath(path)
             p.setPen(QPen(QColor(0, 0, 0, 180), 1))
@@ -383,6 +383,20 @@ class TimelineEditor(QWidget):
             y = self.db2y(max(MIN_DB, min(MAX_DB, float(c.level_db))))     # audio: volume della cue
         return self.t2x(c.start), self.t2x(c.start + fi), self.t2x(end - fo), self.t2x(end), y
 
+    def _curve_op(self, t):
+        """Opacità della curva dei punti al tempo t del file (None se la cue non ha punti di opacità)."""
+        ops = sorted(self._op_points()) if self._video_mode() else []
+        if not ops:
+            return None
+        return max(0.0, min(1.0, float(np.interp(t, [a for a, _b in ops], [b for _a, b in ops]))))
+
+    def _handle_ys(self):
+        """y dei quadratini di fade in e fade out (con la curva di opacità stanno sulla curva)."""
+        xs, xfi, xfo, xe, y = self._env_points()
+        if self._curve_op(0.0) is None:
+            return y, y
+        return self.op2y(self._curve_op(self.x2t(xfi))), self.op2y(self._curve_op(self.x2t(xfo)))
+
     def _draw_envelope(self, p, r):
         c = self.cue
         if self.duration <= 0:
@@ -392,38 +406,61 @@ class TimelineEditor(QWidget):
         col = C_ENV
         path = QPainterPath()
         path.moveTo(xs, r.bottom())
-        path.lineTo(xfi, y)
-        path.lineTo(xfo, y)
-        path.lineTo(xe, r.bottom())
+        curve = video and self._curve_op(0.0) is not None
+        if curve:
+            # opacità effettiva: curva dei punti × fade in/out (è quella che va in uscita)
+            x0, x1 = max(xs, -2.0), min(xe, self.width() + 2.0)
+            path.moveTo(x0, r.bottom())
+            x = x0
+            while x <= x1:
+                t = self.x2t(x)
+                v = self._curve_op(t)
+                if xfi > xs and x < xfi:
+                    v *= (x - xs) / (xfi - xs)
+                if xe > xfo and x > xfo:
+                    v *= (xe - x) / (xe - xfo)
+                path.lineTo(x, self.op2y(max(0.0, v)))
+                x += 2.0
+            path.lineTo(x1, r.bottom())
+        else:
+            path.lineTo(xfi, y)
+            path.lineTo(xfo, y)
+            path.lineTo(xe, r.bottom())
         p.setPen(QPen(col, 1.6))
         p.setBrush(Qt.NoBrush)
         p.drawPath(path)
         p.setPen(QPen(QColor(0, 0, 0, 160), 1))
         p.setBrush(QBrush(col))
-        for x in (xfi, xfo):                       # quadratini dei fade
-            p.drawRect(QRectF(x - 4, y - 4, 8, 8))
-        if True:
-            f = QFont()
-            f.setPixelSize(10)
-            f.setBold(True)
-            p.setFont(f)
+        yi, yo = self._handle_ys()
+        for x, hy in ((xfi, yi), (xfo, yo)):        # quadratini dei fade
+            p.drawRect(QRectF(x - 4, hy - 4, 8, 8))
+        f = QFont()
+        f.setPixelSize(10)
+        f.setBold(True)
+        p.setFont(f)
+        if curve:
+            txt = tr("opacità: curva dei punti")
+            ty = r.top() + 11
+        else:
             txt = tr("opacità {0:.0f}%", float(c.opacity) * 100) if video else \
                 tr("volume {0:+.1f} dB", float(c.level_db)) if float(c.level_db) > MIN_DB else tr("volume −∞")
             ty = y + 12 if y + 14 < r.bottom() else y - 4
-            p.setPen(QColor(0, 0, 0, 200))
-            p.drawText(QPointF(xfi + 7, ty + 1), txt)
-            p.setPen(C_ENV)
-            p.drawText(QPointF(xfi + 6, ty), txt)
+        p.setPen(QColor(0, 0, 0, 200))
+        p.drawText(QPointF(xfi + 7, ty + 1), txt)
+        p.setPen(C_ENV)
+        p.drawText(QPointF(xfi + 6, ty), txt)
 
     def _env_hit(self, pos):
         if self.cue is None or self.duration <= 0:
             return None
         xs, xfi, xfo, xe, y = self._env_points()
-        if abs(pos.y() - y) < 7:
-            if abs(pos.x() - xfi) < 7:
-                return ("fade_in",)
-            if abs(pos.x() - xfo) < 7:
-                return ("fade_out",)
+        yi, yo = self._handle_ys()
+        if abs(pos.y() - yi) < 7 and abs(pos.x() - xfi) < 7:
+            return ("fade_in",)
+        if abs(pos.y() - yo) < 7 and abs(pos.x() - xfo) < 7:
+            return ("fade_out",)
+        if self._video_mode() and self._curve_op(0.0) is not None:
+            return None                     # con la curva dei punti l'opacità si regola con i punti
         if abs(pos.y() - y) < 5 and xfi + 7 <= pos.x() <= xfo - 7:
             return ("opacity",) if self._video_mode() else ("level",)
         return None

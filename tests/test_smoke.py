@@ -671,6 +671,15 @@ def t_inspector_layout(w):
     assert tl._hit(QPointF(tl.t2x(1.0), tl.op2y(v.op_curve[0][1]))) == ("opoint", 0)
     from cuestage.media import curve_arrays, curve_value
     assert abs(curve_value(curve_arrays(v.op_curve + [[2.0, 1.0]]), 1.5) - 0.625) < 0.01
+    # la linea arancione segue la curva dei punti; l'anteprima del cursore usa la stessa opacità
+    from cuestage.engine import opacity_at
+    v.op_curve = [[0.0, 0.2], [2.0, 0.8]]
+    tl.update()
+    assert tl._hit(QPointF((tl._env_points()[1] + tl._env_points()[2]) / 2, tl._env_points()[4])) != ("opacity",)
+    assert abs(opacity_at(v, v, 1.0, 3.0) - 0.5) < 0.01
+    v.fade_out = 1.0
+    assert abs(opacity_at(v, v, 2.5, 3.0) - 0.8 * 0.5) < 0.01
+    v.fade_out = 0.0
     v.op_curve = [[0.0, 0.3]]                                  # in riproduzione l'opacità segue la curva
     v.fade_in = 0.0
     w.ctrl.start_cue(v, cascade=False)

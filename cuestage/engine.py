@@ -239,6 +239,26 @@ def start_preset(inst, target, vis_name, aud_name, dur, shape):
         inst.morph = Morph(view, pv, dur, shape)
 
 
+def opacity_at(cue, state, pos, duration=0.0):
+    """Opacità della cue al tempo pos del file, come in riproduzione: valore della cue (o dei keyframe, in
+    state), curva dei punti di opacità e fade in/out. Per l'anteprima del fotogramma sotto il cursore."""
+    op = float(getattr(state, "opacity", cue.opacity))
+    pts = getattr(cue, "op_curve", None) or []
+    if cue.type == "video" and pts:
+        base = float(cue.opacity)
+        cv = max(0.0, min(1.0, curve_value(curve_arrays(pts), pos)))
+        op = cv * (op / base if base > 1e-3 else 1.0)
+    if cue.type == "video":
+        start = float(cue.start or 0)
+        end = float(cue.end) if cue.end and cue.end > 0 else (float(duration) if duration else None)
+        fi, fo = float(cue.fade_in or 0), float(cue.fade_out or 0)
+        if fi > 0 and pos < start + fi:
+            op *= max(0.0, (pos - start) / fi)
+        if fo > 0 and end is not None and pos > end - fo:
+            op *= max(0.0, (end - pos) / fo)
+    return max(0.0, min(1.0, op))
+
+
 def state_at(cue, T):
     """Stato visivo della cue al tempo T secondo i keyframe (per l'anteprima nella scheda crop: è lo
     stesso calcolo della riproduzione). Restituisce la cue se a quel tempo valgono i valori base."""

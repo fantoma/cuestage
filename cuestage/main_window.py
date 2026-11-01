@@ -799,7 +799,10 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
             lay.image = img
             lay.z = int(cue.layer)
             lay.fit = st.fit
-            lay.opacity = float(st.opacity)
+            from .engine import opacity_at
+            cp = self.inspector.crop_panel
+            pos = float(getattr(cp, "t", 0.0) or 0.0) if cp is not None else 0.0
+            lay.opacity = opacity_at(cue, st, pos, getattr(cp, "duration", 0.0))       # curva dei punti e fade al tempo del cursore
             self._edit_on = True
             self.comp.changed()
         else:
