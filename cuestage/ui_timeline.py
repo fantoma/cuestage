@@ -32,7 +32,8 @@ class TimelineEditor(QWidget):
         self.drag = None          # ("marker", nome) | ("point", indice) | ("pan", x0, v0, v1)
         self.playhead = None
         self.cursor_t = None          # cursore della timeline dei keyframe (tempo del file)
-        self.setMinimumHeight(170)
+        self.thumbs = None            # (QImage striscia, n) miniature del video
+        self.setMinimumHeight(102)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.ClickFocus)
 
@@ -53,6 +54,38 @@ class TimelineEditor(QWidget):
         if old <= 0 and self.duration > 0:
             self.zoom_all()
         self.update()
+
+    def set_thumbs(self, data):
+        """Miniature del video (png, n) da mostrare sotto la forma d'onda; None = nessuna."""
+        if data is getattr(self, "_thumb_src", None):
+            return
+        self._thumb_src = data
+        if not data:
+            self.thumbs = None
+        else:
+            from PySide6.QtGui import QImage
+            img = QImage.fromData(data[0])
+            self.thumbs = (img, int(data[1])) if not img.isNull() else None
+        self.update()
+
+    def _draw_thumbs(self, p, r):
+        img, n = self.thumbs
+        tw = img.width() / max(1, n)
+        th = img.height()
+        if tw <= 0 or th <= 0 or self.duration <= 0:
+            return
+        w = r.height() * tw / th                     # miniature affiancate con le loro proporzioni
+        p.save()
+        p.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        p.setClipRect(r)
+        x = 0.0
+        while x < self.width():
+            t = self.x2t(x + w / 2)
+            i = max(0, min(n - 1, int(t / self.duration * n)))
+            p.drawImage(QRectF(x, r.top(), w, r.height()), img, QRectF(i * tw, 0, tw, th))
+            x += w
+        p.fillRect(r, QColor(20, 21, 28, 140))      # più scure: la forma d'onda resta leggibile
+        p.restore()
 
     def set_cursor(self, t):
         self.cursor_t = t
@@ -109,6 +142,8 @@ class TimelineEditor(QWidget):
         W = self.width()
         r = self._plot()
         p.setRenderHint(QPainter.Antialiasing, False)
+        if self.thumbs is not None:
+            self._draw_thumbs(p, r)
         # regione fuori da IN/OUT
         mk = self._markers()
         xs, xe = self.t2x(mk["start"][0]), self.t2x(mk["end"][0])
@@ -127,8 +162,13 @@ class TimelineEditor(QWidget):
             y = self.db2y(db)
             p.drawLine(QPointF(0, y), QPointF(W, y))
         p.setPen(QColor(110, 110, 125))
-        for db in (6, 0, -12, -24, -40):
-            p.drawText(QPointF(3, self.db2y(db) - 2), f"{db:+d} dB" if db else tr("0 dB"))
+        last_y = -100.0
+        for db in (6, 0, -12, -24, -40):        # con il grafico basso solo le etichette che non si toccano
+            y = self.db2y(db)
+            if y - last_y < 12:
+                continue
+            last_y = y
+            p.drawText(QPointF(3, y - 2), f"{db:+d} dB" if db else tr("0 dB"))
         # forma d'onda
         if self.peaks is not None and len(self.peaks):
             mid = r.center().y()
@@ -138,7 +178,10 @@ class TimelineEditor(QWidget):
             i0 = np.clip((self.v0 + np.arange(cols) / cols * (self.v1 - self.v0)) * PEAK_RATE, 0, n).astype(int)
             i1 = np.clip((self.v0 + (np.arange(cols) + 1) / cols * (self.v1 - self.v0)) * PEAK_RATE, 0, n).astype(int)
             i1 = np.maximum(i1, i0 + 1)
-            p.setPen(QPen(C_WAVE, 1))
+            wave = QColor(C_WAVE)
+            if self.thumbs is not None:
+                wave.setAlpha(150)                   # in trasparenza sopra le miniature del video
+            p.setPen(QPen(wave, 1))
             mins, maxs = self.peaks[:, 0], self.peaks[:, 1]
             for x in range(cols):
                 a, b = i0[x], min(i1[x], n)

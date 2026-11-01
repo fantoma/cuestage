@@ -352,6 +352,11 @@ measures the cue's audio with level, fades, live trim and master volume.
 
 ## Waveform editor
 
+For **video** cues the waveform is drawn in transparency over a strip of **thumbnails** of the video. The thumbnails
+are made in the background the first time (only the key frames when possible, so it is quick even for long videos)
+and kept in a disk cache (`cache/thumbs` in the user data folder, at most 400 videos): they are made again only if
+the file changes.
+
 Drag the **IN**/**OUT** markers and the loop ones; **double-click** (or Ctrl+click) adds a point to the volume
 curve, which can be dragged; **right-click** on a point deletes it, elsewhere it opens a menu (IN/OUT/loop here,
 clear curve). Wheel = zoom, Shift+wheel or dragging = scroll.

@@ -55,6 +55,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         self.tabs = QTabWidget()
         lay.addWidget(self.tabs)
         self.loader.peaksReady.connect(self._media_ready)
+        self.loader.thumbsReady.connect(self._media_ready)
         self.loader.infoReady.connect(self._media_ready)
         self.ph_timer = QTimer(self)
         self.ph_timer.timeout.connect(self._update_playhead)

@@ -402,7 +402,7 @@ class MediaTabsMixin:
         self.info_label.setStyleSheet("color:#999;")
         v.addWidget(self.info_label)
         self.timeline = TimelineEditor()
-        self.timeline.setMinimumHeight(190)
+        self.timeline.setFixedHeight(114)
         self.timeline.changed.connect(self._timeline_changed)
         v.addWidget(self.timeline)
         hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · doppio clic o Ctrl+clic: aggiungi punto "
@@ -688,6 +688,8 @@ class MediaTabsMixin:
         peaks = self.loader.get_peaks(path) if path else None
         dur = info["duration"] if info else 0.0
         self.timeline.set_cue(self.cue, dur, peaks)
+        if info and info.get("has_video") and self.cue.type == "video":
+            self.timeline.set_thumbs(self.loader.get_thumbs(path))
         if self.info_label is not None:
             if not path:
                 self.info_label.setText(tr("Nessun file: usa «Sfoglia…» o trascina un file nella lista"))

@@ -198,6 +198,81 @@ def grab_frame(path, t, max_side=1280):
     return p.stdout or None
 
 
+THUMB_H = 72          # altezza delle miniature dei video (pixel)
+THUMB_CACHE_FILES = 400
+
+
+def thumb_count(duration):
+    """Miniature per un video: una al secondo, da 8 a 120."""
+    return max(8, min(120, int(math.ceil(float(duration or 0)))))
+
+
+def _thumb_cache_path(path, n):
+    import hashlib
+    from .system import data_dir
+    try:
+        st = os.stat(path)
+    except OSError:
+        return None
+    key = hashlib.sha1(f"{os.path.abspath(path)}|{st.st_size}|{st.st_mtime_ns}|{n}|{THUMB_H}".encode()).hexdigest()
+    return os.path.join(data_dir("cache", "thumbs"), f"{key}.png")
+
+
+def _prune_thumb_cache(folder):
+    try:
+        files = [os.path.join(folder, f) for f in os.listdir(folder) if f.endswith(".png")]
+        if len(files) <= THUMB_CACHE_FILES:
+            return
+        files.sort(key=os.path.getmtime)
+        for f in files[:len(files) - THUMB_CACHE_FILES]:
+            os.remove(f)
+    except OSError:
+        pass
+
+
+def make_thumbs(path, duration):
+    """Striscia di miniature del video (PNG: n immagini affiancate, alte THUMB_H), conservata nella cache
+    su disco (cartella dei dati › cache/thumbs): si rifà solo se il file cambia. Restituisce (png, n)."""
+    if not FFMPEG or not duration or duration <= 0:
+        return None
+    n = thumb_count(duration)
+    cache = _thumb_cache_path(path, n)
+    if cache and os.path.isfile(cache):
+        try:
+            with open(cache, "rb") as f:
+                data = f.read()
+            os.utime(cache)                     # usata di recente: resta in cache
+            if data:
+                return data, n
+        except OSError:
+            pass
+    vf = f"fps={n}/{float(duration):.3f},scale=-2:{THUMB_H},tile={n}x1"
+    data = b""
+    # prima solo i fotogrammi chiave (veloce); se non bastano, decodifica completa
+    for extra in (["-skip_frame", "nokey"], []):
+        try:
+            p = subprocess.run([FFMPEG, "-v", "error", "-nostdin", *extra, "-i", path, "-an", "-vf", vf,
+                                "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"],
+                               capture_output=True, check=False, timeout=300, **subprocess_flags())
+            data = p.stdout or b""
+        except (OSError, subprocess.SubprocessError):
+            data = b""
+        if data:
+            break
+    if not data:
+        return None
+    if cache:
+        try:
+            os.makedirs(os.path.dirname(cache), exist_ok=True)
+            with open(cache + ".tmp", "wb") as f:
+                f.write(data)
+            os.replace(cache + ".tmp", cache)
+            _prune_thumb_cache(os.path.dirname(cache))
+        except OSError:
+            pass
+    return data, n
+
+
 # ---------------------------------------------------------------- curve / fade
 
 def fade_shape(t, shape):
@@ -280,6 +355,7 @@ class MediaLoader(QObject):
     peaksReady = Signal(str)
     audioReady = Signal(str)
     frameReady = Signal(str, float, bytes)
+    thumbsReady = Signal(str)
     error = Signal(str, str)
 
     def __init__(self):
@@ -292,6 +368,7 @@ class MediaLoader(QObject):
         self.info = {}
         self.peaks = {}
         self.audio = {}
+        self.thumbs = {}           # percorso -> (png, n) miniature dei video (anche su disco)
         self.pending = set()
 
     def get_info(self, path):
@@ -311,6 +388,24 @@ class MediaLoader(QObject):
             return self.peaks[path]
         self._submit(("peaks", path), self._load_peaks, path)
         return None
+
+    def get_thumbs(self, path):
+        """Miniature del video (png, n) oppure None: arrivano con thumbsReady."""
+        if not path:
+            return None
+        if path in self.thumbs:
+            return self.thumbs[path]
+        if path in self.info:
+            self._submit(("thumbs", path), self._load_thumbs, path)
+        return None
+
+    def _load_thumbs(self, path):
+        info = self.info.get(path) or probe(path)
+        if not info.get("has_video"):
+            self.thumbs[path] = None
+            return
+        self.thumbs[path] = make_thumbs(path, info.get("duration"))
+        self.thumbsReady.emit(path)
 
     def preload_audio(self, path):
         if path and path not in self.audio:

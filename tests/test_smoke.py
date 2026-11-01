@@ -613,6 +613,24 @@ def t_inspector_layout(w):
     drag(left, left + QPointF(cr.width() / 4, 0), Qt.ControlModifier | Qt.ShiftModifier)   # crop simmetrico
     assert v.crop_l > 0 and abs(v.crop_l - v.crop_r) <= 1, (v.crop_l, v.crop_r)
     v.crop_l = v.crop_r = 0
+    # «Tempi e loop»: grafico basso, miniature del video sotto la forma d'onda, conservate su disco
+    import cuestage.media as md
+    ins.tabs.setCurrentIndex(2)
+    run(0.2)
+    assert ins.timeline.height() == 114
+    assert wait_until(lambda: w.loader.thumbs.get(vid) is not None, 20), "miniature non create"
+    run(0.2)
+    assert ins.timeline.thumbs is not None and ins.timeline.thumbs[1] == md.thumb_count(3.0)
+    cache = md._thumb_cache_path(vid, md.thumb_count(3.0))
+    assert cache and os.path.isfile(cache)
+    orig_ff = md.FFMPEG
+    real_run = md.subprocess.run
+    md.subprocess.run = lambda *a_, **k: (_ for _ in ()).throw(AssertionError("ffmpeg rilanciato"))
+    try:
+        assert md.make_thumbs(vid, 3.0)[1] == md.thumb_count(3.0)       # dalla cache, senza ffmpeg
+    finally:
+        md.subprocess.run = real_run
+        md.FFMPEG = orig_ff
     # percorso del file modificabile nel tab Base (IN/OUT restano)
     ins.set_cue(a)
     ins.tabs.setCurrentIndex(0)
