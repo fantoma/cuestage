@@ -24,7 +24,8 @@ TYPE_ICONS = {
 # campi salvati nei preset (per tipo di preset)
 PRESET_KINDS = {
     "audio": ["level_db", "fade_in", "fade_out", "matrix", "out_levels"],
-    "visual": ["crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y", "scale", "warp", "opacity", "fit"],
+    "visual": ["crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y", "scale", "scale_x", "scale_y", "warp",
+               "opacity", "fit"],
 }
 PRESET_LABELS = {"audio": tr("Preset audio"), "visual": tr("Preset crop / posizione")}
 TRIGGERS = ["manual", "with_prev", "after_prev", "trigger"]
@@ -103,7 +104,9 @@ class Cue:
         "crop_l": 0, "crop_t": 0, "crop_r": 0, "crop_b": 0,
         # spostamento in pixel dell'uscita (risoluzione reale dello schermo/proiettore)
         "off_x": 0, "off_y": 0,
-        "scale": 100.0,               # % rispetto all'adattamento scelto
+        "scale": 100.0,               # dimensione: % rispetto all'adattamento scelto
+        # deformazione: larghezza e altezza in % della dimensione (100/100 = proporzioni originali)
+        "scale_x": 100.0, "scale_y": 100.0,
         # deformazione prospettica: spostamento (px uscita) dei 4 angoli alto-sx, alto-dx, basso-dx, basso-sx
         "warp": [[0, 0], [0, 0], [0, 0], [0, 0]],
         # fade

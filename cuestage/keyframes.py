@@ -11,7 +11,7 @@ BASE = "__base__"
 BASE_LABEL = tr("Valori base della cue")
 KINDS = ("visual", "audio")
 KIND_LABELS = {"visual": tr("Immagine"), "audio": tr("Audio")}
-VIS_NUM = ("crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y", "scale", "opacity")
+VIS_NUM = ("crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y", "scale", "scale_x", "scale_y", "opacity")
 MIN_DB = -60.0
 
 

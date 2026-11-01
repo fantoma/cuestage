@@ -359,10 +359,15 @@ clear curve). Wheel = zoom, Shift+wheel or dragging = scroll.
 ## Crop, position and perspective
 
 “Video / Image” tab (video and images). Two views side by side:
-- **Source · crop**: the still frame with the crop rectangle (drag edges, corners or the rectangle;
-  double-click = reset). The **wheel zooms the view** (around the mouse pointer) to crop precisely; drag with
-  the middle or right button to scroll; “⤢ Whole view” (or a middle/right double-click) goes back to 100%.
-  The view zoom does not change the cue. For **videos** a timeline above the views (with IN/OUT) chooses the still frame.
+- **Source · crop**: the still frame drawn at the cue's size (the dashed box is 100%), with the handles on the
+  visible area.
+  - **Drag a handle** = **size**: the opposite side stays still, also on the output. With **Keep proportions**
+    (check box above the views, on by default) width and height change together; with it off the picture is
+    **distorted**: a side handle changes only the width or the height, a corner both.
+  - **Ctrl + drag** = **crop** (Ctrl + drag inside the rectangle moves the crop area).
+  - **Shift** while dragging = **symmetric**: the size changes around the centre, the crop changes on both
+    opposite sides.
+  - **Wheel** = size; double-click = remove the crop.
 - **Output · rendering**: the frame as it reaches the projector (crop, position, size, perspective and 4-corner
   correction, together with the other active cues). Drag a **corner** for the **perspective distortion**, the
   inside to move, wheel to change the size, double-click a corner to reset it.
@@ -371,8 +376,8 @@ While the tab is open, **the video output shows the still frame with the current
 already playing), so you can adjust while looking at the projector. The **Blind** box turns this off (it stays
 saved in the show).
 
-In the fields column: **Size** (slider, value in %, − / + and 100%) to enlarge or shrink the picture, crop in
-source pixels, X/Y offset in output pixels (0,0 = centred),
+In the fields column: **Size** (slider, value in %, − / + and 100%) to enlarge or shrink the picture,
+**Distortion** (width and height in % of the size, “Original proportions” resets them), crop in source pixels, X/Y offset in output pixels (0,0 = centred),
 perspective as the offset in pixels of the 4 corners. The cue's perspective adds to the 4-corner correction of
 the whole output.
 
@@ -380,7 +385,7 @@ the whole output.
 
 Presets belong **to the single cue**: each cue has its own. A preset saves **all the audio and video settings
 together**: audio (volume, fade in, fade out, matrix and output volumes) and video (crop, offset, size,
-perspective, opacity, fit). The preset bar is on the inspector's tab row, on the right, for audio, video and image
+distortion, perspective, opacity, fit). The preset bar is on the inspector's tab row, on the right, for audio, video and image
 cues: **Preset** list, **Apply**, **Save as…**, **Update** and **⋯** (Rename…, Delete). Renaming a preset also
 renames it in the cue's keyframes and in the Change preset cues that use it. Duplicating a cue duplicates its
 presets too.
@@ -392,7 +397,7 @@ the cue that used it.
 ### Preset keyframes
 
 The timeline above the views of the “Video / Image” tab and the one at the bottom of the “Times and loop” tab contain the **keyframes**, on two lanes:
-- **Image** (orange): the video part of the presets — crop, offset, size, perspective, opacity;
+- **Image** (orange): the video part of the presets — crop, offset, size, distortion, perspective, opacity;
 - **Audio** (light blue): audio presets — volume, **matrix** and **output volumes**.
 
 Each keyframe uses a preset of the cue or the cue's **base values**. Between two consecutive keyframes of the

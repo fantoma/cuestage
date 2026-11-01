@@ -533,14 +533,78 @@ def t_inspector_layout(w):
     sl = [x for x in ins.findChildren(QSlider) if x.isVisible() and x.maximum() == 400][0]
     sl.setValue(200)
     assert v.scale == 200.0
-    # zoom della vista del crop con la rotella (la cue non cambia)
+    v.scale_x = 150.0                                          # deformazione: larghezza al 150%
+    from cuestage.video_output import layer_geometry
+    class _L:
+        cue = v
+        fit = v.fit
+    class _I:
+        width = staticmethod(lambda: 640)
+        height = staticmethod(lambda: 360)
+    dst = layer_geometry(_L, _I, 1920, 1080, (1920, 1080))[1]
+    assert abs(dst.width() / dst.height() - 16 / 9 * 1.5) < 0.01, dst
+    v.scale_x = 100.0
+    # vista «Sorgente · crop»: rotella = dimensione; quadratini = dimensione, Ctrl = crop, Maiusc = simmetrico
+    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QMouseEvent, QWheelEvent
+    from PySide6.QtCore import QPoint
     cv = ins.crop_panel.view
-    r0 = cv._img_rect()
-    cv.set_zoom(2.0, QPointF(cv.width() / 2, cv.height() / 2))
-    r1 = cv._img_rect()
-    assert abs(r1.width() - 2 * r0.width()) < 1 and v.crop_l == 0 and v.scale == 200.0
-    cv.fit_view()
-    assert cv.zoom == 1.0
+    v.scale, v.off_x, v.off_y = 100.0, 0, 0
+    v.preset_points = []
+    run(0.2)
+
+    def mouse(kind, pos, mods=Qt.NoModifier):
+        t = {"press": QEvent.MouseButtonPress, "move": QEvent.MouseMove, "release": QEvent.MouseButtonRelease}[kind]
+        btn = Qt.NoButton if kind == "move" else Qt.LeftButton
+        ev = QMouseEvent(t, QPointF(pos), QPointF(cv.mapToGlobal(pos.toPoint())), btn,
+                         Qt.LeftButton if kind != "release" else Qt.NoButton, mods)
+        app.sendEvent(cv, ev)
+
+    def drag(p0, p1, mods=Qt.NoModifier):
+        mouse("press", p0, mods)
+        mouse("move", QPointF((p0.x() + p1.x()) / 2, (p0.y() + p1.y()) / 2), mods)
+        mouse("move", p1, mods)
+        mouse("release", p1, mods)
+
+    ev = QWheelEvent(QPointF(cv.width() / 2, cv.height() / 2), QPointF(0, 0), QPoint(0, 0), QPoint(0, 120),
+                     Qt.NoButton, Qt.NoModifier, Qt.NoScrollPhase, False)
+    app.sendEvent(cv, ev)
+    assert v.scale > 100.0 and v.crop_l == 0, v.scale
+    v.scale = 100.0
+    cr = cv._crop_rect(cv._img_rect())
+    right = QPointF(cr.right(), cr.center().y())
+    before = cv._out_rect()
+    drag(right, right + QPointF(cr.width() / 2, 0))            # lato destro: dimensione, sinistro fermo
+    after = cv._out_rect()
+    assert v.scale > 140 and v.crop_r == 0 and v.scale_x == 100.0, (v.scale, v.crop_r)
+    assert abs(after.left() - before.left()) < 2 and v.off_x > 0, (before, after, v.off_x)
+    v.scale, v.off_x = 100.0, 0
+    run(0.05)
+    cr = cv._crop_rect(cv._img_rect())
+    right = QPointF(cr.right(), cr.center().y())
+    drag(right, right + QPointF(cr.width() / 4, 0), Qt.ShiftModifier)    # simmetrico: centro fermo
+    assert v.scale > 140 and v.off_x == 0, (v.scale, v.off_x)
+    v.scale = 100.0
+    ins.crop_panel.keep.setChecked(False)                      # deformazione: solo la larghezza
+    run(0.05)
+    cr = cv._crop_rect(cv._img_rect())
+    right = QPointF(cr.right(), cr.center().y())
+    drag(right, right + QPointF(cr.width() / 2, 0))
+    assert v.scale == 100.0 and v.scale_x > 140 and v.scale_y == 100.0, (v.scale, v.scale_x, v.scale_y)
+    ins.crop_panel.keep.setChecked(True)
+    v.scale_x, v.off_x = 100.0, 0
+    run(0.05)
+    cr = cv._crop_rect(cv._img_rect())
+    left = QPointF(cr.left(), cr.center().y())
+    drag(left, left + QPointF(cr.width() / 4, 0), Qt.ControlModifier)     # Ctrl: crop
+    assert v.crop_l > 0 and v.crop_r == 0 and v.scale == 100.0, (v.crop_l, v.crop_r)
+    v.crop_l = 0
+    run(0.05)
+    cr = cv._crop_rect(cv._img_rect())
+    left = QPointF(cr.left(), cr.center().y())
+    drag(left, left + QPointF(cr.width() / 4, 0), Qt.ControlModifier | Qt.ShiftModifier)   # crop simmetrico
+    assert v.crop_l > 0 and abs(v.crop_l - v.crop_r) <= 1, (v.crop_l, v.crop_r)
+    v.crop_l = v.crop_r = 0
     # percorso del file modificabile nel tab Base (IN/OUT restano)
     ins.set_cue(a)
     ins.tabs.setCurrentIndex(0)
@@ -1092,7 +1156,7 @@ if __name__ == "__main__":
     check("lettura dei controlli ALSA", t_alsa_parser)
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
-    check("ispettore: tab, preset audio+video, Solo trigger, dimensione, zoom del crop", lambda: t_inspector_layout(w))
+    check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))
     check("avviso iniziale e indirizzi dell'interfaccia web", t_notice_and_addresses)
     check("annulla / ripeti, cronologia e versioni dello show", lambda: t_history_versions(w))
     w.show_data.dirty = False

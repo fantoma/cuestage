@@ -3,7 +3,7 @@ con il riquadro di ritaglio da trascinare. I valori sono in pixel del sorgente."
 from .i18n import tr
 from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPainterPath, QPen
-from PySide6.QtWidgets import (QCheckBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QCheckBox, QHBoxLayout, QLabel, QVBoxLayout, QWidget)
 
 from . import keyframes as kf
 from .media import fmt_time
@@ -26,7 +26,28 @@ def _draw_lock_banner(p, rect, msg):
     p.drawText(r.adjusted(6, 0, -6, 0), Qt.AlignVCenter | Qt.TextWordWrap, msg)
 
 
+class _Geo:
+    """Valori della cue usati per calcolare il rettangolo d'uscita (con dimensione/spostamento di prova)."""
+
+    def __init__(self, cue, **kw):
+        for k in ("crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y", "scale", "scale_x", "scale_y", "fit"):
+            setattr(self, k, kw.get(k, getattr(cue, k, 100.0 if k.startswith("scale") else 0)))
+
+
+class _Img:
+    def __init__(self, w, h):
+        self._w, self._h = w, h
+
+    def width(self):
+        return self._w
+
+    def height(self):
+        return self._h
+
+
 class CropView(QWidget):
+    """Sorgente della cue. Trascinando i quadratini: dimensione (di serie), Ctrl = crop, Maiusc = simmetrico.
+    Rotella = dimensione. La vista mostra l'immagine alla dimensione scelta (tratteggiato: il 100%)."""
     changed = Signal()
 
     def __init__(self, parent=None):
@@ -38,11 +59,13 @@ class CropView(QWidget):
         self.message = ""
         self.state_fn = None    # -> cue (o vista) da disegnare al tempo scelto
         self.locked_fn = None   # -> messaggio se la modifica è bloccata, altrimenti None
-        self.zoom = 1.0         # zoom della vista (rotella): non cambia la cue
-        self.pan = QPointF(0, 0)
-        self._pan_drag = None
+        self.keep_aspect_fn = lambda: True    # True = la dimensione mantiene le proporzioni
+        self.out_size_fn = None               # -> (w, h) dell'uscita in pixel
+        self._frozen = None                   # durante un trascinamento: (k della vista, centro)
         self.setMinimumSize(300, 150)
         self.setMouseTracking(True)
+        self.setToolTip(tr("Trascina i quadratini: dimensione · Ctrl+trascina: crop · Maiusc: simmetrico · "
+                           "rotella: dimensione · doppio clic: togli il crop"))
 
     def set_source(self, cue, img, src_w, src_h):
         self.cue = cue
@@ -51,55 +74,65 @@ class CropView(QWidget):
         self.update()
 
     # -------------------------------------------------- geometria
-    def _img_rect(self):
-        if not self.src_w or not self.src_h:
-            return None
-        m = 12
-        W, H = self.width() - 2 * m, self.height() - 2 * m
-        s = min(W / self.src_w, H / self.src_h) * self.zoom
-        w, h = self.src_w * s, self.src_h * s
-        return QRectF((self.width() - w) / 2 + self.pan.x(), (self.height() - h) / 2 + self.pan.y(), w, h)
-
-    # -------------------------------------------------- zoom della vista
-    def set_zoom(self, z, anchor=None):
-        """Zoom della vista (1 = immagine intera), mantenendo fermo il punto sotto «anchor»."""
-        r = self._img_rect()
-        z = max(1.0, min(16.0, float(z)))
-        if r is None or z <= 1.0:
-            self.zoom, self.pan = 1.0, QPointF(0, 0)
-            self.update()
-            return
-        anchor = anchor if anchor is not None else QPointF(self.width() / 2, self.height() / 2)
-        ux = (anchor.x() - r.left()) / r.width()
-        uy = (anchor.y() - r.top()) / r.height()
-        k = z / self.zoom
-        nw, nh = r.width() * k, r.height() * k
-        cx = anchor.x() - ux * nw + nw / 2
-        cy = anchor.y() - uy * nh + nh / 2
-        self.zoom = z
-        self.pan = QPointF(cx - self.width() / 2, cy - self.height() / 2)
-        self.update()
-
-    def fit_view(self):
-        self.set_zoom(1.0)
-
-    def wheelEvent(self, e):
-        if self._img_rect() is None:
-            return
-        f = 1.15 if e.angleDelta().y() > 0 else 1 / 1.15
-        self.set_zoom(self.zoom * f, e.position())
-
     def _disp(self):
         return self.state_fn() if self.state_fn else self.cue
 
     def _locked(self):
         return self.locked_fn() if self.locked_fn else None
 
+    def _factors(self, c=None):
+        c = c or self._disp()
+        s = max(0.01, float(c.scale) / 100)
+        return (s * max(0.01, float(getattr(c, "scale_x", 100) or 100) / 100),
+                s * max(0.01, float(getattr(c, "scale_y", 100) or 100) / 100))
+
+    def _base(self):
+        """(pixel della vista per pixel sorgente al 100%, centro della vista)."""
+        m = 12
+        W, H = self.width() - 2 * m, self.height() - 2 * m
+        b = min(W / self.src_w, H / self.src_h)
+        return b, QPointF(self.width() / 2, self.height() / 2)
+
+    def _view_k(self):
+        if self._frozen is not None:
+            return self._frozen
+        fx, fy = self._factors()
+        b, _c = self._base()
+        return b / max(1.0, fx, fy)          # tutto visibile: il 100% e l'immagine alla sua dimensione
+
+    def _img_rect(self):
+        if not self.src_w or not self.src_h:
+            return None
+        k = self._view_k()
+        fx, fy = self._factors()
+        w, h = self.src_w * k * fx, self.src_h * k * fy
+        r = QRectF((self.width() - w) / 2, (self.height() - h) / 2, w, h)
+        d = self.drag
+        if d is not None and d.get("anchor") is not None:
+            # durante il trascinamento resta fermo il punto di ancoraggio (lato opposto o centro)
+            A, ax, ay = d["anchor"], d["ax"], d["ay"]
+            r0 = d["r0"]
+            fx0, fy0 = d["f0"]
+            kx, ky = fx / fx0, fy / fy0
+            left = A.x() - (A.x() - r0.left()) * kx if ax is not None else (self.width() - w) / 2
+            top = A.y() - (A.y() - r0.top()) * ky if ay is not None else (self.height() - h) / 2
+            if ax is None:
+                left = r0.center().x() - w / 2
+            if ay is None:
+                top = r0.center().y() - h / 2
+            r = QRectF(left, top, w, h)
+        return r
+
+    def _ref_rect(self):
+        k = self._view_k()
+        w, h = self.src_w * k, self.src_h * k
+        return QRectF((self.width() - w) / 2, (self.height() - h) / 2, w, h)
+
     def _crop_rect(self, r):
         c = self._disp()
-        k = r.width() / self.src_w
-        return QRectF(r.left() + c.crop_l * k, r.top() + c.crop_t * k,
-                      r.width() - (c.crop_l + c.crop_r) * k, r.height() - (c.crop_t + c.crop_b) * k)
+        kx, ky = r.width() / self.src_w, r.height() / self.src_h
+        return QRectF(r.left() + c.crop_l * kx, r.top() + c.crop_t * ky,
+                      r.width() - (c.crop_l + c.crop_r) * kx, r.height() - (c.crop_t + c.crop_b) * ky)
 
     def _hit(self, pos, cr):
         near_l = abs(pos.x() - cr.left()) < EDGE
@@ -123,6 +156,18 @@ class CropView(QWidget):
             return "move"
         return None
 
+    def _out_rect(self, **kw):
+        """Rettangolo della cue sull'uscita (pixel reali) con i valori dati al posto di quelli della cue."""
+        from .video_output import layer_geometry
+        ow, oh = self.out_size_fn() if self.out_size_fn else (1920, 1080)
+        ow, oh = max(1, int(ow or 1920)), max(1, int(oh or 1080))
+        g = _Geo(self.cue, **kw)
+
+        class _L:
+            cue = g
+            fit = g.fit
+        return layer_geometry(_L, _Img(self.src_w, self.src_h), ow, oh, (ow, oh))[1]
+
     # -------------------------------------------------- disegno
     def paintEvent(self, e):
         p = QPainter(self)
@@ -141,70 +186,177 @@ class CropView(QWidget):
             p.setPen(QColor(150, 150, 160))
             p.drawText(r, Qt.AlignCenter, self.message or tr("Caricamento fotogramma…"))
         cr = self._crop_rect(r)
-        # zona esclusa scurita
         outside = QPainterPath()
         outside.addRect(r)
         inner = QPainterPath()
         inner.addRect(cr)
         p.fillPath(outside.subtracted(inner), QColor(0, 0, 0, 165))
         p.setRenderHint(QPainter.Antialiasing)
-        p.setPen(QPen(QColor(255, 180, 40), 1.5))
+        fx, fy = self._factors()
+        if abs(fx - 1) > 1e-3 or abs(fy - 1) > 1e-3:          # riferimento: dimensione 100%
+            p.setPen(QPen(QColor(150, 150, 160, 160), 1, Qt.DashLine))
+            p.setBrush(Qt.NoBrush)
+            p.drawRect(self._ref_rect())
+        crop_mode = self.drag is not None and self.drag.get("crop")
+        col = QColor(255, 180, 40) if crop_mode or self.drag is None else QColor(80, 200, 255)
+        p.setPen(QPen(col, 1.5))
         p.setBrush(Qt.NoBrush)
         p.drawRect(cr)
-        # terzi, utili per comporre
-        p.setPen(QPen(QColor(255, 180, 40, 70), 1))
+        p.setPen(QPen(QColor(col.red(), col.green(), col.blue(), 70), 1))
         for i in (1, 2):
             x = cr.left() + cr.width() * i / 3
             y = cr.top() + cr.height() * i / 3
             p.drawLine(QPointF(x, cr.top()), QPointF(x, cr.bottom()))
             p.drawLine(QPointF(cr.left(), y), QPointF(cr.right(), y))
-        # maniglie
         p.setPen(Qt.NoPen)
-        p.setBrush(QColor(255, 180, 40))
+        p.setBrush(col)
         for pt in (cr.topLeft(), cr.topRight(), cr.bottomLeft(), cr.bottomRight(),
                    QPointF(cr.center().x(), cr.top()), QPointF(cr.center().x(), cr.bottom()),
                    QPointF(cr.left(), cr.center().y()), QPointF(cr.right(), cr.center().y())):
             p.drawRect(QRectF(pt.x() - 3.5, pt.y() - 3.5, 7, 7))
-        # dimensioni risultanti
         c = self._disp()
         w = int(round(self.src_w - c.crop_l - c.crop_r))
         h = int(round(self.src_h - c.crop_t - c.crop_b))
         f = QFont(self.font())
         f.setBold(True)
         p.setFont(f)
-        txt = tr("{0} × {1} px", w, h)
-        tr_rect = QRectF(cr.left() + 4, cr.top() + 4, 120, 18)
+        sx, sy = float(getattr(c, "scale_x", 100) or 100), float(getattr(c, "scale_y", 100) or 100)
+        size = f"{float(c.scale):.0f}%" if abs(sx - 100) < 0.05 and abs(sy - 100) < 0.05 else \
+            f"{float(c.scale) * sx / 100:.0f}% × {float(c.scale) * sy / 100:.0f}%"
+        txt = tr("{0} × {1} px · {2}", w, h, size)
+        fm = p.fontMetrics()
+        tr_rect = QRectF(cr.left() + 4, cr.top() + 4, fm.horizontalAdvance(txt) + 12, 18)
         p.fillRect(tr_rect, QColor(0, 0, 0, 150))
         p.setPen(QColor(255, 220, 150))
         p.drawText(tr_rect, Qt.AlignCenter, txt)
-        if self.zoom > 1.0:
-            zr = QRectF(self.width() - 64, self.height() - 22, 60, 18)
-            p.fillRect(zr, QColor(0, 0, 0, 160))
-            p.setPen(QColor(220, 220, 230))
-            p.drawText(zr, Qt.AlignCenter, f"🔍 {self.zoom * 100:.0f}%")
         _draw_lock_banner(p, self.rect(), self._locked())
         p.end()
 
     # -------------------------------------------------- interazione
     def mousePressEvent(self, e):
-        if e.button() in (Qt.MiddleButton, Qt.RightButton) and self.zoom > 1.0:
-            self._pan_drag = (e.position(), QPointF(self.pan))
-            self.setCursor(Qt.ClosedHandCursor)
-            return
         r = self._img_rect()
         if r is None or self.cue is None or e.button() != Qt.LeftButton or self._locked():
             return
-        mode = self._hit(e.position(), self._crop_rect(r))
-        if mode:
-            c = self.cue
-            self.drag = (mode, e.position(), (c.crop_l, c.crop_t, c.crop_r, c.crop_b))
+        cr = self._crop_rect(r)
+        mode = self._hit(e.position(), cr)
+        if not mode:
+            return
+        c = self.cue
+        crop = bool(e.modifiers() & Qt.ControlModifier)
+        if mode == "move" and not crop:
+            return                        # l'interno sposta solo il crop (con Ctrl)
+        self._frozen = self._view_k()     # la vista non si ridimensiona mentre si trascina
+        self.drag = {"mode": mode, "start": e.position(), "crop": crop, "anchor": None,
+                     "c0": (c.crop_l, c.crop_t, c.crop_r, c.crop_b),
+                     "v0": (float(c.scale), float(getattr(c, "scale_x", 100) or 100),
+                            float(getattr(c, "scale_y", 100) or 100), float(c.off_x), float(c.off_y)),
+                     "r0": QRectF(r), "cr0": QRectF(cr), "f0": self._factors(c)}
+
+    def _size_drag(self, pos, shift):
+        d = self.drag
+        mode, start, cr0 = d["mode"], d["start"], d["cr0"]
+        s0, sx0, sy0, ox0, oy0 = d["v0"]
+        keep = bool(self.keep_aspect_fn())
+        # punto fermo: lato opposto (o il centro con Maiusc); asse non trascinato: centro
+        ax = ay = None
+        if "l" in mode or "r" in mode:
+            ax = cr0.center().x() if shift else (cr0.right() if "l" in mode else cr0.left())
+        if "t" in mode or "b" in mode:
+            ay = cr0.center().y() if shift else (cr0.bottom() if "t" in mode else cr0.top())
+        A = QPointF(ax if ax is not None else cr0.center().x(), ay if ay is not None else cr0.center().y())
+
+        def ratio(edge0, a, delta):
+            base = edge0 - a
+            if abs(base) < 1:
+                return 1.0
+            return max(0.02, (edge0 + delta - a) / base)
+        rx = ry = None
+        if ax is not None:
+            rx = ratio(cr0.left() if "l" in mode else cr0.right(), ax, pos.x() - start.x())
+        if ay is not None:
+            ry = ratio(cr0.top() if "t" in mode else cr0.bottom(), ay, pos.y() - start.y())
+        c = self.cue
+        if keep:
+            k = rx if ry is None else ry if rx is None else (rx if abs(rx - 1) >= abs(ry - 1) else ry)
+            c.scale = round(max(1.0, min(1000.0, s0 * k)), 1)
+            c.scale_x, c.scale_y = sx0, sy0
+            if ax is None:
+                ax = A.x()          # anche l'altro asse cresce: resta fermo il centro
+            if ay is None:
+                ay = A.y()
+        else:
+            c.scale = s0
+            c.scale_x = round(max(1.0, min(1000.0, sx0 * (rx if rx is not None else 1.0))), 1)
+            c.scale_y = round(max(1.0, min(1000.0, sy0 * (ry if ry is not None else 1.0))), 1)
+        d["anchor"] = A
+        d["ax"], d["ay"] = ax, ay
+        # sull'uscita resta fermo lo stesso lato: si corregge lo spostamento
+        if not shift:
+            before = self._out_rect(scale=s0, scale_x=sx0, scale_y=sy0, off_x=ox0, off_y=oy0)
+            after = self._out_rect(off_x=ox0, off_y=oy0)
+            dx = dy = 0.0
+            if "l" in mode:
+                dx = before.right() - after.right()
+            elif "r" in mode:
+                dx = before.left() - after.left()
+            if "t" in mode:
+                dy = before.bottom() - after.bottom()
+            elif "b" in mode:
+                dy = before.top() - after.top()
+            c.off_x, c.off_y = int(round(ox0 + dx)), int(round(oy0 + dy))
+        else:
+            c.off_x, c.off_y = int(ox0), int(oy0)
+
+    def _crop_drag(self, pos, shift):
+        d = self.drag
+        mode, start = d["mode"], d["start"]
+        l0, t0, r0, b0 = d["c0"]
+        r = d["r0"]
+        dx = int(round((pos.x() - start.x()) * self.src_w / r.width()))
+        dy = int(round((pos.y() - start.y()) * self.src_h / r.height()))
+        W, H = self.src_w, self.src_h
+        l, t, rr, b = l0, t0, r0, b0
+        if mode == "move":
+            dx = max(-l0, min(dx, r0))
+            dy = max(-t0, min(dy, b0))
+            l, rr, t, b = l0 + dx, r0 - dx, t0 + dy, b0 - dy
+        else:
+            if "l" in mode:
+                l = l0 + dx
+                if shift:
+                    rr = r0 + dx                 # simmetrico: il lato opposto si muove al contrario
+            if "r" in mode:
+                rr = r0 - dx
+                if shift:
+                    l = l0 - dx
+            if "t" in mode:
+                t = t0 + dy
+                if shift:
+                    b = b0 + dy
+            if "b" in mode:
+                b = b0 - dy
+                if shift:
+                    t = t0 - dy
+            l, rr = max(0, l), max(0, rr)
+            t, b = max(0, t), max(0, b)
+            if l + rr > W - 2:
+                if "l" in mode and not shift:
+                    l = W - 2 - rr
+                elif "r" in mode and not shift:
+                    rr = W - 2 - l
+                else:
+                    l = rr = (W - 2) // 2
+            if t + b > H - 2:
+                if "t" in mode and not shift:
+                    t = H - 2 - b
+                elif "b" in mode and not shift:
+                    b = H - 2 - t
+                else:
+                    t = b = (H - 2) // 2
+        c = self.cue
+        c.crop_l, c.crop_t, c.crop_r, c.crop_b = int(l), int(t), int(rr), int(b)
 
     def mouseMoveEvent(self, e):
-        if self._pan_drag is not None:
-            start, pan0 = self._pan_drag
-            self.pan = pan0 + (e.position() - start)
-            self.update()
-            return
         r = self._img_rect()
         if r is None or self.cue is None:
             return
@@ -214,53 +366,42 @@ class CropView(QWidget):
                 self.setCursor(Qt.ForbiddenCursor)
                 return
             mode = self._hit(pos, self._crop_rect(r))
+            if mode == "move" and not (e.modifiers() & Qt.ControlModifier):
+                mode = None
             cur = {"l": Qt.SizeHorCursor, "r": Qt.SizeHorCursor, "t": Qt.SizeVerCursor,
                    "b": Qt.SizeVerCursor, "tl": Qt.SizeFDiagCursor, "br": Qt.SizeFDiagCursor,
                    "tr": Qt.SizeBDiagCursor, "bl": Qt.SizeBDiagCursor, "move": Qt.SizeAllCursor}
             self.setCursor(cur.get(mode, Qt.ArrowCursor))
             return
-        mode, start, (l0, t0, r0, b0) = self.drag
-        k = self.src_w / r.width()
-        dx = int(round((pos.x() - start.x()) * k))
-        dy = int(round((pos.y() - start.y()) * k))
-        W, H = self.src_w, self.src_h
-        l, t, rr, b = l0, t0, r0, b0
-        if mode == "move":
-            dx = max(-l0, min(dx, r0))
-            dy = max(-t0, min(dy, b0))
-            l, rr, t, b = l0 + dx, r0 - dx, t0 + dy, b0 - dy
+        shift = bool(e.modifiers() & Qt.ShiftModifier)
+        if self.drag["crop"]:
+            self._crop_drag(pos, shift)
         else:
-            if "l" in mode:
-                l = max(0, min(l0 + dx, W - r0 - 2))
-            if "r" in mode:
-                rr = max(0, min(r0 - dx, W - l0 - 2))
-            if "t" in mode:
-                t = max(0, min(t0 + dy, H - b0 - 2))
-            if "b" in mode:
-                b = max(0, min(b0 - dy, H - t0 - 2))
-        c = self.cue
-        c.crop_l, c.crop_t, c.crop_r, c.crop_b = int(l), int(t), int(rr), int(b)
+            self._size_drag(pos, shift)
         self.changed.emit()
         self.update()
 
     def mouseReleaseEvent(self, e):
         self.drag = None
-        if self._pan_drag is not None:
-            self._pan_drag = None
-            self.setCursor(Qt.ArrowCursor)
+        self._frozen = None
+        self.update()
 
     def mouseDoubleClickEvent(self, e):
-        if e.button() in (Qt.MiddleButton, Qt.RightButton):    # doppio clic centrale/destro: vista intera
-            self.fit_view()
-            return
-        if e.button() != Qt.LeftButton:
-            return
         # doppio clic: nessun crop
-        if self.cue is not None and not self._locked():
+        if e.button() == Qt.LeftButton and self.cue is not None and not self._locked():
             c = self.cue
             c.crop_l = c.crop_t = c.crop_r = c.crop_b = 0
             self.changed.emit()
             self.update()
+
+    def wheelEvent(self, e):
+        """Rotella: dimensione della cue (come nell'anteprima dell'uscita)."""
+        if self.cue is None or self._img_rect() is None or self._locked():
+            return
+        f = 1.05 if e.angleDelta().y() > 0 else 1 / 1.05
+        self.cue.scale = round(max(1.0, min(1000.0, float(self.cue.scale) * f)), 1)
+        self.changed.emit()
+        self.update()
 
 
 class OutputFrameView(QWidget):
@@ -467,8 +608,8 @@ class CropPanel(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
         top = QHBoxLayout()
-        title = QLabel(tr("Sinistra: crop sul sorgente (rotella = zoom della vista, tasto centrale o destro = "
-                          "scorri) · Destra: uscita (angoli = prospettiva, interno = sposta, rotella = dimensione, "
+        title = QLabel(tr("Sinistra: quadratini = dimensione, Ctrl = crop, Maiusc = simmetrico, rotella = "
+                          "dimensione · Destra: uscita (angoli = prospettiva, interno = sposta, rotella = dimensione, "
                           "doppio clic su un angolo = azzera)"))
         title.setStyleSheet("color:#999; font-size:10px;")
         title.setWordWrap(True)
@@ -479,14 +620,18 @@ class CropPanel(QWidget):
                               "con le impostazioni correnti (se la cue non è già in riproduzione)."))
         self.blind.setChecked(bool(settings_fn().get("edit_blind", False)))
         self.blind.toggled.connect(self._blind_toggled)
-        self.fit_btn = QPushButton(tr("⤢ Vista intera"))
-        self.fit_btn.setToolTip(tr("Riporta la vista «Sorgente · crop» all'immagine intera (zoom 100%)"))
-        top.addWidget(self.fit_btn)
+        self.keep = QCheckBox(tr("Mantieni proporzioni"))
+        self.keep.setToolTip(tr("Acceso: i quadratini cambiano la dimensione mantenendo le proporzioni.\n"
+                                "Spento: deformazione, larghezza e altezza cambiano separatamente."))
+        self.keep.setChecked(bool(settings_fn().get("edit_keep_aspect", True)))
+        self.keep.toggled.connect(lambda on: settings_fn().__setitem__("edit_keep_aspect", bool(on)))
+        top.addWidget(self.keep)
         top.addWidget(self.blind)
         v.addLayout(top)
 
         self.view = CropView()
-        self.fit_btn.clicked.connect(lambda: self.view.fit_view())
+        self.view.keep_aspect_fn = self.keep.isChecked
+        self.view.out_size_fn = lambda: self.comp.out_size
         self.view.state_fn = self.state
         self.view.locked_fn = self.locked
         self.view.changed.connect(self._crop_changed)

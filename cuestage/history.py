@@ -15,7 +15,7 @@ from .model import Cue, CueList, ShowVersion, MAIN_ID
 MAX_STEPS = 500
 
 # impostazioni che si muovono durante lo spettacolo: annullare una modifica non le tocca
-VOLATILE_SETTINGS = ("master_db", "edit_blind")
+VOLATILE_SETTINGS = ("master_db", "edit_blind", "edit_keep_aspect")
 VOLATILE_SUB = {"ducking": ("master_on", "dim_on"), "preview": ("db",)}
 VOLATILE_CUE = ("collapsed",)
 
@@ -261,7 +261,7 @@ def _field_labels():
         "pfl": "PFL", "preload": tr("precarica"), "layer": "layer", "opacity": tr("opacità"),
         "fit": tr("adattamento"), "duration": tr("durata"), "crop_l": "crop", "crop_t": "crop",
         "crop_r": "crop", "crop_b": "crop", "off_x": tr("posizione"), "off_y": tr("posizione"),
-        "scale": tr("scala"), "warp": tr("prospettiva"), "target": "target",
+        "scale": tr("dimensione"), "scale_x": tr("deformazione"), "scale_y": tr("deformazione"), "warp": tr("prospettiva"), "target": "target",
         "fade_duration": tr("durata del fade"), "target_db": tr("livello finale"),
         "target_opacity": tr("opacità finale"), "presets": "preset", "preset_points": "keyframe",
         "color": tr("colore"), "hotkey": tr("scorciatoia"), "grid_pos": tr("posizione nella griglia"),

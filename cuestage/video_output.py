@@ -77,11 +77,14 @@ def layer_geometry(lay, img, W, H, out_size=None):
     cl = ct = cr = cb = 0.0
     ox = oy = 0.0
     sc = 1.0
+    sx = sy = 1.0
     fit = lay.fit
     if c is not None:
         cl, ct, cr, cb = (float(c.crop_l), float(c.crop_t), float(c.crop_r), float(c.crop_b))
         ox, oy = float(c.off_x), float(c.off_y)
         sc = max(0.01, float(c.scale) / 100)
+        sx = max(0.01, float(getattr(c, "scale_x", 100) or 100) / 100)     # deformazione
+        sy = max(0.01, float(getattr(c, "scale_y", 100) or 100) / 100)
         fit = c.fit
     # almeno 1 pixel visibile
     cl, ct = max(0.0, min(cl, iw - 1)), max(0.0, min(ct, ih - 1))
@@ -95,7 +98,7 @@ def layer_geometry(lay, img, W, H, out_size=None):
         dst = fit_rect(src.width(), src.height(), W, H, fit)
     cx = dst.center().x() + ox * W / max(1, ow)
     cy = dst.center().y() + oy * H / max(1, oh)
-    w, h = dst.width() * sc, dst.height() * sc
+    w, h = dst.width() * sc * sx, dst.height() * sc * sy
     return src, QRectF(cx - w / 2, cy - h / 2, w, h)
 
 
