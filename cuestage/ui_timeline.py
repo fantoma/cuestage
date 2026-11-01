@@ -49,6 +49,8 @@ class TimelineEditor(QWidget):
     # ------------------------------------------------------------ dati
     def set_cue(self, cue, duration, peaks):
         same = self.cue is cue
+        if not same:     # video: di serie il doppio clic aggiunge punti di opacità
+            self.point_mode = "opacity" if cue is not None and cue.type == "video" else "volume"
         self.cue = cue
         self.duration = max(0.0, duration or 0.0)
         self.peaks = peaks
@@ -565,11 +567,19 @@ class TimelineEditor(QWidget):
         hit = self._hit(e.position())
         if hit and hit[0] == "umark":
             self.rename_marker(hit[1])
+        elif hit and hit[0] == "opacity":
+            self._add_point(e.position(), "opacity")       # doppio clic sulla linea dell'opacità
+        elif hit and hit[0] == "level":
+            self._add_point(e.position(), "volume")
         elif not hit:
-            self._add_point(e.position())
+            # Maiusc+doppio clic: l'altro tipo di punto (volume ↔ opacità)
+            mode = self.point_mode
+            if e.modifiers() & Qt.ShiftModifier and self._video_mode():
+                mode = "volume" if mode == "opacity" else "opacity"
+            self._add_point(e.position(), mode)
 
-    def _add_point(self, pos):
-        if self.point_mode == "opacity" and self._video_mode():
+    def _add_point(self, pos, mode=None):
+        if (mode or self.point_mode) == "opacity" and self._video_mode():
             ops = self._op_points()
             ops.append([round(self.x2t(pos.x()), 3), round(self.y2op(pos.y()), 3)])
             ops.sort()
@@ -799,15 +809,12 @@ class TimelineEditor(QWidget):
         act(tr("Inizio loop qui"), lambda: (setattr(c, "loop", True), setattr(c, "loop_start", t)))
         act(tr("Fine loop qui"), lambda: (setattr(c, "loop", True), setattr(c, "loop_end", t)))
         m.addSeparator()
-        act(tr("Aggiungi punto curva"), lambda: self._add_point(pos))
+        act(tr("Aggiungi punto curva"), lambda: self._add_point(pos, "volume"))
         act(tr("Cancella curva di volume"), lambda: c.curve.clear())
         if self._video_mode():
             def add_op():
-                mode = self.point_mode
-                self.point_mode = "opacity"
-                self._add_point(pos)
+                self._add_point(pos, "opacity")
                 self.drag = None
-                self.point_mode = mode
             m.addAction(tr("Aggiungi punto di opacità"), add_op)
             act(tr("Cancella curva di opacità"), lambda: self._op_points().clear())
         act(tr("Reimposta IN/OUT"), lambda: (setattr(c, "start", 0.0), setattr(c, "end", 0.0)))

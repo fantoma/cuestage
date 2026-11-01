@@ -407,9 +407,10 @@ class MediaTabsMixin:
         v.addWidget(self.timeline)
         hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · quadratini arancioni = fade in e fade out · linea "
                          "arancione = {0} · clic o trascina = cursore · tasto destro: marker e keyframe · M = marker al "
-                         "cursore · doppio clic o Ctrl+clic: punto di volume · rotella: zoom · Maiusc+rotella o tasto "
+                         "cursore · doppio clic o Ctrl+clic: {1} · rotella: zoom · Maiusc+rotella o tasto "
                          "centrale: scorri",
-                         tr("opacità (trasparenza)") if cue.type == "video" else tr("volume")))
+                         tr("opacità (trasparenza)") if cue.type == "video" else tr("volume"),
+                         tr("punto di opacità (Maiusc: di volume)") if cue.type == "video" else tr("punto di volume")))
         hint.setStyleSheet("color:#888; font-size:10px;")
         hint.setWordWrap(True)
         v.addWidget(hint)
@@ -490,7 +491,7 @@ class MediaTabsMixin:
                 b.setText(text)
                 b.setToolTip(tip)
                 b.setCheckable(True)
-                b.setChecked(mode == "volume")
+                b.setChecked(mode == "opacity")      # video: di serie punti di opacità
                 b.setProperty("mode", mode)
                 grp_pts.addButton(b)
                 row.addWidget(b)

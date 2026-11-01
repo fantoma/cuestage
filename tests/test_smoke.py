@@ -648,6 +648,18 @@ def t_inspector_layout(w):
     tl.drag = None
     assert abs(v.opacity - 0.5) < 0.03, v.opacity
     v.fade_in, v.opacity = 0.0, 1.0
+    # video: il doppio clic aggiunge punti di opacità (anche sulla linea arancione), come i punti di volume
+    assert tl.point_mode == "opacity"
+    r = tl._plot()
+    tl.mouseDoubleClickEvent(QMouseEvent(QEvent.MouseButtonDblClick, QPointF(tl.t2x(0.8), r.top() + r.height() * 0.6),
+                                         QPointF(0, 0), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    tl.drag = None
+    xs, xfi, xfo, xe, y = tl._env_points()
+    tl.mouseDoubleClickEvent(QMouseEvent(QEvent.MouseButtonDblClick, QPointF((xfi + xfo) / 2, y), QPointF(0, 0),
+                                         Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    tl.drag = None
+    assert len(v.op_curve) == 2 and v.curve == [], (v.op_curve, v.curve)
+    v.op_curve = []
     # punti di opacità (come quelli di volume), scelti con «◐ Opacità»
     btn = [b for b in ins._pts_group.buttons() if b.property("mode") == "opacity"][0]
     btn.click()

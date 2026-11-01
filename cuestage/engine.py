@@ -300,7 +300,7 @@ class KeyframeMixin:
             aud = n if n in c.preset_dict("audio") else ""
             vis = n if n in c.preset_dict("visual") else ""
             if aud or vis:
-                start_preset(self, c, vis, aud, float(m.get("fade", 0) or 0), "scurve")
+                start_preset(self, c, vis, aud, float(m.get("fade", 0) or 0), m.get("shape") or "scurve")
             else:
                 self.ctrl.message.emit(tr("Marker «{0}»: la cue non ha il preset «{1}»", m.get("name") or "M", n))
         elif act == "stop":

@@ -196,14 +196,26 @@ class MarkersPanel(QWidget):
             self._fill_targets(tgt, m, this_cue=act.currentData() == "stop")
             tgt.blockSignals(False)
         tgt.currentIndexChanged.connect(lambda i: (m.__setitem__("target", tgt.itemData(i) or ""), self.changed.emit()))
+        fade_lab = QLabel(tr("fade"))
+        shape = QComboBox()
+        from .model import FADE_SHAPE_LABELS, FADE_SHAPES
+        for k in FADE_SHAPES:
+            shape.addItem(FADE_SHAPE_LABELS[k], k)
+        shape.setCurrentIndex(max(0, shape.findData(m.get("shape") or "scurve")))
+        shape.setToolTip(tr("Forma del fade"))
+        shape.currentIndexChanged.connect(lambda i: (m.__setitem__("shape", shape.itemData(i)), self.changed.emit()))
         ph.addWidget(pre)
         ph.addWidget(tgt)
+        ph.addWidget(fade_lab)
         ph.addWidget(fade)
+        ph.addWidget(shape)
 
         def show_params():
             k = act.currentData()
             pre.setVisible(k == "preset")
             fade.setVisible(k in ("preset", "stop"))
+            fade_lab.setVisible(k in ("preset", "stop"))
+            shape.setVisible(k == "preset")         # lo stop usa la sua curva di fade
             fade.setToolTip(tr("Tempo di transizione verso il preset") if k == "preset" else
                             tr("Tempo di fade dello stop"))
             tgt.setVisible(k in ("cue", "stop"))

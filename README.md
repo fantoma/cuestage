@@ -368,7 +368,8 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
 - under the graph, **IN, OUT, volume, fades** (and opacity for video) and the **loop** settings are on a single row;
 - below it the **marker table**: for each marker its **name**, **time** (seconds in the file, editable; ⌖ moves the
   cursor there), a short **notes** field and the **action** performed when playback reaches the marker:
-  **None**, **Recall Preset** (the cue goes to one of its presets, audio and video, in the given transition time) or
+  **None**, **Recall Preset** (the cue goes to one of its presets, audio and video, with a **fade** of the given time and
+  shape: S curve, linear, linear in dB) or
   **Call Cue** (starts another cue of any list) or **Stop Cue** (stops this cue, or a chosen one, with the given
   fade time). Actions also work in loops, every time the marker is passed, and on
   redundant instances each one runs them by itself;
@@ -377,8 +378,9 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
 - a **click** or a **drag** moves the cursor: for video cues the video output and its preview show the frame at the
   cursor (unless the cue is playing or BLIND is on); it also sets the time shown by the Audio tab matrix (and the
   frame of the Video / Image tab);
-- **opacity points** (video): choose **◐ Opacity** next to the loop settings (**∿ Volume** is the default), then
-  double-click or Ctrl+click on the graph adds an opacity point (yellow squares, dashed line), dragged like the volume
+- **opacity points** (video): **double-click** (or Ctrl+click) on the graph adds an opacity point, also on the orange
+  opacity line; **Shift+double-click** adds a volume point instead. The **◐ Opacity** / **∿ Volume** buttons on the
+  marker row choose which kind double-click adds (video cues start with Opacity). An opacity point (yellow squares, dashed line), dragged like the volume
   points and deleted with a right-click. The curve gives the opacity of the picture at each moment, in place of the
   cue's opacity; fades and keyframes still apply. The buttons **✕ volume curve** and **✕ opacity curve** on the marker row (and the right-click menu)
   clear them;
