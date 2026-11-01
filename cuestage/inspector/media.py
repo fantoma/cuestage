@@ -405,15 +405,10 @@ class MediaTabsMixin:
         self.timeline.setFixedHeight(114)
         self.timeline.changed.connect(self._timeline_changed)
         v.addWidget(self.timeline)
-        if cue.type == "video":
-            hint = QLabel(tr("Sulle miniature: trascina IN/OUT e i marcatori del loop · quadratini arancioni = fade in "
-                             "e fade out (audio e video) · linea arancione = trasparenza (opacità) · doppio clic o "
-                             "Ctrl+clic: punto di volume · tasto destro su un punto: elimina · rotella: zoom · "
-                             "Maiusc+rotella o trascina: scorri · keyframe nella scheda Video / Immagine"))
-        else:
-            hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · quadratini bianchi = fade in e fade out · "
-                             "doppio clic o Ctrl+clic: aggiungi punto di volume · tasto destro su un punto: elimina · "
-                             "rotella: zoom · Maiusc+rotella o trascina: scorri"))
+        hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · quadratini arancioni = fade in e fade out · linea "
+                         "arancione = {0} · clic = cursore · tasto destro: marker e keyframe · M = marker al cursore · "
+                         "doppio clic o Ctrl+clic: punto di volume · rotella: zoom · Maiusc+rotella o trascina: scorri",
+                         tr("opacità (trasparenza)") if cue.type == "video" else tr("volume")))
         hint.setStyleSheet("color:#888; font-size:10px;")
         hint.setWordWrap(True)
         v.addWidget(hint)
@@ -429,14 +424,20 @@ class MediaTabsMixin:
             kbar.edited.connect(lambda: self.timeline.update() if self.timeline else None)
             self.audio_kbar = kbar
         elif info is not None and float(info.get("duration") or 0) > 0:
+            # audio: la timeline dei keyframe resta nascosta (tiene il cursore e i preset in uso); marker,
+            # keyframe e cursore si gestiscono direttamente sulla forma d'onda
             from ..ui_keyframes import KeyframeBar
             dur = float(info.get("duration") or 0.0)
-            kbar = KeyframeBar(cue, duration_fn=lambda: dur, in_out=True)
+            kbar = KeyframeBar(cue, duration_fn=lambda: dur, in_out=True, parent=w)
+            kbar.hide()
             kbar.timeChanged.connect(lambda t: self.timeline.set_cursor(t) if self.timeline else None)
             kbar.presetInUse.connect(self._show_in_use)
             kbar.edited.connect(lambda: self.timeline.update() if self.timeline else None)
             self.audio_kbar = kbar
-            v.addWidget(kbar)
+        if kbar is not None:
+            def moved(ft, kbar=kbar):
+                kbar.goto_time(self.timeline._cue_time_of(ft) if self.timeline else ft)
+            self.timeline.cursorMoved.connect(moved)
         top = QHBoxLayout()
         top.addWidget(QLabel("IN"))
         top.addWidget(self._dspin("start", 0, 36000, 0.1, 3))

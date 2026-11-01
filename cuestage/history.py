@@ -267,7 +267,7 @@ def _field_labels():
         "color": tr("colore"), "hotkey": tr("scorciatoia"), "grid_pos": tr("posizione nella griglia"),
         "group": tr("gruppo"), "text_content": tr("testo"), "midi": "MIDI", "osc_trigger": "OSC",
         "mo_msgs": tr("messaggi MIDI"), "osc_address": tr("indirizzo OSC"), "osc_args": tr("argomenti OSC"),
-        "type": tr("tipo"),
+        "type": tr("tipo"), "markers": tr("marker"),
     }
 
 

@@ -21,8 +21,13 @@ C_ENV = QColor(255, 165, 40)          # inviluppo del video: fade e opacità
 HANDLE_H = 16
 
 
+C_MARK = QColor(90, 220, 230)          # marker dell'utente
+WAVE_H = 0.45                          # altezza massima della semionda (frazione del grafico)
+
+
 class TimelineEditor(QWidget):
     changed = Signal()
+    cursorMoved = Signal(float)        # clic sul grafico: nuovo cursore (tempo del file)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -172,34 +177,22 @@ class TimelineEditor(QWidget):
             p.drawText(QPointF(3, y - 2), f"{db:+d} dB" if db else tr("0 dB"))
         # forma d'onda
         if self.peaks is not None and len(self.peaks):
-            mid = r.center().y()
-            amp = r.height() / 2 * 0.95
             n = len(self.peaks)
             cols = max(1, int(W))
             i0 = np.clip((self.v0 + np.arange(cols) / cols * (self.v1 - self.v0)) * PEAK_RATE, 0, n).astype(int)
             i1 = np.clip((self.v0 + (np.arange(cols) + 1) / cols * (self.v1 - self.v0)) * PEAK_RATE, 0, n).astype(int)
             i1 = np.maximum(i1, i0 + 1)
             mins, maxs = self.peaks[:, 0], self.peaks[:, 1]
-            if self._video_mode():
-                # video: solo la semionda superiore, appoggiata in basso, bianca in trasparenza sulle miniature
-                p.setPen(QPen(QColor(255, 255, 255, 150), 1))
-                full = r.height() * 0.9
-                for x in range(cols):
-                    a, b = i0[x], min(i1[x], n)
-                    if a >= n:
-                        break
-                    v = max(abs(float(mins[a:b].min())), abs(float(maxs[a:b].max())))
-                    if v > 0.002:
-                        p.drawLine(QPointF(x, r.bottom()), QPointF(x, r.bottom() - min(1.0, v) * full))
-            else:
-                p.setPen(QPen(C_WAVE, 1))
-                for x in range(cols):
-                    a, b = i0[x], min(i1[x], n)
-                    if a >= n:
-                        break
-                    lo = float(mins[a:b].min())
-                    hi = float(maxs[a:b].max())
-                    p.drawLine(QPointF(x, mid - hi * amp), QPointF(x, mid - lo * amp))
+            # solo la semionda superiore, appoggiata in basso, bianca (in trasparenza sulle miniature)
+            p.setPen(QPen(QColor(255, 255, 255, 150 if self.thumbs is not None else 190), 1))
+            full = r.height() * WAVE_H
+            for x in range(cols):
+                a, b = i0[x], min(i1[x], n)
+                if a >= n:
+                    break
+                v = max(abs(float(mins[a:b].min())), abs(float(maxs[a:b].max())))
+                if v > 0.002:
+                    p.drawLine(QPointF(x, r.bottom()), QPointF(x, r.bottom() - min(1.0, v) * full))
         elif self.duration <= 0:
             p.setPen(QColor(140, 140, 150))
             p.drawText(r, Qt.AlignCenter, tr("Caricamento media…") if self.cue.file else tr("Nessun file"))
@@ -241,6 +234,27 @@ class TimelineEditor(QWidget):
             p.drawRoundedRect(box, 3, 3)
             p.setPen(QColor(0, 0, 0))
             p.drawText(box, Qt.AlignCenter, lab)
+        # marker dell'utente
+        self._umark_hits = []
+        f2 = QFont()
+        f2.setPixelSize(10)
+        f2.setBold(True)
+        p.setFont(f2)
+        fm = p.fontMetrics()
+        for i, m in enumerate(self._user_markers()):
+            x = self.t2x(float(m.get("t", 0)))
+            if x < -40 or x > W + 2:
+                continue
+            p.setPen(QPen(C_MARK, 1.3, Qt.DashLine))
+            p.drawLine(QPointF(x, HANDLE_H), QPointF(x, r.bottom()))
+            name = str(m.get("name") or "") or "M"
+            box = QRectF(x, r.top() + 1, fm.horizontalAdvance(name) + 8, 13)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QBrush(C_MARK))
+            p.drawRoundedRect(box, 2, 2)
+            p.setPen(QColor(0, 0, 0))
+            p.drawText(box, Qt.AlignCenter, name)
+            self._umark_hits.append((i, x, box))
         # keyframe (immagine in alto, audio in basso nella fascia inferiore), posizionati sul file
         self._kf_hits = []
         ax = cue_axis(c, self.duration) if self.duration else None
@@ -261,7 +275,7 @@ class TimelineEditor(QWidget):
                 tip = tr("{0}: {1} — cue {2}", KL.get(kind, kind), kf_label(pt.get('preset', '')), fmt_time(float(pt['t'])))
                 if rep:
                     tip += tr(" (ripetizione {0} del loop)", rep)
-                self._kf_hits.append((x, y, tip))
+                self._kf_hits.append((x, y, tip, pt, ft))
         # cursore dei keyframe
         if self.cursor_t is not None:
             x = self.t2x(self.cursor_t)
@@ -297,10 +311,14 @@ class TimelineEditor(QWidget):
         end = c.end if c.end > 0 else self.duration
         fi = max(0.0, float(c.fade_in or 0))
         fo = max(0.0, float(c.fade_out or 0))
+        span = max(0.0, end - float(c.start or 0))
+        if fi + fo > span > 0:                      # fade più lunghi della cue: si dividono la durata
+            k = span / (fi + fo)
+            fi, fo = fi * k, fo * k
         if self._video_mode():
             y = r.top() + (1.0 - max(0.0, min(1.0, float(c.opacity)))) * r.height()
         else:
-            y = r.top() + 6
+            y = self.db2y(max(MIN_DB, min(MAX_DB, float(c.level_db))))     # audio: volume della cue
         return self.t2x(c.start), self.t2x(c.start + fi), self.t2x(end - fo), self.t2x(end), y
 
     def _draw_envelope(self, p, r):
@@ -309,26 +327,26 @@ class TimelineEditor(QWidget):
             return
         xs, xfi, xfo, xe, y = self._env_points()
         video = self._video_mode()
-        col = C_ENV if video else QColor(255, 255, 255, 170)
-        if video or c.fade_in > 0 or c.fade_out > 0:
-            path = QPainterPath()
-            path.moveTo(xs, r.bottom())
-            path.lineTo(xfi, y)
-            path.lineTo(xfo, y)
-            path.lineTo(xe, r.bottom())
-            p.setPen(QPen(col, 1.6 if video else 1.2, Qt.SolidLine if video else Qt.DashLine))
-            p.setBrush(Qt.NoBrush)
-            p.drawPath(path)
+        col = C_ENV
+        path = QPainterPath()
+        path.moveTo(xs, r.bottom())
+        path.lineTo(xfi, y)
+        path.lineTo(xfo, y)
+        path.lineTo(xe, r.bottom())
+        p.setPen(QPen(col, 1.6))
+        p.setBrush(Qt.NoBrush)
+        p.drawPath(path)
         p.setPen(QPen(QColor(0, 0, 0, 160), 1))
         p.setBrush(QBrush(col))
         for x in (xfi, xfo):                       # quadratini dei fade
             p.drawRect(QRectF(x - 4, y - 4, 8, 8))
-        if video:
+        if True:
             f = QFont()
             f.setPixelSize(10)
             f.setBold(True)
             p.setFont(f)
-            txt = tr("opacità {0:.0f}%", float(c.opacity) * 100)
+            txt = tr("opacità {0:.0f}%", float(c.opacity) * 100) if video else \
+                tr("volume {0:+.1f} dB", float(c.level_db)) if float(c.level_db) > MIN_DB else tr("volume −∞")
             ty = y + 12 if y + 14 < r.bottom() else y - 4
             p.setPen(QColor(0, 0, 0, 200))
             p.drawText(QPointF(xfi + 7, ty + 1), txt)
@@ -344,9 +362,71 @@ class TimelineEditor(QWidget):
                 return ("fade_in",)
             if abs(pos.x() - xfo) < 7:
                 return ("fade_out",)
-        if self._video_mode() and abs(pos.y() - y) < 5 and xfi + 7 <= pos.x() <= xfo - 7:
-            return ("opacity",)
+        if abs(pos.y() - y) < 5 and xfi + 7 <= pos.x() <= xfo - 7:
+            return ("opacity",) if self._video_mode() else ("level",)
         return None
+
+    # ------------------------------------------------------------ marker dell'utente e keyframe
+    def _user_markers(self):
+        c = self.cue
+        if not isinstance(getattr(c, "markers", None), list):
+            c.markers = []
+        return c.markers
+
+    def add_marker(self, t, name=None):
+        """Nuovo marker al tempo t del file (nome automatico «M1», «M2»…)."""
+        ms = self._user_markers()
+        if name is None:
+            used = {str(m.get("name")) for m in ms}
+            k = 1
+            while f"M{k}" in used:
+                k += 1
+            name = f"M{k}"
+        m = {"t": round(max(0.0, min(float(t), self.duration or float(t))), 3), "name": name}
+        ms.append(m)
+        ms.sort(key=lambda x: float(x.get("t", 0)))
+        self.changed.emit()
+        self.update()
+        return m
+
+    def rename_marker(self, i):
+        from PySide6.QtWidgets import QInputDialog
+        ms = self._user_markers()
+        if not (0 <= i < len(ms)):
+            return
+        n, ok = QInputDialog.getText(self, tr("Marker"), tr("Nome del marker:"), text=str(ms[i].get("name") or ""))
+        if ok:
+            ms[i]["name"] = n.strip()
+            self.changed.emit()
+            self.update()
+
+    def _cue_time_of(self, ft):
+        """Tempo della cue (prima volta) in cui si suona la posizione ft del file."""
+        from .markers import file_to_cue_times
+        ax = cue_axis(self.cue, self.duration) if self.duration else None
+        ts = file_to_cue_times(ax, ft) if ax is not None else []
+        return ts[0] if ts else max(0.0, ft - float(self.cue.start or 0))
+
+    def add_keyframe(self, kind, ft, preset):
+        from . import keyframes as kfm
+        kfm.new_keyframe(self.cue, kind, round(self._cue_time_of(ft), 2), preset)
+        self.changed.emit()
+        self.update()
+
+    def _preset_menu(self, m, kind, fn):
+        from . import keyframes as kfm
+        names = [kfm.BASE] + sorted(self.cue.preset_dict(kind), key=str.lower)
+        for n in names:
+            a = QAction(kfm.label(n), m)
+            a.triggered.connect(lambda _=False, n=n: fn(n))
+            m.addAction(a)
+
+    def keyPressEvent(self, e):
+        if self.cue is not None and e.key() == Qt.Key_M and not e.modifiers():
+            t = self.cursor_t if self.cursor_t is not None else (self.playhead or float(self.cue.start or 0))
+            self.add_marker(t)
+            return
+        super().keyPressEvent(e)
 
     # ------------------------------------------------------------ interazione
     def _hit(self, pos):
@@ -358,6 +438,12 @@ class TimelineEditor(QWidget):
         env = self._env_hit(pos)
         if env is not None:
             return env
+        for kx, ky, _tip, pt, ft in getattr(self, "_kf_hits", []):
+            if abs(kx - pos.x()) < 6 and abs(ky - pos.y()) < 6:
+                return ("kf", pt, ft)
+        for i, x, box in getattr(self, "_umark_hits", []):
+            if box.contains(pos) or (abs(x - pos.x()) < 5 and pos.y() > HANDLE_H):
+                return ("umark", i)
         best, bd = None, 7
         for name, (t, col, lab) in self._markers().items():
             d = abs(self.t2x(t) - pos.x())
@@ -380,20 +466,32 @@ class TimelineEditor(QWidget):
                 del self.cue.curve[hit[1]]
                 self.changed.emit()
                 self.update()
+            elif hit and hit[0] == "umark":
+                self._marker_menu(e, hit[1])
+            elif hit and hit[0] == "kf":
+                self._kf_menu(e, hit[1])
             else:
                 self._menu(e, pos)
             return
         if e.button() == Qt.LeftButton:
-            if hit:
+            if hit and hit[0] == "kf":
+                self.drag = ("kf", hit[1], float(hit[1].get("t", 0)), hit[2])
+            elif hit:
                 self.drag = hit
             elif e.modifiers() & Qt.ControlModifier or pos.y() > HANDLE_H:
                 if e.modifiers() & Qt.ControlModifier:
                     self._add_point(pos)
                 else:
-                    self.drag = ("pan", pos.x(), self.v0, self.v1)
+                    # trascinare = scorrere; un clic senza trascinare sposta il cursore
+                    self.drag = ("pan", pos.x(), self.v0, self.v1, [False])
 
     def mouseDoubleClickEvent(self, e):
-        if self.cue is not None and e.button() == Qt.LeftButton and not self._hit(e.position()):
+        if self.cue is None or e.button() != Qt.LeftButton:
+            return
+        hit = self._hit(e.position())
+        if hit and hit[0] == "umark":
+            self.rename_marker(hit[1])
+        elif not hit:
             self._add_point(e.position())
 
     def _add_point(self, pos):
@@ -408,18 +506,20 @@ class TimelineEditor(QWidget):
     def mouseMoveEvent(self, e):
         pos = e.position()
         if self.drag is None:
-            for kx, ky, tip in getattr(self, "_kf_hits", []):
+            for kx, ky, tip, _pt, _ft in getattr(self, "_kf_hits", []):
                 if abs(kx - pos.x()) < 6 and abs(ky - pos.y()) < 6:
                     QToolTip.showText(e.globalPosition().toPoint(), tip, self)
                     break
             hit = self._hit(pos)
-            self.setCursor(Qt.SizeHorCursor if hit and hit[0] in ("marker", "fade_in", "fade_out")
-                           else Qt.SizeVerCursor if hit and hit[0] == "opacity"
+            self.setCursor(Qt.SizeHorCursor if hit and hit[0] in ("marker", "fade_in", "fade_out", "umark", "kf")
+                           else Qt.SizeVerCursor if hit and hit[0] in ("opacity", "level")
                            else Qt.PointingHandCursor if hit else Qt.ArrowCursor)
             return
         kind = self.drag[0]
         if kind == "pan":
-            _, x0, v0, v1 = self.drag
+            _, x0, v0, v1, moved = self.drag
+            if abs(pos.x() - x0) > 3:
+                moved[0] = True
             dt = (pos.x() - x0) / max(1, self.width()) * (v1 - v0)
             span = v1 - v0
             nv0 = max(0.0, min(v0 - dt, max(self.duration, 1) - span))
@@ -428,7 +528,23 @@ class TimelineEditor(QWidget):
             return
         t = round(self.x2t(pos.x()), 3)
         c = self.cue
-        if kind in ("fade_in", "fade_out", "opacity"):
+        if kind == "umark":
+            ms = self._user_markers()
+            i = self.drag[1]
+            if i < len(ms):
+                ms[i]["t"] = t
+                QToolTip.showText(e.globalPosition().toPoint(), f"{ms[i].get('name') or 'M'}  {fmt_time(t)}", self)
+            self.changed.emit()
+            self.update()
+            return
+        if kind == "kf":
+            _k, pt, ct0, ft0 = self.drag
+            pt["t"] = round(max(0.0, ct0 + (t - ft0)), 2)
+            QToolTip.showText(e.globalPosition().toPoint(), tr("keyframe — cue {0}", fmt_time(pt["t"])), self)
+            self.changed.emit()
+            self.update()
+            return
+        if kind in ("fade_in", "fade_out", "opacity", "level"):
             end = c.end if c.end > 0 else self.duration
             span = max(0.0, end - c.start)
             if kind == "fade_in":
@@ -437,6 +553,9 @@ class TimelineEditor(QWidget):
             elif kind == "fade_out":
                 c.fade_out = round(max(0.0, min(end - t, span - float(c.fade_in or 0))), 2)
                 tip = tr("Fade out {0:.2f} s", c.fade_out)
+            elif kind == "level":
+                c.level_db = round(self.y2db(pos.y()) * 2) / 2
+                tip = tr("Volume {0:+.1f} dB", c.level_db)
             else:
                 r = self._plot()
                 c.opacity = round(max(0.0, min(1.0, 1.0 - (pos.y() - r.top()) / max(1.0, r.height()))), 2)
@@ -469,10 +588,23 @@ class TimelineEditor(QWidget):
         self.update()
 
     def mouseReleaseEvent(self, e):
-        if self.drag and self.drag[0] == "point":
+        d = self.drag
+        self.drag = None
+        if not d:
+            return
+        if d[0] == "point":
             self.cue.curve.sort()
             self.changed.emit()
-        self.drag = None
+        elif d[0] == "umark":
+            self._user_markers().sort(key=lambda m: float(m.get("t", 0)))
+            self.changed.emit()
+        elif d[0] == "kf":
+            self.cue.preset_points.sort(key=lambda p: float(p.get("t", 0)))
+            self.changed.emit()
+        elif d[0] == "pan" and not d[4][0]:
+            self.cursor_t = self.x2t(e.position().x())
+            self.update()
+            self.cursorMoved.emit(self.cursor_t)
 
     def wheelEvent(self, e):
         if self.cue is None:
@@ -493,6 +625,48 @@ class TimelineEditor(QWidget):
             self.v0, self.v1 = nv0, nv0 + nspan
         self.update()
 
+    def _marker_menu(self, e, i):
+        ms = self._user_markers()
+        if not (0 <= i < len(ms)):
+            return
+        mk = ms[i]
+        c = self.cue
+        t = float(mk.get("t", 0))
+        m = QMenu(self)
+
+        def act(label, fn):
+            a = QAction(label, m)
+            a.triggered.connect(lambda: (fn(), self.changed.emit(), self.update()))
+            m.addAction(a)
+        m.addAction(tr("Rinomina…"), lambda: self.rename_marker(i))
+        act(tr("Imposta IN qui"), lambda: setattr(c, "start", t))
+        act(tr("Imposta OUT qui"), lambda: setattr(c, "end", t))
+        act(tr("Inizio loop qui"), lambda: (setattr(c, "loop", True), setattr(c, "loop_start", t)))
+        act(tr("Fine loop qui"), lambda: (setattr(c, "loop", True), setattr(c, "loop_end", t)))
+        m.addSeparator()
+        act(tr("Elimina marker"), lambda: ms.remove(mk))
+        m.exec(e.globalPosition().toPoint())
+
+    def _kf_menu(self, e, pt):
+        from . import keyframes as kfm
+        m = QMenu(self)
+        sub = m.addMenu(tr("Preset del keyframe"))
+
+        def setp(n):
+            pt["preset"] = n
+            self.changed.emit()
+            self.update()
+        self._preset_menu(sub, pt.get("kind", "audio"), setp)
+
+        def delete():
+            if pt in self.cue.preset_points:
+                self.cue.preset_points.remove(pt)
+            self.changed.emit()
+            self.update()
+        m.addAction(tr("Elimina keyframe"), delete)
+        m.setToolTip(kfm.label(pt.get("preset", "")))
+        m.exec(e.globalPosition().toPoint())
+
     def _menu(self, e, pos):
         t = round(self.x2t(pos.x()), 3)
         c = self.cue
@@ -502,6 +676,22 @@ class TimelineEditor(QWidget):
             a = QAction(label, m)
             a.triggered.connect(lambda: (fn(), self.changed.emit(), self.update()))
             m.addAction(a)
+
+        m.addAction(tr("Aggiungi marker qui (M)"), lambda: self.add_marker(t))
+        kinds = ["audio"] if c.type == "audio" else ["visual", "audio"]
+        from .keyframes import KIND_LABELS as KL
+        for kind in kinds:
+            sub = m.addMenu(tr("Aggiungi keyframe {0} qui", KL.get(kind, kind).lower()))
+            self._preset_menu(sub, kind, lambda n, kind=kind: self.add_keyframe(kind, t, n))
+        ms = self._user_markers()
+        if ms:
+            go = m.addMenu(tr("Vai al marker"))
+            for mk in ms:
+                a = QAction(f"{mk.get('name') or 'M'}  {fmt_time(float(mk.get('t', 0)))}", go)
+                a.triggered.connect(lambda _=False, tt=float(mk.get("t", 0)): (
+                    setattr(self, "cursor_t", tt), self.update(), self.cursorMoved.emit(tt)))
+                go.addAction(a)
+        m.addSeparator()
 
         act(tr("Imposta IN a {0}", fmt_time(t)), lambda: setattr(c, "start", t))
         act(tr("Imposta OUT a {0}", fmt_time(t)), lambda: setattr(c, "end", t))

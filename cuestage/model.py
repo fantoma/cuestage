@@ -87,6 +87,8 @@ class Cue:
         "file": "", "start": 0.0, "end": 0.0, "loop": False, "loop_start": 0.0,
         "loop_end": 0.0, "loop_count": 0, "level_db": 0.0, "fade_in": 0.0,
         "fade_out": 0.0, "curve": [],
+        # marker dell'utente sul file: [{"t": secondi del file, "name": testo}]
+        "markers": [],
         # uscita audio (audio e video): scheda ("" = predefinita), matrice sorgente×uscita in dB
         # (None = incrocio spento; lista vuota = routing predefinito), volume per uscita in dB
         "audio_device": "", "matrix": [], "out_levels": [],

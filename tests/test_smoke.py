@@ -624,7 +624,7 @@ def t_inspector_layout(w):
     # video: niente timeline dei keyframe nella scheda; fade e opacità si trascinano sulle miniature
     from cuestage.ui_keyframes import KeyframeBar
     page = ins.tabs.widget(2)
-    assert not [k for k in page.findChildren(KeyframeBar)], "timeline dei keyframe ancora sotto le miniature"
+    assert not [k for k in page.findChildren(KeyframeBar) if k.isVisible()], "timeline dei keyframe ancora visibile"
     tl = ins.timeline
     v.start = v.end = 0.0
     v.fade_in = v.fade_out = 0.0
@@ -658,6 +658,49 @@ def t_inspector_layout(w):
     finally:
         md.subprocess.run = real_run
         md.FFMPEG = orig_ff
+    # cue solo audio: stessa interfaccia (niente timeline dei keyframe), volume sulla linea arancione, marker,
+    # keyframe e cursore sulla forma d'onda
+    ins.set_cue(a)
+    ins.tabs.setCurrentIndex(2)
+    run(0.3)
+    page = ins.tabs.widget(2)
+    assert not [k for k in page.findChildren(KeyframeBar) if k.isVisible()]
+    tl = ins.timeline
+    tl.zoom_all()
+    a.level_db, a.fade_in, a.fade_out, a.start, a.end = 0.0, 0.0, 0.0, 0.0, 0.0
+    xs, xfi, xfo, xe, y = tl._env_points()
+    mid = QPointF((xfi + xfo) / 2, y)
+    assert tl._hit(mid) == ("level",), tl._hit(mid)
+    tl.drag = ("level",)
+    tl.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(mid.x(), tl.db2y(-12)), QPointF(0, 0), Qt.NoButton,
+                                  Qt.LeftButton, Qt.NoModifier))
+    tl.drag = None
+    assert abs(a.level_db + 12) <= 0.5, a.level_db
+    m = tl.add_marker(1.0)
+    assert a.markers == [m] and m["name"] == "M1"
+    run(0.1)
+    tl.repaint()
+    hit = tl._hit(QPointF(tl.t2x(1.0), tl._plot().center().y()))
+    assert hit == ("umark", 0), hit
+    tl.drag = hit
+    tl.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(tl.t2x(1.5), 40), QPointF(0, 0), Qt.NoButton,
+                                  Qt.LeftButton, Qt.NoModifier))
+    tl.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, QPointF(tl.t2x(1.5), 40), QPointF(0, 0),
+                                     Qt.LeftButton, Qt.NoButton, Qt.NoModifier))
+    assert abs(a.markers[0]["t"] - 1.5) < 0.05, a.markers
+    a.preset_dict("audio")["piano"] = a.preset_values("audio")
+    tl.add_keyframe("audio", 2.0, "piano")
+    assert any(p_.get("preset") == "piano" and abs(p_["t"] - 2.0) < 0.01 for p_ in a.preset_points), a.preset_points
+    # clic (senza trascinare) = cursore, che arriva anche alla timeline dei keyframe nascosta
+    px = tl.t2x(2.0)
+    tl.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, QPointF(px, tl._plot().bottom() - 3), QPointF(0, 0),
+                                   Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    tl.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, QPointF(px, tl._plot().bottom() - 3), QPointF(0, 0),
+                                     Qt.LeftButton, Qt.NoButton, Qt.NoModifier))
+    assert abs(ins.audio_kbar.cue_time() - 2.0) < 0.15, ins.audio_kbar.cue_time()
+    sh2 = Show.from_data(sh.to_data(None), None)
+    assert sh2.by_id(a.id).markers[0]["name"] == "M1"         # i marker si salvano con lo show
+    a.markers, a.preset_points, a.level_db = [], [], 0.0
     # percorso del file modificabile nel tab Base (IN/OUT restano)
     ins.set_cue(a)
     ins.tabs.setCurrentIndex(0)
