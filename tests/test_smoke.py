@@ -700,7 +700,35 @@ def t_inspector_layout(w):
     assert abs(ins.audio_kbar.cue_time() - 2.0) < 0.15, ins.audio_kbar.cue_time()
     sh2 = Show.from_data(sh.to_data(None), None)
     assert sh2.by_id(a.id).markers[0]["name"] == "M1"         # i marker si salvano con lo show
+    # tabella dei marker sotto la riga di IN/OUT/fade/loop: nome, tempo, note, azione
+    from cuestage.ui_markers import MarkersPanel
+    from PySide6.QtWidgets import QComboBox, QDoubleSpinBox
+    mp = ins.markers_panel
+    assert isinstance(mp, MarkersPanel) and len(mp._rows) == 1
+    names = [x for x in mp.findChildren(QLineEdit) if x.isVisible() and x.text() == "M1"]
+    assert names, "nome del marker non modificabile"
+    names[0].setText("Tuono")
+    names[0].editingFinished.emit()
+    assert a.markers[0]["name"] == "Tuono"
+    spins = [x for x in mp.findChildren(QDoubleSpinBox) if x.isVisible() and x.suffix() == " s" and x.maximum() > 1000]
+    spins[0].setValue(0.4)                                     # colonna del tempo
+    assert abs(a.markers[0]["t"] - 0.4) < 1e-6
+    combos = [x for x in mp.findChildren(QComboBox) if x.isVisible() and x.findData("cue") >= 0]
+    combos[0].setCurrentIndex(combos[0].findData("cue"))
+    assert a.markers[0]["action"] == "cue"
+    # in riproduzione: «Call Cue» al marker avvia l'altra cue, «Recall Preset» porta la cue al preset
+    a.markers[0]["target"] = t.id
+    a.markers.append({"t": 0.6, "name": "P", "action": "preset", "preset": "piano", "fade": 0.0})
+    a.preset_dict("audio")["piano"] = dict(a.preset_values("audio"), level_db=-20.0)
+    a.preset_points = []
+    w.ctrl.start_cue(a, cascade=False)
+    assert wait_until(lambda: t.id in w.ctrl.instances, 3), "Call Cue non eseguita"
+    inst = w.ctrl.instances.get(a.id)
+    assert wait_until(lambda: inst._aud_override is not None, 3), "Recall Preset non eseguito"
+    w.ctrl.stop_all(0)
+    run(0.2)
     a.markers, a.preset_points, a.level_db = [], [], 0.0
+    a.presets = {"audio": {}, "visual": {}}
     # percorso del file modificabile nel tab Base (IN/OUT restano)
     ins.set_cue(a)
     ins.tabs.setCurrentIndex(0)

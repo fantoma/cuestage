@@ -210,6 +210,12 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
                 w.blockSignals(False)
         if self.crop_panel is not None:
             self.crop_panel.refresh()
+        mp = getattr(self, "markers_panel", None)
+        if mp is not None:
+            try:
+                mp.reload()
+            except RuntimeError:
+                self.markers_panel = None
 
     # ------------------------------------------------------------ costruzione
     def set_cue(self, cue):
@@ -238,6 +244,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         self.crop_panel = None
         self.audio_kbar = None
         self.preset_bar = None
+        self.markers_panel = None
         cue = self.cue
         if cue is None:
             self.header.setText(tr("Nessuna cue selezionata"))

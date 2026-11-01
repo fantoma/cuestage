@@ -260,3 +260,19 @@ def marks_tooltip(marks, ax, t_hover, width_px):
     near = [m for m in marks if abs(m.t - t_hover) <= tol]
     from .media import fmt_time
     return "\n".join(f"{fmt_time(m.t)}  {m.label or KIND_LABELS.get(m.kind, m.kind)}" for m in near)
+
+
+def due_markers(markers, prev, pos):
+    """Marker superati passando dalla posizione prev alla pos del file (anche al giro del loop)."""
+    out = []
+    for m in markers or ():
+        try:
+            t = float(m.get("t", 0))
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if pos >= prev:
+            if prev < t <= pos:
+                out.append((t, m))
+        elif t > prev or t <= pos:       # il loop è ripartito
+            out.append((t if t > prev else t + 1e9, m))
+    return [m for _t, m in sorted(out, key=lambda x: x[0])]

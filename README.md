@@ -364,6 +364,12 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
 - **markers**: right-click › “Add marker here” or the **M** key (at the cursor) adds a named marker (cyan). Drag it to
   move it, double-click its label to rename it, right-click it to set IN, OUT or the loop there, or to delete it.
   “Go to marker” in the right-click menu moves the cursor. Markers are saved with the show;
+- under the graph, **IN, OUT, volume, fades** (and opacity for video) and the **loop** settings are on a single row;
+- below it the **marker table**: for each marker its **name**, **time** (seconds in the file, editable; ⌖ moves the
+  cursor there), a short **notes** field and the **action** performed when playback reaches the marker:
+  **None**, **Recall Preset** (the cue goes to one of its presets, audio and video, in the given transition time) or
+  **Call Cue** (starts another cue of any list). Actions also work in loops, every time the marker is passed, and on
+  redundant instances each one runs them by itself;
 - **keyframes**: right-click › “Add audio keyframe here” (video also “image keyframe”) with the preset to use; drag the
   ◆ to move it, right-click it to change preset or delete it;
 - a **click** (without dragging) moves the cursor, which also sets the time shown by the Audio tab matrix (and the

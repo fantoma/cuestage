@@ -270,11 +270,48 @@ class KeyframeMixin:
         self.kf_level_ratio = 1.0
         self._aud_override = None
         self._kf_T = 0.0
+        self._mk_pos = None
 
     def cue_time(self):
         return self.elapsed
 
+    def _tick_markers(self):
+        """Azioni dei marker dell'utente (Recall Preset, Call Cue) quando la riproduzione li supera."""
+        ms = getattr(self.cue, "markers", None)
+        if not ms or self.cue.type not in ("audio", "video"):
+            return
+        try:
+            pos = float(self.position())
+        except Exception:
+            return
+        prev = getattr(self, "_mk_pos", None)
+        if prev is None:
+            prev = float(self.cue.start or 0) - 0.001          # un marker sull'IN scatta all'avvio
+        self._mk_pos = pos
+        from .markers import due_markers
+        for m in due_markers(ms, prev, pos):
+            self._marker_action(m)
+
+    def _marker_action(self, m):
+        act = m.get("action") or "none"
+        c = self.cue
+        if act == "preset" and m.get("preset"):
+            n = m["preset"]
+            aud = n if n in c.preset_dict("audio") else ""
+            vis = n if n in c.preset_dict("visual") else ""
+            if aud or vis:
+                start_preset(self, c, vis, aud, float(m.get("fade", 0) or 0), "scurve")
+            else:
+                self.ctrl.message.emit(tr("Marker «{0}»: la cue non ha il preset «{1}»", m.get("name") or "M", n))
+        elif act == "cue" and m.get("target"):
+            tg = self.ctrl.show.resolve_target(m["target"])
+            if tg is None:
+                self.ctrl.message.emit(tr("Marker «{0}»: cue «{1}» non trovata", m.get("name") or "M", m["target"]))
+            elif tg is not c:
+                self.ctrl.trigger(tg, cascade=True)
+
     def _tick_kf(self, dt):
+        self._tick_markers()
         T = self.cue_time()
         self._kf_T = T
         c = self.cue

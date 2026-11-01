@@ -452,8 +452,8 @@ class MediaTabsMixin:
         if cue.type == "video":
             top.addWidget(QLabel(tr("Opacità")))
             top.addWidget(self._opacity_spin())
-        top.addStretch(1)
-        row = QHBoxLayout()
+        top.addSpacing(10)
+        row = top                       # loop sulla stessa riga di IN, OUT, volume e fade
         lc = self._check("loop", tr("Loop"))
         grp = self.show_fn().by_id(cue.group) if cue.group else None
         if grp is not None and grp.type == "group" and grp.group_mode in ("playlist", "rplaylist"):
@@ -475,14 +475,44 @@ class MediaTabsMixin:
                           "risparmiare memoria con molti video grandi."))
             row.addWidget(pc)
         row.addStretch(1)
-        bc = QPushButton(tr("Cancella curva volume"))
+        from PySide6.QtWidgets import QToolButton
+        bc = QToolButton()
+        bc.setText("✕∿")
+        bc.setToolTip(tr("Cancella curva volume"))
         bc.clicked.connect(lambda: (cue.curve.clear(), self._timeline_changed()))
-        bz = QPushButton(tr("Zoom tutto"))
+        bz = QToolButton()
+        bz.setText("⤢")
+        bz.setToolTip(tr("Zoom tutto"))
         bz.clicked.connect(lambda: self.timeline.zoom_all())
         row.addWidget(bc)
         row.addWidget(bz)
         v.addLayout(top)
-        v.addLayout(row)
+        # ---- elenco dei marker: nome, tempo, note, azione
+        from ..ui_markers import MarkersPanel
+        mp = MarkersPanel(cue, self.show_fn)
+        self.markers_panel = mp
+
+        def panel_changed():
+            self.show_fn().dirty = True
+            self.edited.emit(False)
+            if self.timeline is not None:
+                self.timeline.update()
+        mp.changed.connect(panel_changed)
+
+        def goto(t):
+            if self.timeline is not None:
+                self.timeline.cursor_t = t
+                self.timeline.update()
+                self.timeline.cursorMoved.emit(t)
+        mp.gotoRequested.connect(goto)
+
+        def add_here():
+            tl = self.timeline
+            if tl is not None:
+                tl.add_marker(tl.cursor_t if tl.cursor_t is not None else float(cue.start or 0))
+        mp.addRequested.connect(add_here)
+        self.timeline.changed.connect(mp.reload)
+        v.addWidget(mp)
         v.addStretch(1)
         self._media_info = info
         self._load_media()
