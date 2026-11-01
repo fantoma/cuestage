@@ -650,7 +650,10 @@ class CropPanel(QWidget):
         self.kbar.timeChanged.connect(self._time_moved)
         self.kbar.edited.connect(self._kf_edited)
         self.slider = self.kbar.strip          # compatibilità
-        v.addWidget(self.kbar)
+        # la timeline dei keyframe non si mostra: il tempo arriva dal cursore della scheda «Tempi e loop»
+        # (marker, keyframe e punti si gestiscono lì); resta come riferimento del tempo e dei preset in uso
+        self.kbar.setParent(self)
+        self.kbar.hide()
 
         if cue.type == "video":
             self.debounce = QTimer(self)

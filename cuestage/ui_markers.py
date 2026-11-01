@@ -49,6 +49,7 @@ class MarkersPanel(QWidget):
         self.empty.setStyleSheet("color:#888;")
         head.addWidget(self.empty)
         head.addStretch(1)
+        self.head = head                # chi usa il pannello può aggiungere i suoi pulsanti a destra
         outer.addLayout(head)
         self.grid = QGridLayout()
         outer.addLayout(self.grid)

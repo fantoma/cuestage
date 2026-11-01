@@ -187,6 +187,16 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         w.lineEdit().editingFinished.connect(typed)
         return w
 
+    def cursor_preview(self):
+        """Scheda «Tempi e loop» di una cue video aperta e cursore spostato: l'uscita (e la sua anteprima)
+        mostrano il fotogramma al cursore, come con la scheda Video / Immagine."""
+        tl = self.timeline
+        try:
+            return (tl is not None and self.cue is not None and self.cue.type == "video" and tl.isVisible()
+                    and getattr(tl, "cursor_used", False))
+        except RuntimeError:
+            return False
+
     def refresh_fields(self):
         bars = list(self.findChildren(PresetBar))   # anche quella accanto ai tab
         if self.preset_bar is not None and self.preset_bar not in bars:

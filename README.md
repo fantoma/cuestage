@@ -356,7 +356,8 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
 
 - the audio is a **white upper half-wave** along the bottom (up to half the height); for **video** cues it is drawn in
   transparency over a strip of **thumbnails** of the video. The thumbnails are made in the background the first time
-  (only the key frames when possible, so it is quick even for long videos) and kept in a disk cache (`cache/thumbs` in
+  (first a quick version from the key frames, then the exact one, decoding the whole video: up to 600
+  thumbnails, so they match the time even when zoomed in) and kept in a disk cache (`cache/thumbs` in
   the user data folder, at most 400 videos): they are made again only if the file changes;
 - the **orange envelope** of the cue: its squares set **fade in** and **fade out**, its horizontal line sets the
   **opacity** (video) or the **volume** (audio);
@@ -373,11 +374,19 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   redundant instances each one runs them by itself;
 - **keyframes**: right-click › “Add audio keyframe here” (video also “image keyframe”) with the preset to use; drag the
   ◆ to move it, right-click it to change preset or delete it;
-- a **click** or a **drag** moves the cursor, which also sets the time shown by the Audio tab matrix (and the
+- a **click** or a **drag** moves the cursor: for video cues the video output and its preview show the frame at the
+  cursor (unless the cue is playing or BLIND is on); it also sets the time shown by the Audio tab matrix (and the
   frame of the Video / Image tab);
+- **opacity points** (video): choose **◐ Opacity** next to the loop settings (**∿ Volume** is the default), then
+  double-click or Ctrl+click on the graph adds an opacity point (yellow squares, dashed line), dragged like the volume
+  points and deleted with a right-click. The curve gives the opacity of the picture at each moment, in place of the
+  cue's opacity; fades and keyframes still apply. The buttons **✕ volume curve** and **✕ opacity curve** on the marker row (and the right-click menu)
+  clear them;
 - double-click or Ctrl+click adds a volume curve point; wheel = zoom, Shift+wheel or middle-button drag = scroll.
 
-The keyframe timeline with lanes is no longer in this tab: for video cues it is in the “Video / Image” tab.
+The keyframe timeline with lanes is no longer shown (neither here nor in the “Video / Image” tab): keyframes, markers
+and points are managed on the graph, and its cursor also sets the frame shown in the “Video / Image” tab. Keyframes
+of image cues made with earlier versions keep working but can no longer be edited.
 
 ## Crop, position and perspective
 
@@ -422,8 +431,7 @@ the cue that used it.
 
 ### Preset keyframes
 
-The timeline above the views of the “Video / Image” tab contains the **keyframes**, on two lanes (for audio cues, and also
-for video, keyframes are added, moved and changed directly on the waveform of the “Times and loop” tab, see above):
+The **keyframes** (added, moved and changed on the graph of the “Times and loop” tab, see above) are of two kinds:
 - **Image** (orange): the video part of the presets — crop, offset, size, distortion, perspective, opacity;
 - **Audio** (light blue): audio presets — volume, **matrix** and **output volumes**.
 
@@ -623,14 +631,11 @@ card instead of direct access (hw:), which is more sensitive to delays.
 ## Markers
 
 All the markers of a cue are visible everywhere, with the same colours: IN (green), OUT (red), loop (yellow, with
-the repetitions), fade in/out (ramps and dashed lines), volume curve points (pink), image keyframes (orange ◆)
+the repetitions), fade in/out (ramps and dashed lines), volume curve points (pink), opacity points (yellow squares), user markers (cyan), image keyframes (orange ◆)
 and audio keyframes (light blue ◆; hollow = “base”).
 
 - **Waveform** (“Times and loop” tab): IN/OUT, loop, fades, curve and also the keyframes, placed at the
   file position (a keyframe that falls in a loop repetition is marked as such).
-- **Keyframe timeline** (“Video / Image” tab), in cue time: “Markers” lane with IN/OUT, loop
-  with its repetitions, fades and curve points, above the keyframe lanes; ◀ / ▶ arrows to move from one marker
-  to another. The timeline cursor also appears on the waveform as a dashed line.
 - **Progress bars** during playback (“Status” column and “Active cues” panel): real cue time with the loop
   unrolled into its repetitions, fade ramps, curve and keyframes; with an infinite loop the cursor runs inside
   the loop region. Hovering a marker shows its description.

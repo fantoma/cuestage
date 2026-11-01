@@ -781,7 +781,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         want = None
         cp = self.inspector.crop_panel
         try:
-            if cp is not None and cp.isVisible() and not cp.is_blind() \
+            if cp is not None and (cp.isVisible() or self.inspector.cursor_preview()) and not cp.is_blind() \
                     and cp.cue.id not in self.ctrl.instances:
                 img = cp.still()
                 if img is not None and not img.isNull():

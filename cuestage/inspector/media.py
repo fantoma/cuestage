@@ -476,11 +476,37 @@ class MediaTabsMixin:
                           "risparmiare memoria con molti video grandi."))
             row.addWidget(pc)
         row.addStretch(1)
+        # strumenti del grafico: sulla riga dei marker, così la riga dei tempi resta intera
         from PySide6.QtWidgets import QToolButton
+        row = QHBoxLayout()
+        row.setSpacing(3)
+        if cue.type == "video":
+            # doppio clic / Ctrl+clic sul grafico: punto di volume o di opacità
+            from PySide6.QtWidgets import QButtonGroup
+            grp_pts = QButtonGroup(w)
+            for mode, text, tip in (("volume", tr("∿ Volume"), tr("Doppio clic o Ctrl+clic sul grafico: punto di volume")),
+                                    ("opacity", tr("◐ Opacità"), tr("Doppio clic o Ctrl+clic sul grafico: punto di opacità"))):
+                b = QToolButton()
+                b.setText(text)
+                b.setToolTip(tip)
+                b.setCheckable(True)
+                b.setChecked(mode == "volume")
+                b.setProperty("mode", mode)
+                grp_pts.addButton(b)
+                row.addWidget(b)
+            grp_pts.setExclusive(True)
+            grp_pts.buttonClicked.connect(lambda b: self.timeline.set_point_mode(b.property("mode")))
+            self._pts_group = grp_pts
         bc = QToolButton()
-        bc.setText("✕∿")
+        bc.setText(tr("✕ curva volume"))
         bc.setToolTip(tr("Cancella curva volume"))
         bc.clicked.connect(lambda: (cue.curve.clear(), self._timeline_changed()))
+        if cue.type == "video":
+            bo = QToolButton()
+            bo.setText(tr("✕ curva opacità"))
+            bo.setToolTip(tr("Cancella curva di opacità"))
+            bo.clicked.connect(lambda: (setattr(cue, "op_curve", []), self._timeline_changed()))
+            row.addWidget(bo)
         bz = QToolButton()
         bz.setText("⤢")
         bz.setToolTip(tr("Zoom tutto"))
@@ -503,6 +529,7 @@ class MediaTabsMixin:
         def goto(t):
             if self.timeline is not None:
                 self.timeline.cursor_t = t
+                self.timeline.cursor_used = True
                 self.timeline.update()
                 self.timeline.cursorMoved.emit(t)
         mp.gotoRequested.connect(goto)
@@ -513,6 +540,7 @@ class MediaTabsMixin:
                 tl.add_marker(tl.cursor_t if tl.cursor_t is not None else float(cue.start or 0))
         mp.addRequested.connect(add_here)
         self.timeline.changed.connect(mp.reload)
+        mp.head.addLayout(row)
         v.addWidget(mp)
         v.addStretch(1)
         self._media_info = info

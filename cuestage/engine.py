@@ -8,7 +8,7 @@ from PySide6.QtGui import QImage
 from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
 
 from .audio_engine import Voice, build_gains
-from .media import SR, Envelope, curve_arrays, curve_gain
+from .media import SR, Envelope, curve_arrays, curve_gain, curve_value
 from . import keyframes as kf
 from .model import db_to_lin
 from .remote import osc_send
@@ -544,6 +544,7 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             self.env_vol.ramp_to(now, lvl, c.fade_in)
             self.env_op.ramp_to(now, float(c.opacity), c.fade_in)
         self.curve = curve_arrays(c.curve)
+        self.op_curve = curve_arrays(getattr(c, "op_curve", None) or [])      # punti di opacità
         self.seeked = deck.loaded
         self.loops_left = (int(c.loop_count) - 1) if c.loop_count and c.loop_count > 0 else -1
         self.ended = False
@@ -716,7 +717,13 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
                 * self.kf_level_ratio * self.trim_gain * self.duck_gain() * self.ctrl.audio.duck.master_gain()
             # il lettore di sistema non può andare alla cuffia del preascolto: in preascolto tace
             self.aout.setVolume(0.0 if (self.blind or self.pfl) else max(0.0, min(1.0, vol)))
-        self.layer.opacity = min(1.0, self.env_op.get(now) * fo * self.kf_op_ratio * self.trim_op)
+        oc = 1.0
+        if getattr(self, "op_curve", None) is not None:
+            # la curva dà l'opacità assoluta: sostituisce quella della cue (fade e keyframe restano)
+            base = float(c.opacity)
+            v = max(0.0, min(1.0, curve_value(self.op_curve, pos)))
+            oc = v / base if base > 1e-3 else v
+        self.layer.opacity = min(1.0, self.env_op.get(now) * fo * self.kf_op_ratio * self.trim_op * oc)
 
     def stop(self, fade=0.0):
         self.user_stopped = True

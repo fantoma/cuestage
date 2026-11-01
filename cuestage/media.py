@@ -199,22 +199,24 @@ def grab_frame(path, t, max_side=1280):
 
 
 THUMB_H = 72          # altezza delle miniature dei video (pixel)
+THUMB_COLS = 20       # miniature per riga nell'immagine della cache
 THUMB_CACHE_FILES = 400
 
 
 def thumb_count(duration):
-    """Miniature per un video: una al secondo, da 8 a 120."""
-    return max(8, min(120, int(math.ceil(float(duration or 0)))))
+    """Miniature per un video: una al secondo, da 8 a 600 (video lunghi: una ogni durata/600 s)."""
+    return max(8, min(600, int(math.ceil(float(duration or 0)))))
 
 
-def _thumb_cache_path(path, n):
+def _thumb_cache_path(path, n, exact=True):
     import hashlib
     from .system import data_dir
     try:
         st = os.stat(path)
     except OSError:
         return None
-    key = hashlib.sha1(f"{os.path.abspath(path)}|{st.st_size}|{st.st_mtime_ns}|{n}|{THUMB_H}".encode()).hexdigest()
+    key = hashlib.sha1(f"{os.path.abspath(path)}|{st.st_size}|{st.st_mtime_ns}|{n}|{THUMB_H}|{THUMB_COLS}"
+                       f"|{'exact' if exact else 'key'}".encode()).hexdigest()
     return os.path.join(data_dir("cache", "thumbs"), f"{key}.png")
 
 
@@ -230,35 +232,51 @@ def _prune_thumb_cache(folder):
         pass
 
 
-def make_thumbs(path, duration):
-    """Striscia di miniature del video (PNG: n immagini affiancate, alte THUMB_H), conservata nella cache
-    su disco (cartella dei dati › cache/thumbs): si rifà solo se il file cambia. Restituisce (png, n)."""
+def cached_thumbs(path, duration):
+    """Miniature già nella cache su disco: (png, n, colonne, esatte) oppure None (prima le esatte)."""
+    n = thumb_count(duration)
+    for exact in (True, False):
+        cache = _thumb_cache_path(path, n, exact)
+        if cache and os.path.isfile(cache):
+            try:
+                with open(cache, "rb") as f:
+                    data = f.read()
+                os.utime(cache)                     # usata di recente: resta in cache
+                if data:
+                    return data, n, THUMB_COLS, exact
+            except OSError:
+                pass
+    return None
+
+
+def make_thumbs(path, duration, exact=True):
+    """Miniature del video: n immagini alte THUMB_H in una griglia di THUMB_COLS colonne; la i-esima è il
+    fotogramma al tempo i·durata/n. exact=False usa solo i fotogrammi chiave (molto più veloce, ma su video
+    con fotogrammi chiave radi le miniature sono in anticipo); exact=True decodifica tutto il video.
+    Si conservano nella cache su disco (cartella dei dati › cache/thumbs). Restituisce (png, n, colonne, esatte)."""
     if not FFMPEG or not duration or duration <= 0:
         return None
     n = thumb_count(duration)
-    cache = _thumb_cache_path(path, n)
+    cache = _thumb_cache_path(path, n, exact)
     if cache and os.path.isfile(cache):
         try:
             with open(cache, "rb") as f:
                 data = f.read()
-            os.utime(cache)                     # usata di recente: resta in cache
+            os.utime(cache)
             if data:
-                return data, n
+                return data, n, THUMB_COLS, exact
         except OSError:
             pass
-    vf = f"fps={n}/{float(duration):.3f},scale=-2:{THUMB_H},tile={n}x1"
-    data = b""
-    # prima solo i fotogrammi chiave (veloce); se non bastano, decodifica completa
-    for extra in (["-skip_frame", "nokey"], []):
-        try:
-            p = subprocess.run([FFMPEG, "-v", "error", "-nostdin", *extra, "-i", path, "-an", "-vf", vf,
-                                "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"],
-                               capture_output=True, check=False, timeout=300, **subprocess_flags())
-            data = p.stdout or b""
-        except (OSError, subprocess.SubprocessError):
-            data = b""
-        if data:
-            break
+    rows = int(math.ceil(n / THUMB_COLS))
+    vf = f"fps={n}/{float(duration):.3f}:round=near,scale=-2:{THUMB_H},tile={THUMB_COLS}x{rows}"
+    extra = [] if exact else ["-skip_frame", "nokey"]
+    try:
+        p = subprocess.run([FFMPEG, "-v", "error", "-nostdin", *extra, "-i", path, "-an", "-vf", vf,
+                            "-frames:v", "1", "-f", "image2pipe", "-vcodec", "png", "-"],
+                           capture_output=True, check=False, timeout=1800, **subprocess_flags())
+        data = p.stdout or b""
+    except (OSError, subprocess.SubprocessError):
+        data = b""
     if not data:
         return None
     if cache:
@@ -270,7 +288,7 @@ def make_thumbs(path, duration):
             _prune_thumb_cache(os.path.dirname(cache))
         except OSError:
             pass
-    return data, n
+    return data, n, THUMB_COLS, exact
 
 
 # ---------------------------------------------------------------- curve / fade
@@ -301,6 +319,14 @@ def curve_arrays(points):
         return None
     pts = sorted((float(t), float(d)) for t, d in points)
     return np.array([p[0] for p in pts]), np.array([p[1] for p in pts])
+
+
+def curve_value(arrays, t, default=1.0):
+    """Valore interpolato di una curva (tempi, valori) al tempo t; default se non c'è la curva."""
+    if arrays is None:
+        return default
+    ct, cv = arrays
+    return float(np.interp(t, ct, cv))
 
 
 def curve_gain(arrays, t):
@@ -400,12 +426,23 @@ class MediaLoader(QObject):
         return None
 
     def _load_thumbs(self, path):
+        """Prima le miniature in cache o quelle veloci (fotogrammi chiave), poi quelle esatte."""
         info = self.info.get(path) or probe(path)
+        dur = info.get("duration")
         if not info.get("has_video"):
             self.thumbs[path] = None
             return
-        self.thumbs[path] = make_thumbs(path, info.get("duration"))
-        self.thumbsReady.emit(path)
+        res = cached_thumbs(path, dur)
+        if res is None:
+            res = make_thumbs(path, dur, exact=False)
+        if res is not None:
+            self.thumbs[path] = res
+            self.thumbsReady.emit(path)
+        if res is None or not res[3]:
+            exact = make_thumbs(path, dur, exact=True)
+            if exact is not None or res is None:
+                self.thumbs[path] = exact
+                self.thumbsReady.emit(path)
 
     def preload_audio(self, path):
         if path and path not in self.audio:

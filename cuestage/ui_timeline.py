@@ -1,5 +1,7 @@
 """Editor grafico: forma d'onda, punti di inizio/fine, loop e curva di volume."""
 from .i18n import tr
+import math
+
 import numpy as np
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QBrush, QAction
@@ -39,6 +41,7 @@ class TimelineEditor(QWidget):
         self.playhead = None
         self.cursor_t = None          # cursore della timeline dei keyframe (tempo del file)
         self.thumbs = None            # (QImage striscia, n) miniature del video
+        self.point_mode = "volume"    # doppio clic / Ctrl+clic: punto di «volume» o di «opacity» (video)
         self.setMinimumHeight(102)
         self.setMouseTracking(True)
         self.setFocusPolicy(Qt.ClickFocus)
@@ -71,25 +74,48 @@ class TimelineEditor(QWidget):
         else:
             from PySide6.QtGui import QImage
             img = QImage.fromData(data[0])
-            self.thumbs = (img, int(data[1])) if not img.isNull() else None
+            cols = int(data[2]) if len(data) > 2 else int(data[1])
+            self.thumbs = (img, int(data[1]), max(1, cols)) if not img.isNull() else None
         self.update()
 
     def _draw_thumbs(self, p, r):
-        img, n = self.thumbs
-        tw = img.width() / max(1, n)
-        th = img.height()
+        img, n, cols = self.thumbs
+        rows = max(1, int(math.ceil(n / cols)))
+        tw = img.width() / cols
+        th = img.height() / rows
         if tw <= 0 or th <= 0 or self.duration <= 0:
             return
         w = r.height() * tw / th                     # miniature affiancate con le loro proporzioni
+        step = self.duration / n                     # la miniatura i è il fotogramma al tempo i·step
         p.save()
         p.setRenderHint(QPainter.SmoothPixmapTransform, True)
         p.setClipRect(r)
-        x = 0.0
-        while x < self.width():
-            t = self.x2t(x + w / 2)
-            i = max(0, min(n - 1, int(t / self.duration * n)))
-            p.drawImage(QRectF(x, r.top(), w, r.height()), img, QRectF(i * tw, 0, tw, th))
-            x += w
+        # ogni casella mostra il fotogramma più vicino al tempo del suo bordo sinistro, così l'immagine
+        # cambia dove cambia davvero anche con lo zoom (le caselle seguono la griglia dei tempi)
+        t0 = max(0.0, self.x2t(0))
+        i0 = int(t0 / step)
+        i = i0
+        while True:
+            x0 = self.t2x(i * step)
+            if x0 > self.width():
+                break
+            x1 = self.t2x((i + 1) * step)
+            k = max(0, min(n - 1, i))
+            src = QRectF((k % cols) * tw, (k // cols) * th, tw, th)
+            if x1 - x0 >= w * 0.98:
+                # zoom forte: la miniatura ha il suo intervallo tutto per sé, ripetuta per riempirlo
+                x = x0
+                while x < x1:
+                    p.drawImage(QRectF(x, r.top(), min(w, x1 - x), r.height()), img,
+                                QRectF(src.left(), src.top(), tw * min(1.0, (x1 - x) / w), th))
+                    x += w
+                i += 1
+            else:
+                # più intervalli in una casella: si mostra quello all'inizio della casella
+                p.drawImage(QRectF(x0, r.top(), w, r.height()), img, src)
+                i = max(i + 1, int(self.x2t(x0 + w) / step + 1e-9))
+            if i >= n:
+                break
         p.fillRect(r, QColor(20, 21, 28, 140))      # più scure: la forma d'onda resta leggibile
         p.restore()
 
@@ -126,6 +152,24 @@ class TimelineEditor(QWidget):
         r = self._plot()
         db = MAX_DB - (y - r.top()) / max(1, r.height()) * (MAX_DB - MIN_DB)
         return max(MIN_DB, min(MAX_DB, db))
+
+    def op2y(self, v):
+        r = self._plot()
+        return r.top() + (1.0 - max(0.0, min(1.0, float(v)))) * r.height()
+
+    def y2op(self, y):
+        r = self._plot()
+        return max(0.0, min(1.0, 1.0 - (y - r.top()) / max(1.0, r.height())))
+
+    def _op_points(self):
+        c = self.cue
+        if not isinstance(getattr(c, "op_curve", None), list):
+            c.op_curve = []
+        return c.op_curve
+
+    def set_point_mode(self, mode):
+        self.point_mode = mode if mode in ("volume", "opacity") else "volume"
+        self.update()
 
     def _markers(self):
         c = self.cue
@@ -222,6 +266,22 @@ class TimelineEditor(QWidget):
         else:
             p.setPen(QPen(QColor(255, 140, 220, 90), 1, Qt.DotLine))
             p.drawLine(QPointF(0, self.db2y(0)), QPointF(W, self.db2y(0)))
+        # curva di opacità (video)
+        ops = sorted(self._op_points()) if self._video_mode() else []
+        if ops:
+            path = QPainterPath()
+            path.moveTo(0, self.op2y(ops[0][1]))
+            for t, v in ops:
+                path.lineTo(self.t2x(t), self.op2y(v))
+            path.lineTo(W, self.op2y(ops[-1][1]))
+            p.setPen(QPen(QColor(255, 220, 120), 2, Qt.DashLine))
+            p.setBrush(Qt.NoBrush)
+            p.drawPath(path)
+            p.setPen(QPen(QColor(0, 0, 0, 180), 1))
+            p.setBrush(QBrush(QColor(255, 220, 120)))
+            for t, v in ops:
+                x, y = self.t2x(t), self.op2y(v)
+                p.drawRect(QRectF(x - 4.5, y - 4.5, 9, 9))
         # marcatori
         for name, (t, col, lab) in mk.items():
             x = self.t2x(t)
@@ -426,6 +486,7 @@ class TimelineEditor(QWidget):
         if t == self.cursor_t:
             return
         self.cursor_t = t
+        self.cursor_used = True
         self.update()
         self.cursorMoved.emit(t)
 
@@ -440,6 +501,10 @@ class TimelineEditor(QWidget):
     def _hit(self, pos):
         if self.cue is None:
             return None
+        if self._video_mode():
+            for i, (t, v) in enumerate(self._op_points()):
+                if abs(self.t2x(t) - pos.x()) < 7 and abs(self.op2y(v) - pos.y()) < 7:
+                    return ("opoint", i)
         for i, (t, db) in enumerate(self.cue.curve):
             if abs(self.t2x(t) - pos.x()) < 7 and abs(self.db2y(db) - pos.y()) < 7:
                 return ("point", i)
@@ -470,8 +535,8 @@ class TimelineEditor(QWidget):
             return
         hit = self._hit(pos)
         if e.button() == Qt.RightButton:
-            if hit and hit[0] == "point":
-                del self.cue.curve[hit[1]]
+            if hit and hit[0] in ("point", "opoint"):
+                del (self.cue.curve if hit[0] == "point" else self._op_points())[hit[1]]
                 self.changed.emit()
                 self.update()
             elif hit and hit[0] == "umark":
@@ -504,6 +569,16 @@ class TimelineEditor(QWidget):
             self._add_point(e.position())
 
     def _add_point(self, pos):
+        if self.point_mode == "opacity" and self._video_mode():
+            ops = self._op_points()
+            ops.append([round(self.x2t(pos.x()), 3), round(self.y2op(pos.y()), 3)])
+            ops.sort()
+            for i, (t, v) in enumerate(ops):
+                if abs(self.t2x(t) - pos.x()) < 1:
+                    self.drag = ("opoint", i)
+            self.changed.emit()
+            self.update()
+            return
         self.cue.curve.append([round(self.x2t(pos.x()), 3), round(self.y2db(pos.y()), 1)])
         self.cue.curve.sort()
         for i, (t, db) in enumerate(self.cue.curve):
@@ -521,6 +596,7 @@ class TimelineEditor(QWidget):
                     break
             hit = self._hit(pos)
             self.setCursor(Qt.SizeHorCursor if hit and hit[0] in ("marker", "fade_in", "fade_out", "umark", "kf")
+                           else Qt.PointingHandCursor if hit and hit[0] == "opoint"
                            else Qt.SizeVerCursor if hit and hit[0] in ("opacity", "level")
                            else Qt.PointingHandCursor if hit else Qt.ArrowCursor)
             return
@@ -577,6 +653,16 @@ class TimelineEditor(QWidget):
             self.changed.emit()
             self.update()
             return
+        if kind == "opoint":
+            ops = self._op_points()
+            i = self.drag[1]
+            if i < len(ops):
+                ops[i] = [t, round(self.y2op(pos.y()), 3)]
+                QToolTip.showText(e.globalPosition().toPoint(),
+                                  tr("{0}  opacità {1:.0f}%", fmt_time(t), ops[i][1] * 100), self)
+            self.changed.emit()
+            self.update()
+            return
         if kind == "point":
             i = self.drag[1]
             if i < len(c.curve):
@@ -607,6 +693,9 @@ class TimelineEditor(QWidget):
             return
         if d[0] == "point":
             self.cue.curve.sort()
+            self.changed.emit()
+        elif d[0] == "opoint":
+            self._op_points().sort()
             self.changed.emit()
         elif d[0] == "umark":
             self._user_markers().sort(key=lambda m: float(m.get("t", 0)))
@@ -712,6 +801,15 @@ class TimelineEditor(QWidget):
         m.addSeparator()
         act(tr("Aggiungi punto curva"), lambda: self._add_point(pos))
         act(tr("Cancella curva di volume"), lambda: c.curve.clear())
+        if self._video_mode():
+            def add_op():
+                mode = self.point_mode
+                self.point_mode = "opacity"
+                self._add_point(pos)
+                self.drag = None
+                self.point_mode = mode
+            m.addAction(tr("Aggiungi punto di opacità"), add_op)
+            act(tr("Cancella curva di opacità"), lambda: self._op_points().clear())
         act(tr("Reimposta IN/OUT"), lambda: (setattr(c, "start", 0.0), setattr(c, "end", 0.0)))
         m.addSeparator()
         act(tr("Mostra tutto"), self.zoom_all)

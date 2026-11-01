@@ -618,7 +618,7 @@ def t_inspector_layout(w):
     ins.tabs.setCurrentIndex(2)
     run(0.2)
     assert ins.timeline.height() == 114
-    assert wait_until(lambda: w.loader.thumbs.get(vid) is not None, 20), "miniature non create"
+    assert wait_until(lambda: (w.loader.thumbs.get(vid) or (0, 0, 0, False))[3], 30), "miniature esatte non create"
     run(0.2)
     assert ins.timeline.thumbs is not None and ins.timeline.thumbs[1] == md.thumb_count(3.0)
     # video: niente timeline dei keyframe nella scheda; fade e opacità si trascinano sulle miniature
@@ -648,6 +648,28 @@ def t_inspector_layout(w):
     tl.drag = None
     assert abs(v.opacity - 0.5) < 0.03, v.opacity
     v.fade_in, v.opacity = 0.0, 1.0
+    # punti di opacità (come quelli di volume), scelti con «◐ Opacità»
+    btn = [b for b in ins._pts_group.buttons() if b.property("mode") == "opacity"][0]
+    btn.click()
+    assert tl.point_mode == "opacity"
+    r = tl._plot()
+    tl._add_point(QPointF(tl.t2x(1.0), r.top() + r.height() * 0.75))
+    tl.drag = None
+    assert len(v.op_curve) == 1 and abs(v.op_curve[0][1] - 0.25) < 0.03 and v.curve == [], (v.op_curve, v.curve)
+    assert tl._hit(QPointF(tl.t2x(1.0), tl.op2y(v.op_curve[0][1]))) == ("opoint", 0)
+    from cuestage.media import curve_arrays, curve_value
+    assert abs(curve_value(curve_arrays(v.op_curve + [[2.0, 1.0]]), 1.5) - 0.625) < 0.01
+    v.op_curve = [[0.0, 0.3]]                                  # in riproduzione l'opacità segue la curva
+    v.fade_in = 0.0
+    w.ctrl.start_cue(v, cascade=False)
+    assert wait_until(lambda: v.id in w.ctrl.instances and abs(w.ctrl.instances[v.id].layer.opacity - 0.3) < 0.02, 6), \
+        getattr(w.ctrl.instances.get(v.id), "layer", None) and w.ctrl.instances[v.id].layer.opacity
+    w.ctrl.stop_all(0)
+    run(0.3)
+    v.op_curve = []
+    [b for b in ins._pts_group.buttons() if b.property("mode") == "volume"][0].click()
+    # nella scheda Video / Immagine la timeline dei keyframe non si vede
+    assert not ins.crop_panel.kbar.isVisible()
     cache = md._thumb_cache_path(vid, md.thumb_count(3.0))
     assert cache and os.path.isfile(cache)
     orig_ff = md.FFMPEG
