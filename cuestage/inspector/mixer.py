@@ -41,7 +41,9 @@ class MixerTabMixin:
         def ctl_changed(i):
             cue.mix_ctl = cc.itemData(i) or ""
             info = mm.control_info(cue.mix_target, cue.mix_ctl)
-            if info is not None and info.get("value") is not None:
+            if info is not None and info.get("type") == "action":
+                cue.mix_ctl_value = 1
+            elif info is not None and info.get("value") is not None:
                 cue.mix_ctl_value = int(info["value"])      # parte dal valore attuale della scheda
             self._emit()
             QTimer.singleShot(0, self.rebuild)
@@ -53,14 +55,20 @@ class MixerTabMixin:
         row.addWidget(rd)
         f.addRow(tr("Controllo"), row)
         if not ctls:
-            lab = QLabel(tr("Controlli non ancora letti: scheda collegata? (serve «amixer», pacchetto alsa-utils)"))
+            lab = QLabel(tr("Controlli non ancora letti: scheda collegata? (serve «amixer», pacchetto alsa-utils)")
+                         if "card" in cls.FIELDS
+                         else tr("Controlli non ancora letti: dispositivo collegato?"))
             lab.setStyleSheet("color:#e0b040;")
             lab.setWordWrap(True)
             f.addRow(lab)
         info = mm.control_info(cue.mix_target, cue.mix_ctl)
         res = QLabel()
         res.setStyleSheet("color:#999;")
-        if info is not None:
+        if info is not None and info["type"] == "action":
+            lab = QLabel(tr("Comando: la cue lo esegue al GO"))
+            lab.setStyleSheet("color:#999;")
+            f.addRow(tr("Valore"), lab)
+        elif info is not None:
             typ = info["type"]
             cur = int(cue.mix_ctl_value or 0)
             if typ == "bool":
@@ -427,7 +435,7 @@ class MixerTabMixin:
             if any("fader" in caps for _k, _n, caps in cls.sections(conf)):
                 acts.append(("duck", tr("Ducking: aggancia i fader alla curva del ducking")))
         if cls.CONTROLS:
-            acts.append(("control", tr("Imposta un controllo della scheda (interruttore, menu, volume)")))
+            acts.append(("control", tr("Imposta un controllo (interruttore, menu, volume, comando)")))
         for code, text in acts:
             ac.addItem(text, code)
         if ac.findData(cue.mix_action) < 0 and acts:

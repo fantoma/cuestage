@@ -1324,6 +1324,82 @@ def t_mixer_x32(w):
     assert spins, "il livello letto non compare nell'ispettore"
 
 
+def t_roland_video(w):
+    """Regie Roland V-8HD / V-1HD: byte MIDI esatti (porta finta), cue «Imposta un controllo» e comandi."""
+    import mido
+    from PySide6.QtWidgets import QLabel, QPushButton
+    from cuestage.i18n import tr
+    from cuestage.ui_mixers import ControlsBox, _ctl_text
+    sent = []
+
+    class FakeOut:
+        name = "V-8HD MIDI"
+
+        def send(self, msg):
+            sent.append(msg.hex() if msg.type == "sysex" else (msg.type, msg.channel, *msg.bytes()[1:]))
+
+        def close(self):
+            pass
+    old = mido.get_output_names, mido.open_output
+    mido.get_output_names = lambda: ["V-8HD MIDI", "V-1HD MIDI"]
+    mido.open_output = lambda name: FakeOut()
+    try:
+        sh = Show()
+        sh.settings["output_fullscreen"] = False
+        sh.settings["mixers"] = [dict(id="v8", name="V-8HD", driver="roland_v8hd", midi_out="V-8HD"),
+                                 dict(id="v1", name="V-1HD", driver="roland_v1hd", midi_out="V-1HD", midi_ch=2)]
+        sh.cues = [Cue("mixer", number="1", name="PGM 3", mix_target="v8", mix_action="control",
+                       mix_ctl="pgm", mix_ctl_value=2),
+                   Cue("mixer", number="2", name="AUTO 6", mix_target="v8", mix_action="control",
+                       mix_ctl="auto_to", mix_ctl_value=5),
+                   Cue("mixer", number="3", name="CUT", mix_target="v8", mix_action="control",
+                       mix_ctl="cut", mix_ctl_value=1),
+                   Cue("mixer", number="4", name="V1 CUT 4", mix_target="v1", mix_action="control",
+                       mix_ctl="cut_to", mix_ctl_value=3)]
+        w._set_show(sh)
+        run(0.2)
+        for _ in range(4):
+            w.go()
+        wait_until(lambda: len(sent) >= 9)
+        assert sent[0] == "F0 41 10 00 00 00 68 12 00 12 00 02 6C F7", sent
+        assert sent[1] == "F0 41 10 00 00 00 68 12 00 12 01 05 68 F7", sent
+        assert sent[2] == ("control_change", 0, 55, 127) and sent[3] == ("control_change", 0, 54, 127), sent
+        # V-1HD sul canale 2: ingresso 4 sul bus B (fuori onda) e fader tutto su B
+        assert sent[4:8] == [("control_change", 1, 0, 1), ("control_change", 1, 32, 0), ("program_change", 1, 3),
+                             ("control_change", 1, 17, 127)], sent
+        mm = w.ctrl.mixers
+        wait_until(lambda: mm.control_info("v8", "pgm") is not None)
+        done = []
+        mm.read_controls("v8", lambda ok, res: done.append(ok))
+        wait_until(lambda: done)
+        assert mm.control_info("v8", "pgm")["value"] == 2 and mm.control_info("v8", "pst")["value"] == 5
+        assert _ctl_text(mm.control_info("v8", "trans_time"), 15) == "1.5 s"
+        # audio: fader in dB secondo la tabella del manuale, mute
+        del sent[:]
+        mm.submit("v8", lambda d: (d.set_fader("ch", 9, 0.0), d.set_mute("main", 1, True)), "", report=False)
+        wait_until(lambda: len(sent) >= 2)
+        assert sent == [("control_change", 0, 44, 97), ("control_change", 0, 65, 1)], sent
+        # pannello: i comandi hanno il pulsante «Esegui»
+        box = ControlsBox(mm, "v8")
+        from PySide6.QtWidgets import QToolButton
+        for tb in box.findChildren(QToolButton):
+            tb.setChecked(True)
+        ex = [b for b in box.findChildren(QPushButton) if b.text() == tr("▶ Esegui")]
+        assert len(ex) == 2, len(ex)
+        del sent[:]
+        ex[0].click()
+        wait_until(lambda: sent)
+        assert sent == [("control_change", 0, 54, 127)], sent
+        box.deleteLater()
+        # ispettore: un comando non ha valore da scegliere
+        w.inspector.set_cue(sh.cues[2])
+        w.inspector.tabs.setCurrentIndex(w.inspector._tab_keys.index("Mixer"))
+        run(0.2)
+        assert any(lab.text() == tr("Comando: la cue lo esegue al GO") for lab in w.inspector.findChildren(QLabel))
+    finally:
+        mido.get_output_names, mido.open_output = old
+
+
 def t_osc_profile():
     from cuestage.osc_profiles import render
     assert render("chamsys_magicq", "go", {"pb": 3}) == ("/pb/3/go", "1")
@@ -1400,6 +1476,7 @@ if __name__ == "__main__":
     check("cue mixer su X32 simulato (mute a scena e fader)", lambda: t_mixer_x32(w))
     check("profilo OSC ChamSys MagicQ", t_osc_profile)
     check("lettura dei controlli ALSA", t_alsa_parser)
+    check("regie video Roland V-8HD / V-1HD via MIDI", lambda: t_roland_video(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))

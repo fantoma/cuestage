@@ -47,5 +47,8 @@ pannello mixer e nelle cue Mixer › «Imposta un controllo»:
                                #      "writable", "group"}]
     def set_control(self, key, value): ...
 ```
+Tipi: `int` (cursore; `"fmt": (scostamento, moltiplicatore, unità, decimali)` per mostrare il valore, es.
+`(0, 0.1, " s", 1)`), `bool`, `enum`, `action` (comando senza valore: pulsante «Esegui», la cue lo esegue al GO).
+`roland_video.py` (regie Roland V-8HD e V-1HD via MIDI su USB) è un esempio di driver solo «comandi».
 `schede_audio_alsa.py` (Focusrite Scarlett/Clarett e qualsiasi scheda ALSA) usa `cuestage.alsactl`
 (lettura e scrittura con «amixer») e il campo di configurazione `card` (id della scheda ALSA).

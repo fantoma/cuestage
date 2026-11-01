@@ -774,6 +774,29 @@ Change Rx ON on the given MIDI channel): if the table on the mixer has been chan
 uses the last value received, so move the fader on the mixer first. The 02R does not transmit: set the level in
 the cue. On these models the dB values are approximate (128-step scale).
 
+### Roland video switchers (V-8HD, V-1HD)
+
+The **Roland V-8HD** and **Roland V-1HD** video switchers are controlled over **MIDI via USB**: connect the switcher
+to the computer with the USB cable, add it in **Settings › Mixers…** (driver “Roland V-8HD” or “Roland V-1HD”) and
+choose its MIDI port (on Linux check that it appears with `amidi -l`). Their commands appear in the mixer panel
+(F10) and in a **Mixer cue › “Set a control”**, one command or value per cue.
+
+- **V-8HD** (MIDI channel fixed at 1): **Program (PGM)**, **Preset (PST)** and **AUX** input; **CUT to** /
+  **AUTO to** an input (puts it on preset and takes it to air); **CUT** and **AUTO TAKE** buttons; video fader;
+  transition type and times (MIX/WIPE, PinP 1/2, DSK); **memories 1–8**; PinP 1/2 on air, source, position, size,
+  zoom; DSK on air, source, key level/gain, mix level; SPLIT/VFX A/B on/off and type; OUTPUT FADE. Its audio mixer
+  appears as a mixer: channels 1–8 = HDMI inputs, 9 = AUDIO IN, Master = audio output, with mute and fader cues
+  (levels in dB from the table of the manual). PGM/PST/AUX and PinP/DSK on air use SysEx (DT1), the rest Control
+  Changes and Program Changes, as in the *V-8HD Reference Manual*.
+- **V-1HD** (on the unit: SETUP › MIDI › Rx SOURCE = USB, Rx CHANNEL = the channel set in CueStage): **bus A** and
+  **bus B** input; **CUT to** / **AUTO to** an input (loads it on the off-air bus and moves the A/B fader: the V-1HD
+  has no MIDI command for AUTO, so CueStage moves the fader over the **AUTO time**); cut to bus A / B; A/B fader;
+  transition type (WIPE, MIX, CUT); memories 1–8; EFFECTS A/B; OUTPUT FADE; FREEZE; audio levels of HDMI 1–4,
+  AUDIO IN, MIC and master (raw 0–127 values).
+
+The switchers do not report their state: the values shown are the last ones sent by CueStage (for the V-1HD,
+“CUT to” / “AUTO to” assume the fader starts on bus A). Check the commands on the unit before the show.
+
 ### “Mixer” panel (mutes)
 
 With at least one mixer configured the **≣ Mixer ▾** button (or F10) appears at the top: a panel with a tab per

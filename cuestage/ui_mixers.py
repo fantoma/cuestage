@@ -525,6 +525,11 @@ class ControlsBox(QWidget):
                 self.mm.set_control(self.mid, key, 1 if on else 0)
             b.toggled.connect(toggled)
             w = b
+        elif typ == "action":
+            w = QPushButton(tr("▶ Esegui"))
+            w.setFocusPolicy(Qt.NoFocus)
+            w.setFixedWidth(110)
+            w.clicked.connect(lambda _=False, key=key: self.mm.set_control(self.mid, key, 1))
         elif typ == "enum":
             w = QComboBox()
             w.setMinimumWidth(170)
@@ -573,9 +578,14 @@ def _ctl_text(c, raw):
         return "?"
     if c["type"] == "bool":
         return tr("acceso") if raw else tr("spento")
+    if c["type"] == "action":
+        return tr("esegui")
     if c["type"] == "enum":
         items = c.get("items") or []
         return items[raw] if 0 <= raw < len(items) else str(raw)
+    fmt = c.get("fmt")
+    if fmt:                                    # (scostamento, moltiplicatore, unità, decimali)
+        return f"{fmt[0] + raw * fmt[1]:.{fmt[3]}f}{fmt[2]}"
     db = c.get("db")
     if db:
         if db[0] == "minmax":
