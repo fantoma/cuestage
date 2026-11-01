@@ -366,6 +366,9 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   move it, double-click its label to rename it, right-click it to set IN, OUT or the loop there, or to delete it.
   “Go to marker” in the right-click menu moves the cursor. Markers are saved with the show;
 - under the graph, **IN, OUT, volume, fades** (and opacity for video) and the **loop** settings are on a single row;
+  when the cue has volume points (or, for video, opacity points), the **Volume** (or **Opacity**) field shows the value
+  of the curve **at the cursor** (with “@ time” next to it), and changing it moves the point at the cursor or creates
+  one there; without points it is the cue's value;
 - below it the **marker table**: for each marker its **name**, **time** (seconds in the file, editable; ⌖ moves the
   cursor there), a short **notes** field and the **action** performed when playback reaches the marker:
   **None**, **Recall Preset** (the cue goes to one of its presets, audio and video, with a **fade** of the given time and

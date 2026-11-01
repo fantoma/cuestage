@@ -446,14 +446,14 @@ class MediaTabsMixin:
         top.addWidget(QLabel("OUT"))
         top.addWidget(self._dspin("end", 0, 36000, 0.1, 3, special=tr("fine file")))
         top.addWidget(QLabel(tr("Volume")))
-        top.addWidget(self._dspin("level_db", MIN_DB, MAX_DB, 0.5, 1, " dB", special=tr("-∞ dB")))
+        top.addWidget(self._cursor_value_spin("volume"))
         top.addWidget(QLabel(tr("Fade in")))
         top.addWidget(self._dspin("fade_in", 0, 3600, 0.1, 2))
         top.addWidget(QLabel(tr("Fade out")))
         top.addWidget(self._dspin("fade_out", 0, 3600, 0.1, 2))
         if cue.type == "video":
             top.addWidget(QLabel(tr("Opacità")))
-            top.addWidget(self._opacity_spin())
+            top.addWidget(self._cursor_value_spin("opacity"))
         top.addSpacing(10)
         row = top                       # loop sulla stessa riga di IN, OUT, volume e fade
         lc = self._check("loop", tr("Loop"))
@@ -608,6 +608,102 @@ class MediaTabsMixin:
         h.addWidget(bp)
         h.addWidget(sp)
         h.addWidget(b1)
+        return w
+
+    def _cursor_value_spin(self, kind):
+        """Volume (dB) o opacità (%) nella riga dei tempi. Senza curva è il valore della cue; con la curva dei
+        punti mostra il valore al cursore del grafico e modificarlo sposta (o crea) il punto al cursore."""
+        import numpy as np
+        cue = self.cue
+        w = QWidget()
+        h = QHBoxLayout(w)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(3)
+        sp = QDoubleSpinBox()
+        sp.setKeyboardTracking(False)
+        if kind == "volume":
+            sp.setRange(MIN_DB, MAX_DB)
+            sp.setDecimals(1)
+            sp.setSingleStep(0.5)
+            sp.setSuffix(" dB")
+            sp.setSpecialValueText(tr("-∞ dB"))
+        else:
+            sp.setRange(0, 100)
+            sp.setDecimals(1)
+            sp.setSingleStep(1)
+            sp.setSuffix(" %")
+        lab = QLabel()
+        lab.setStyleSheet("color:#ffdc78; font-size:10px;")
+
+        def pts():
+            return (cue.curve if kind == "volume" else cue.op_curve) or []
+
+        def cursor():
+            tl = self.timeline
+            t = tl.cursor_t if tl is not None and tl.cursor_t is not None else None
+            return float(cue.start or 0) if t is None else float(t)
+
+        def value():
+            p_ = sorted(pts())
+            if kind == "volume":
+                lvl = float(cue.level_db)
+                if not p_:
+                    return lvl
+                c = float(np.interp(cursor(), [a for a, _b in p_], [b for _a, b in p_]))
+                return MIN_DB if c <= MIN_DB + 0.01 or lvl <= MIN_DB else max(MIN_DB, min(MAX_DB, lvl + c))
+            if not p_:
+                return float(cue.opacity) * 100
+            return max(0.0, min(1.0, float(np.interp(cursor(), [a for a, _b in p_], [b for _a, b in p_])))) * 100
+
+        def sync():
+            sp.blockSignals(True)
+            sp.setValue(value())
+            sp.blockSignals(False)
+            from ..media import fmt_time
+            if pts():
+                lab.setText(tr("@ {0}", fmt_time(cursor())))
+                sp.setToolTip(tr("Valore della curva al cursore ({0}): modificandolo si sposta o si crea il punto al "
+                                 "cursore", fmt_time(cursor())))
+            else:
+                lab.setText("")
+                sp.setToolTip(tr("Volume della cue") if kind == "volume" else tr("Opacità della cue"))
+            lab.setVisible(bool(pts()))
+
+        def changed(v):
+            p_ = pts()
+            if p_:
+                t = round(cursor(), 3)
+                if kind == "volume":
+                    val = MIN_DB if v <= MIN_DB + 0.01 else round(v - float(cue.level_db), 1)
+                else:
+                    val = round(v / 100.0, 3)
+                tol = 0.05
+                tl = self.timeline
+                if tl is not None and tl.width() > 0:
+                    tol = max(tol, 4 * (tl.v1 - tl.v0) / tl.width())      # 4 pixel del grafico
+                near = [i for i, (a, _b) in enumerate(p_) if abs(float(a) - t) <= tol]
+                if near:
+                    i = min(near, key=lambda i: abs(float(p_[i][0]) - t))
+                    p_[i] = [p_[i][0], val]
+                else:
+                    p_.append([t, val])
+                    p_.sort()
+            elif kind == "volume":
+                cue.level_db = float(v)
+            else:
+                cue.opacity = v / 100.0
+            self._emit()
+            sync()
+            if self.timeline is not None:
+                self.timeline.update()
+        sp.valueChanged.connect(changed)
+        sync()
+        self.bound.append((sp, sync))
+        if self.timeline is not None:
+            self.timeline.cursorMoved.connect(lambda _t: sync())
+            self.timeline.changed.connect(sync)
+        h.addWidget(sp)
+        h.addWidget(lab)
         return w
 
     def _opacity_spin(self):

@@ -471,7 +471,7 @@ def t_inspector_layout(w):
     """Ispettore: tab Base/Trigger/Tempi e loop/Audio/Video, preset audio+video insieme, «Solo trigger»,
     file modificabile, dimensione e zoom della vista del crop."""
     from PySide6.QtCore import QPointF, Qt
-    from PySide6.QtWidgets import QInputDialog, QLineEdit
+    from PySide6.QtWidgets import QDoubleSpinBox, QInputDialog, QLineEdit
     from cuestage.i18n import tr
     from cuestage.inspector.presets import CuePresetBar
     from cuestage.ui_cuelist import C_PLAYHEAD
@@ -680,6 +680,16 @@ def t_inspector_layout(w):
     v.fade_out = 1.0
     assert abs(opacity_at(v, v, 2.5, 3.0) - 0.8 * 0.5) < 0.01
     v.fade_out = 0.0
+    # il campo «Opacità» della riga dei tempi mostra la curva al cursore; modificandolo si crea il punto
+    page = ins.tabs.widget(2)
+    ops = [x for x in page.findChildren(QDoubleSpinBox) if x.suffix() == " %" and x.maximum() == 100]
+    assert len(ops) == 1, ops
+    tl._move_cursor(tl.t2x(1.0))
+    assert abs(ops[0].value() - 50.0) < 1.5, ops[0].value()
+    tl._move_cursor(tl.t2x(1.5))
+    ops[0].setValue(30.0)
+    assert any(abs(t_ - tl.cursor_t) < 0.01 and abs(v_ - 0.3) < 0.001 for t_, v_ in v.op_curve), v.op_curve
+    assert abs(v.opacity - 1.0) < 1e-6                         # il valore della cue non cambia
     v.op_curve = [[0.0, 0.3]]                                  # in riproduzione l'opacità segue la curva
     v.fade_in = 0.0
     w.ctrl.start_cue(v, cascade=False)
@@ -750,6 +760,19 @@ def t_inspector_layout(w):
     assert abs(tl.cursor_t - 1.2) < 0.05 and abs(ins.audio_kbar.cue_time() - 1.2) < 0.15, tl.cursor_t
     tl.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, QPointF(tl.t2x(1.2), y0), QPointF(0, 0),
                                      Qt.LeftButton, Qt.NoButton, Qt.NoModifier))
+    # campo «Volume»: con la curva mostra livello + curva al cursore e crea il punto al cursore
+    page = ins.tabs.widget(2)
+    vols = [x for x in page.findChildren(QDoubleSpinBox) if x.suffix() == " dB" and x.minimum() < -50]
+    a.curve = [[0.0, -6.0], [2.0, 0.0]]
+    a.level_db = -3.0
+    tl.update()
+    tl._move_cursor(tl.t2x(1.0))
+    vol = [x for x in vols if x.isVisible()][0]
+    assert abs(vol.value() + 6.0) < 0.3, vol.value()
+    vol.setValue(-10.0)
+    assert any(abs(t_ - tl.cursor_t) < 0.01 and abs(d_ + 7.0) < 0.05 for t_, d_ in a.curve), a.curve
+    assert a.level_db == -3.0
+    a.curve, a.level_db = [], 0.0
     sh2 = Show.from_data(sh.to_data(None), None)
     assert sh2.by_id(a.id).markers[0]["name"] == "M1"         # i marker si salvano con lo show
     # tabella dei marker sotto la riga di IN/OUT/fade/loop: nome, tempo, note, azione
