@@ -34,9 +34,10 @@ def _midi_names(output):
 
 
 class MixersDialog(QDialog):
-    def __init__(self, mixers, manager, parent=None):
+    def __init__(self, mixers, manager, parent=None, switchers=False):
         super().__init__(parent)
-        self.setWindowTitle(tr("Mixer"))
+        self.sw = bool(switchers)          # True = regie video (Impostazioni › Regie video…)
+        self.setWindowTitle(tr("Regie video") if self.sw else tr("Mixer"))
         self.mm = manager
         self.items = copy.deepcopy(mixers or [])
         self.cur = None
@@ -131,6 +132,7 @@ class MixersDialog(QDialog):
         ab.clicked.connect(self._add_found)
         gl.addWidget(ab)
         v.addWidget(gs)
+        gs.setVisible(not self.sw)
 
         pl = QHBoxLayout()
         self.plug_lab = QLabel()
@@ -156,16 +158,21 @@ class MixersDialog(QDialog):
         cur = self.driver.currentData()
         self.driver.blockSignals(True)
         self.driver.clear()
-        for did, cls in sorted(self.mm.registry.drivers.items(), key=lambda x: x[1].NAME):
+        drivers = self._drivers()
+        for did, cls in sorted(drivers.items(), key=lambda x: x[1].NAME):
             self.driver.addItem(cls.NAME, did)
         self.driver.setCurrentIndex(max(0, self.driver.findData(cur)))
         self.driver.blockSignals(False)
         errs = self.mm.registry.errors
-        txt = tr("Driver mixer: {0}. Plugin utente in {1}", len(self.mm.registry.drivers), USER_MIXER_DIR)
+        txt = (tr("Driver regie video: {0}. Plugin utente in {1}", len(drivers), USER_MIXER_DIR) if self.sw
+               else tr("Driver mixer: {0}. Plugin utente in {1}", len(drivers), USER_MIXER_DIR))
         if errs:
             txt += "\n⚠ " + "\n⚠ ".join(errs)
         self.plug_lab.setText(txt)
         self.plug_lab.setStyleSheet("color:#e0b040;" if errs else "color:#888;")
+
+    def _drivers(self):
+        return {did: cls for did, cls in self.mm.registry.drivers.items() if bool(cls.SWITCHER) == self.sw}
 
     def _label(self, m):
         cls = self.mm.registry.get(m.get("driver"))
@@ -189,7 +196,8 @@ class MixersDialog(QDialog):
         self.test_btn.setEnabled(self.cur is not None)
         self.result.clear()
         if self.cur is None:
-            self.notes.setText(tr("Aggiungi un mixer con «Aggiungi» oppure con la ricerca in rete."))
+            self.notes.setText(tr("Aggiungi una regia video con «Aggiungi» e scegli la sua porta MIDI.") if self.sw
+                               else tr("Aggiungi un mixer con «Aggiungi» oppure con la ricerca in rete."))
             return
         m = self.cur
         self.name.setText(m.get("name", ""))
@@ -285,7 +293,8 @@ class MixersDialog(QDialog):
 
     def _new(self, did, **kw):
         cls = self.mm.registry.get(did)
-        m = {"id": uuid.uuid4().hex[:8], "name": tr("Mixer {0}", len(self.items) + 1), "driver": did, "host": "",
+        m = {"id": uuid.uuid4().hex[:8], "driver": did, "host": "",
+             "name": tr("Regia {0}", len(self.items) + 1) if self.sw else tr("Mixer {0}", len(self.items) + 1),
              "port": cls.DEFAULT_PORT if cls else 0, "midi_ch": 1}
         if cls and cls.MODELS:
             m["model"] = cls.MODELS[0][0]
@@ -293,7 +302,7 @@ class MixersDialog(QDialog):
         return m
 
     def _add(self):
-        self.items.append(self._new(self.driver.currentData() or "behringer_x32"))
+        self.items.append(self._new(self.driver.currentData() or ("roland_v8hd" if self.sw else "behringer_x32")))
         self._fill_list(len(self.items) - 1)
 
     def _dup(self):
@@ -387,9 +396,9 @@ class ControlsBox(QWidget):
 
     @staticmethod
     def collapsed(g):
-        return g.startswith("Mix") or g.startswith("Routing") or g == "Altro"
+        return g.startswith("Mix") or g.startswith("Routing") or g in ("Altro", tr("Audio della regia"))
 
-    def __init__(self, mm, mid, parent=None):
+    def __init__(self, mm, mid, parent=None, title=None):
         super().__init__(parent)
         from PySide6.QtCore import QTimer
         from PySide6.QtWidgets import QToolButton
@@ -402,7 +411,7 @@ class ControlsBox(QWidget):
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 6, 0, 0)
         head = QHBoxLayout()
-        t = QLabel(tr("<b>Controlli della scheda</b>"))
+        t = QLabel(tr("<b>Controlli della scheda</b>") if title is None else title)
         head.addWidget(t)
         head.addStretch(1)
         rd = QPushButton(tr("⟲ Leggi"))
@@ -583,6 +592,9 @@ def _ctl_text(c, raw):
     if c["type"] == "enum":
         items = c.get("items") or []
         return items[raw] if 0 <= raw < len(items) else str(raw)
+    labels = c.get("labels")
+    if labels and 0 <= raw < len(labels):
+        return labels[raw]
     fmt = c.get("fmt")
     if fmt:                                    # (scostamento, moltiplicatore, unità, decimali)
         return f"{fmt[0] + raw * fmt[1]:.{fmt[3]}f}{fmt[2]}"
@@ -601,8 +613,9 @@ class MixerPanel(QFrame):
     """Finestrella a comparsa: i mute di ogni sezione del mixer, come pulsanti (rosso = muto)."""
     visibilityChanged = Signal(bool)
 
-    def __init__(self, manager, parent=None):
+    def __init__(self, manager, parent=None, switchers=False):
         super().__init__(parent, Qt.Tool | Qt.FramelessWindowHint)
+        self.sw = bool(switchers)         # pannello delle regie video: solo i comandi
         self.setAttribute(Qt.WA_ShowWithoutActivating)
         self.setFrameShape(QFrame.StyledPanel)
         self.setObjectName("mixPanel")
@@ -619,11 +632,12 @@ class MixerPanel(QFrame):
         v = QVBoxLayout(self)
         v.setContentsMargins(8, 6, 8, 8)
         head = QHBoxLayout()
-        t = QLabel(tr("Mixer · mute"))
+        t = QLabel(tr("Regie video") if self.sw else tr("Mixer · mute"))
         t.setStyleSheet("font-weight:bold;font-size:14px;")
         head.addWidget(t)
         head.addStretch(1)
         rb = QPushButton(tr("Leggi tutto"))
+        rb.setVisible(not self.sw)
         rb.setFocusPolicy(Qt.NoFocus)
         rb.setToolTip(tr("Legge dal mixer lo stato di tutti i mute"))
         rb.clicked.connect(self.read_all)
@@ -695,7 +709,7 @@ class MixerPanel(QFrame):
                     bl.addLayout(g)
                     pv.addWidget(box)
                 if cls.CONTROLS:
-                    pv.addWidget(ControlsBox(self.mm, conf.get("id")))
+                    pv.addWidget(ControlsBox(self.mm, conf.get("id"), title="" if self.sw else None))
             pv.addStretch(1)
             sa = QScrollArea()
             sa.setWidgetResizable(True)
@@ -765,8 +779,8 @@ class MixerPanel(QFrame):
         self.result.setStyleSheet("color:#6c6;" if ok else "color:#e66;")
 
     def popup_under(self, anchor):
-        self.resize(700, min(720, max(360, 120 + 70 * max([len(c.sections(m)) for m in self.mm.mixers
-                                                            for c in [self.mm.cls_for(m)] if c] or [3]))))
+        self.resize(700, 640 if self.sw else min(720, max(360, 120 + 70 * max(
+            [len(c.sections(m)) for m in self.mm.mixers for c in [self.mm.cls_for(m)] if c] or [3]))))
         g = anchor.mapToGlobal(QPoint(anchor.width(), anchor.height() + 4))
         x = g.x() - self.width()
         scr = anchor.screen().availableGeometry() if anchor.screen() else None

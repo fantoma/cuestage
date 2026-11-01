@@ -383,6 +383,9 @@ class MixerDriver:
     NAMES = False
     # controlli generici (schede audio: interruttori, menu, volumi): CONTROLS = True e i metodi qui sotto
     CONTROLS = False
+    # regia video (es. Roland V-8HD): configurata in Impostazioni › Regie video e comandata dalle cue
+    # «Regia video» invece che dal pannello e dalle cue Mixer
+    SWITCHER = False
 
     def list_controls(self):
         """[dict(key, name, type «int»/«bool»/«enum», min, max, items, db, value, writable, group)]"""
@@ -991,3 +994,25 @@ def fmt_numbers(nums):
         out.append(str(nums[i]) if i == j else f"{nums[i]}-{nums[j]}")
         i = j + 1
     return ", ".join(out)
+
+
+def migrate_switchers(show, registry):
+    """Show salvati quando le regie video stavano tra i mixer: le sposta in settings["switchers"] e
+    trasforma le loro cue Mixer «Imposta un controllo» in cue «Regia video». Restituisce True se ha cambiato."""
+    st = show.settings
+    moved = []
+    keep = []
+    for m in st.get("mixers") or []:
+        cls = registry.get(m.get("driver"))
+        (moved if cls is not None and cls.SWITCHER else keep).append(m)
+    if not moved:
+        return False
+    st["mixers"] = keep
+    st["switchers"] = list(st.get("switchers") or []) + moved
+    ids = {m.get("id") for m in moved}
+    for c in show.all_cues():
+        if c.type == "mixer" and c.mix_target in ids:
+            c.type = "switcher"
+            c.sw_target = c.mix_target
+            c.sw_cmds = [{"key": c.mix_ctl, "value": int(c.mix_ctl_value or 0)}] if c.mix_ctl else []
+    return True

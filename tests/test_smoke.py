@@ -1325,11 +1325,11 @@ def t_mixer_x32(w):
 
 
 def t_roland_video(w):
-    """Regie Roland V-8HD / V-1HD: byte MIDI esatti (porta finta), cue «Imposta un controllo» e comandi."""
+    """Regie video Roland V-8HD / V-1HD: impostazioni proprie, cue «Regia video», byte MIDI esatti (porta finta)."""
     import mido
-    from PySide6.QtWidgets import QLabel, QPushButton
+    from PySide6.QtWidgets import QComboBox, QPushButton, QToolButton
     from cuestage.i18n import tr
-    from cuestage.ui_mixers import ControlsBox, _ctl_text
+    from cuestage.ui_mixers import ControlsBox, MixersDialog, _ctl_text
     sent = []
 
     class FakeOut:
@@ -1346,42 +1346,51 @@ def t_roland_video(w):
     try:
         sh = Show()
         sh.settings["output_fullscreen"] = False
-        sh.settings["mixers"] = [dict(id="v8", name="V-8HD", driver="roland_v8hd", midi_out="V-8HD"),
-                                 dict(id="v1", name="V-1HD", driver="roland_v1hd", midi_out="V-1HD", midi_ch=2)]
+        # show salvato quando le regie stavano tra i mixer: regia e cue vengono spostate
+        sh.settings["mixers"] = [dict(id="v8", name="V-8HD", driver="roland_v8hd", midi_out="V-8HD")]
+        sh.settings["switchers"] = [dict(id="v1", name="V-1HD", driver="roland_v1hd", midi_out="V-1HD", midi_ch=2)]
         sh.cues = [Cue("mixer", number="1", name="PGM 3", mix_target="v8", mix_action="control",
                        mix_ctl="pgm", mix_ctl_value=2),
-                   Cue("mixer", number="2", name="AUTO 6", mix_target="v8", mix_action="control",
-                       mix_ctl="auto_to", mix_ctl_value=5),
-                   Cue("mixer", number="3", name="CUT", mix_target="v8", mix_action="control",
-                       mix_ctl="cut", mix_ctl_value=1),
-                   Cue("mixer", number="4", name="V1 CUT 4", mix_target="v1", mix_action="control",
-                       mix_ctl="cut_to", mix_ctl_value=3)]
+                   Cue("switcher", number="2", name="AUTO 6 + CUT", sw_target="v8",
+                       sw_cmds=[{"key": "auto_to", "value": 5}, {"key": "cut", "value": 1}]),
+                   Cue("switcher", number="3", name="V1 CUT 4", sw_target="v1",
+                       sw_cmds=[{"key": "cut_to", "value": 3}])]
         w._set_show(sh)
         run(0.2)
-        for _ in range(4):
+        assert sh.settings["mixers"] == [] and [m["id"] for m in sh.settings["switchers"]] == ["v1", "v8"]
+        assert sh.cues[0].type == "switcher" and sh.cues[0].sw_cmds == [{"key": "pgm", "value": 2}]
+        assert not w.mixers.mixers and w.sw_btn.isVisibleTo(w) and not w.mix_btn.isVisibleTo(w)
+        for _ in range(3):
             w.go()
-        wait_until(lambda: len(sent) >= 9)
+        wait_until(lambda: len(sent) >= 8)
         assert sent[0] == "F0 41 10 00 00 00 68 12 00 12 00 02 6C F7", sent
         assert sent[1] == "F0 41 10 00 00 00 68 12 00 12 01 05 68 F7", sent
         assert sent[2] == ("control_change", 0, 55, 127) and sent[3] == ("control_change", 0, 54, 127), sent
         # V-1HD sul canale 2: ingresso 4 sul bus B (fuori onda) e fader tutto su B
         assert sent[4:8] == [("control_change", 1, 0, 1), ("control_change", 1, 32, 0), ("program_change", 1, 3),
                              ("control_change", 1, 17, 127)], sent
-        mm = w.ctrl.mixers
-        wait_until(lambda: mm.control_info("v8", "pgm") is not None)
+        sm = w.switchers
         done = []
-        mm.read_controls("v8", lambda ok, res: done.append(ok))
+        sm.read_controls("v8", lambda ok, res: done.append(ok))
         wait_until(lambda: done)
-        assert mm.control_info("v8", "pgm")["value"] == 2 and mm.control_info("v8", "pst")["value"] == 5
-        assert _ctl_text(mm.control_info("v8", "trans_time"), 15) == "1.5 s"
-        # audio: fader in dB secondo la tabella del manuale, mute
+        assert sm.control_info("v8", "pgm")["value"] == 2 and sm.control_info("v8", "pst")["value"] == 5
+        assert _ctl_text(sm.control_info("v8", "trans_time"), 15) == "1.5 s"
+        assert _ctl_text(sm.control_info("v8", "lvl_9"), 97) == "+0.0 dB"
+        # audio della regia: livello e mute come comandi
         del sent[:]
-        mm.submit("v8", lambda d: (d.set_fader("ch", 9, 0.0), d.set_mute("main", 1, True)), "", report=False)
+        sm.set_control("v8", "lvl_9", 97)
+        sm.set_control("v8", "mute_out", 1)
         wait_until(lambda: len(sent) >= 2)
         assert sent == [("control_change", 0, 44, 97), ("control_change", 0, 65, 1)], sent
-        # pannello: i comandi hanno il pulsante «Esegui»
-        box = ControlsBox(mm, "v8")
-        from PySide6.QtWidgets import QToolButton
+        # elenco: comandi della cue in chiaro
+        txt = w.model.data(w.model.index(1, 0), 0)
+        for col in range(w.model.columnCount()):
+            t = w.model.data(w.model.index(1, col), 0) or ""
+            if "AUTO" in t and "V-8HD:" in t:
+                txt = t
+        assert tr("AUTO a") in txt and "HDMI 6" in txt, txt
+        # pannello delle regie: i comandi hanno il pulsante «Esegui»
+        box = ControlsBox(sm, "v8", title="")
         for tb in box.findChildren(QToolButton):
             tb.setChecked(True)
         ex = [b for b in box.findChildren(QPushButton) if b.text() == tr("▶ Esegui")]
@@ -1391,11 +1400,36 @@ def t_roland_video(w):
         wait_until(lambda: sent)
         assert sent == [("control_change", 0, 54, 127)], sent
         box.deleteLater()
-        # ispettore: un comando non ha valore da scegliere
-        w.inspector.set_cue(sh.cues[2])
-        w.inspector.tabs.setCurrentIndex(w.inspector._tab_keys.index("Mixer"))
+        w.toggle_switcher_panel()
         run(0.2)
-        assert any(lab.text() == tr("Comando: la cue lo esegue al GO") for lab in w.inspector.findChildren(QLabel))
+        assert w.sw_panel.isVisible() and w.sw_panel.tabs.count() == 2
+        w.sw_panel.hide()
+        # le regie non compaiono tra i driver dei mixer, e viceversa
+        d = MixersDialog([], w.mixers, w)
+        drv = [d.driver.itemData(i) for i in range(d.driver.count())]
+        assert "roland_v8hd" not in drv and "behringer_x32" in drv
+        d2 = MixersDialog([], w.switchers, w, switchers=True)
+        drv2 = [d2.driver.itemData(i) for i in range(d2.driver.count())]
+        assert set(drv2) == {"roland_v8hd", "roland_v1hd"}, drv2
+        d.deleteLater()
+        d2.deleteLater()
+        # ispettore: elenco dei comandi, aggiunta di un comando
+        c = sh.cues[1]
+        w.inspector.set_cue(c)
+        w.inspector.tabs.setCurrentIndex(w.inspector._tab_keys.index("Regia video"))
+        run(0.2)
+        combos = [cb for cb in w.inspector.findChildren(QComboBox) if cb.isVisible()
+                  and cb.findData("auto_to") >= 0]
+        assert len(combos) == 2 and combos[0].currentData() == "auto_to", [cb.currentData() for cb in combos]
+        addb = next(b for b in w.inspector.findChildren(QPushButton) if b.text() == tr("+ Aggiungi comando")
+                    and b.isVisible())
+        addb.click()
+        run(0.2)
+        assert len(c.sw_cmds) == 3
+        combos = [cb for cb in w.inspector.findChildren(QComboBox) if cb.isVisible() and cb.findData("memory") >= 0]
+        combos[-1].setCurrentIndex(combos[-1].findData("memory"))
+        run(0.2)
+        assert c.sw_cmds[2]["key"] == "memory"
     finally:
         mido.get_output_names, mido.open_output = old
 
@@ -1476,7 +1510,7 @@ if __name__ == "__main__":
     check("cue mixer su X32 simulato (mute a scena e fader)", lambda: t_mixer_x32(w))
     check("profilo OSC ChamSys MagicQ", t_osc_profile)
     check("lettura dei controlli ALSA", t_alsa_parser)
-    check("regie video Roland V-8HD / V-1HD via MIDI", lambda: t_roland_video(w))
+    check("regie video Roland V-8HD / V-1HD: impostazioni, cue Regia video, MIDI", lambda: t_roland_video(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))

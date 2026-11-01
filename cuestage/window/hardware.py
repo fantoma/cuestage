@@ -2,6 +2,8 @@
 from ..i18n import tr
 import traceback
 
+from PySide6.QtCore import QTimer
+
 
 FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 
@@ -36,7 +38,7 @@ class HardwareMixin:
         self.model.refresh()
         cue = getattr(self.inspector, "cue", None)
         if cue is not None and cue.type == "mixer" and cue.mix_target == mid and cue.mix_action == "control":
-            self.inspector.rebuild()
+            QTimer.singleShot(0, self.inspector.rebuild)   # può arrivare mentre l'ispettore si sta costruendo
 
     def mixers_dialog(self):
         from ..ui_mixers import MixersDialog
@@ -47,6 +49,50 @@ class HardwareMixin:
             self.show_data.dirty = True
             self.model.refresh()
             self.inspector.rebuild()
+
+    # ------------------------------------------------------------- regie video
+    def _set_switchers(self, lst):
+        self.switchers.set_mixers(lst)
+        if not hasattr(self, "sw_panel"):
+            return
+        has = bool(self.switchers.mixers)
+        self.sw_btn.setVisible(has)
+        try:
+            self.sw_panel.rebuild()
+        except Exception as e:
+            traceback.print_exc()
+            self.status(tr("✘ Pannello regie video: {0}", e))
+        if not has:
+            self.sw_panel.hide()
+
+    def _switcher_controls_changed(self, mid):
+        self.model.refresh()
+        cue = getattr(self.inspector, "cue", None)
+        if cue is not None and cue.type == "switcher" and cue.sw_target == mid:
+            QTimer.singleShot(0, self.inspector.rebuild)   # può arrivare mentre l'ispettore si sta costruendo
+
+    def switchers_dialog(self):
+        from ..ui_mixers import MixersDialog
+        d = MixersDialog(self.show_data.settings.get("switchers", []), self.switchers, self, switchers=True)
+        if d.exec():
+            self.show_data.settings["switchers"] = d.result_mixers()
+            self._set_switchers(self.show_data.settings["switchers"])
+            self.show_data.dirty = True
+            self.model.refresh()
+            self.inspector.rebuild()
+
+    def toggle_switcher_panel(self):
+        if not self.switchers.mixers:
+            self.switchers_dialog()
+            return
+        self.sw_btn.setVisible(True)
+        self.sw_btn.setChecked(not self.sw_panel.isVisible())
+
+    def _toggle_sw_panel(self, on):
+        if on and not self.sw_panel.isVisible():
+            self.sw_panel.popup_under(self.sw_btn)
+        elif not on and self.sw_panel.isVisible():
+            self.sw_panel.hide()
 
     def toggle_mixer_panel(self):
         if not self.mixers.mixers:

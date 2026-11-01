@@ -128,6 +128,10 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.mixers.finished.connect(self._mixer_done)
         self.mixers.namesChanged.connect(self._mixer_names_changed)
         self.mixers.controlsChanged.connect(self._mixer_controls_changed)
+        self.switchers = MixerManager()          # regie video: stessi driver (plugin con SWITCHER = True)
+        self.ctrl.switchers = self.switchers
+        self.switchers.finished.connect(self._mixer_done)
+        self.switchers.controlsChanged.connect(self._switcher_controls_changed)
         try:
             os.makedirs(USER_PLUGIN_DIR, exist_ok=True)
         except OSError:
@@ -255,6 +259,20 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self._build_shortcuts(self.mix_panel)
         bar.addWidget(self.mix_btn, 0, Qt.AlignVCenter)
         self.mix_btn.setVisible(False)
+        # pannello a scomparsa delle regie video (visibile se ce n'è almeno una configurata)
+        self.sw_btn = QPushButton(tr("◧ Regie ▾"))
+        self.sw_btn.setCheckable(True)
+        self.sw_btn.setFocusPolicy(Qt.NoFocus)
+        self.sw_btn.setFixedHeight(40)
+        self.sw_btn.setToolTip(tr("Comandi diretti delle regie video configurate (F11)"))
+        self.sw_btn.setStyleSheet("QPushButton{padding:0 10px;font-weight:bold;}"
+                                  "QPushButton:checked{background:#3a4a6a;color:white;}")
+        self.sw_panel = MixerPanel(self.switchers, self, switchers=True)
+        self.sw_panel.visibilityChanged.connect(self.sw_btn.setChecked)
+        self.sw_btn.toggled.connect(self._toggle_sw_panel)
+        self._build_shortcuts(self.sw_panel)
+        bar.addWidget(self.sw_btn, 0, Qt.AlignVCenter)
+        self.sw_btn.setVisible(False)
         # volume globale (master): vale per audio e video
         mv = QVBoxLayout()
         self.master_label = QLabel(tr("Volume master"))
@@ -575,6 +593,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         add(m, tr("Mixer e schede audio…"), self.mixers_dialog)
         add(m, tr("Pannello mixer"), self.toggle_mixer_panel, "F10")
         m.addSeparator()
+        add(m, tr("Regie video…"), self.switchers_dialog)
+        add(m, tr("Pannello regie video"), self.toggle_switcher_panel, "F11")
+        m.addSeparator()
         add(m, tr("Diventa slave…"), self.become_slave)
         self.act_leave = add(m, tr("Esci dalla modalità slave (diventa indipendente)"), self.cluster_promote)
         self.act_leave.setEnabled(False)
@@ -649,6 +670,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self._update_duck_btn()
         self._set_projectors(s.get("projectors") or [])
         self._set_mixers(s.get("mixers") or [])
+        self._set_switchers(s.get("switchers") or [])
         self._cluster_apply_settings()
         self.master_slider.blockSignals(True)
         self.master_slider.setValue(int(round(float(s.get("master_db", 0)) * 10)))
@@ -980,6 +1002,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.midi.close()
         self.projectors.shutdown()
         self.mixers.shutdown()
+        self.switchers.shutdown()
         self.web.stop()
         if self.output is not None:
             self.output.close()

@@ -16,12 +16,14 @@ from .model import (
 from .inspector.control import ControlTabsMixin
 from .inspector.media import MediaTabsMixin
 from .inspector.mixer import MixerTabMixin
+from .inspector.switcher import SwitcherTabMixin
 from .inspector.presets import PresetBar  # noqa: F401  (importata anche da qui)
 from .inspector.projector import ProjectorTabMixin
 from .inspector.text import TextTabMixin
 
 
-class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, ProjectorTabMixin, QWidget):
+class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, SwitcherTabMixin, ProjectorTabMixin,
+                QWidget):
     edited = Signal(bool)        # True se è cambiato il file (va ricaricato)
     testRequested = Signal(str)  # id cue da provare
     stopRequested = Signal(str)
@@ -308,6 +310,8 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
             add(self._tab_projector(), tr("Proiettore"), key="Proiettore")
         if t == "mixer":
             add(self._tab_mixer(), tr("Mixer"), key="Mixer")
+        if t == "switcher":
+            add(self._tab_switcher(), tr("Regia video"), key="Regia video")
         if t == "text":
             add(self._tab_text(), tr("Testo"), key="Testo")
         if t == "midiout":

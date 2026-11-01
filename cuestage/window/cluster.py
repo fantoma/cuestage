@@ -47,7 +47,8 @@ class ClusterMixin:
             outs = list(_m.get_output_names()) if _m else []
         except Exception:
             outs = []
-        return {"audio": audio, "midi_out": outs, "mixers": self.show_data.settings.get("mixers") or []}
+        return {"audio": audio, "midi_out": outs, "mixers": self.show_data.settings.get("mixers") or [],
+                "switchers": self.show_data.settings.get("switchers") or []}
 
     def _cluster_join(self, cid, name, addr, mode):
         what = tr("RIDONDANZA (esegue le stesse cue)") if mode == "redundancy" else tr("SLAVE (copia del progetto)")
@@ -231,6 +232,21 @@ class ClusterMixin:
                 diffs.append(why)
                 for c in sh.all_cues():
                     if c.type == "mixer" and c.mix_target == mid:
+                        bad[c.id] = why
+        # regie video
+        sw_master = {m.get("id"): m for m in (hw.get("switchers") or master_settings.get("switchers") or [])}
+        sw_local = {m.get("id"): m for m in sh.settings.get("switchers") or []}
+        for sid, m in sw_master.items():
+            lm = sw_local.get(sid)
+            why = None
+            if lm is None:
+                why = tr("regia video «{0}» non configurata qui", m.get('name'))
+            elif any((lm.get(k) or "") != (m.get(k) or "") for k in ("driver", "midi_out", "midi_ch")):
+                why = tr("regia video «{0}» configurata in modo diverso", m.get('name'))
+            if why:
+                diffs.append(why)
+                for c in sh.all_cues():
+                    if c.type == "switcher" and c.sw_target == sid:
                         bad[c.id] = why
         # uscita MIDI
         try:

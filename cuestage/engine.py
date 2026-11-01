@@ -1638,6 +1638,24 @@ class OscInstance(Instance):
         self.finish()
 
 
+class SwitcherInstance(Instance):
+    """Cue «Regia video»: invia in ordine i comandi alla regia (thread della regia: l'ordine è garantito)."""
+
+    def start(self, silent=False):
+        c = self.cue
+        sm = getattr(self.ctrl, "switchers", None)
+        conf = sm.find(c.sw_target) if sm is not None and c.sw_target else None
+        cmds = [d for d in (c.sw_cmds or []) if d.get("key")]
+        if conf is None:
+            self.ctrl.message.emit(tr("Regia video '{0}': nessuna regia selezionata", c.label()))
+        elif not cmds:
+            self.ctrl.message.emit(tr("Regia video '{0}': nessun comando", c.label()))
+        else:
+            for d in cmds:
+                sm.set_control(c.sw_target, d["key"], int(d.get("value") or 0))
+        self.finish()
+
+
 class MemoInstance(Instance):
     def start(self, silent=False):
         self.finish()
@@ -1646,7 +1664,8 @@ class MemoInstance(Instance):
 INSTANCE_CLASSES = {
     "audio": AudioInstance, "video": VideoInstance, "image": ImageInstance,
     "wait": WaitInstance, "fade": FadeInstance, "preset": PresetInstance, "control": ControlInstance,
-    "osc": OscInstance, "projector": ProjectorInstance, "mixer": MixerInstance, "memo": MemoInstance,
+    "osc": OscInstance, "projector": ProjectorInstance, "mixer": MixerInstance, "switcher": SwitcherInstance,
+    "memo": MemoInstance,
     "group": GroupInstance, "groupexit": GroupExitInstance, "stoppanel": StopPanelInstance, "text": TextInstance, "midiout": MidiOutInstance,
 }
 

@@ -220,6 +220,23 @@ class CueTableModel(QAbstractTableModel):
                 if cue.type == "groupexit":
                     tg = self.show.resolve_target(cue.target) if cue.target else self.show.by_id(cue.group)
                     return tr("⇥ esce da «{0}»", tg.label()) if tg else tr("— nessun gruppo —")
+                if cue.type == "switcher":
+                    sm = getattr(self.ctrl, "switchers", None)
+                    conf = sm.find(cue.sw_target) if sm and cue.sw_target else None
+                    who = (conf.get("name") or conf.get("midi_out")) if conf else tr("— nessuna regia —")
+                    parts = []
+                    for d in cue.sw_cmds or []:
+                        if not d.get("key"):
+                            continue
+                        info = sm.control_info(cue.sw_target, d["key"]) if sm else None
+                        if info is None:
+                            parts.append(f"{d['key']} = {d.get('value')}")
+                        elif info["type"] == "action":
+                            parts.append(info["name"])
+                        else:
+                            from .ui_mixers import _ctl_text
+                            parts.append(f"{info['name']} = {_ctl_text(info, int(d.get('value') or 0))}")
+                    return f"{who}: " + ("; ".join(parts) if parts else tr("— nessun comando —"))
                 if cue.type == "mixer":
                     from .mixers import KIND_SHORT, fmt_db
                     mm = getattr(self.ctrl, "mixers", None)

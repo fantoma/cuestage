@@ -8,17 +8,18 @@ import uuid
 from .system import local_path, portable_rel
 
 CUE_TYPES = ["audio", "video", "image", "text", "group", "groupexit", "fade", "preset", "control", "stoppanel",
-             "osc", "midiout", "projector", "mixer", "wait", "memo"]
+             "osc", "midiout", "projector", "mixer", "switcher", "wait", "memo"]
 TYPE_LABELS = {
     "audio": tr("Audio"), "video": tr("Video"), "image": tr("Immagine"), "fade": tr("Fade"),
     "preset": tr("Cambia preset"), "control": tr("Comando"), "osc": "OSC", "projector": tr("Proiettore"), "mixer": tr("Mixer"),
+    "switcher": tr("Regia video"),
     "group": tr("Gruppo"), "groupexit": tr("Esci dal gruppo"), "text": tr("Testo"), "midiout": tr("MIDI out"),
     "wait": tr("Attesa"), "memo": tr("Memo"), "stoppanel": tr("Stop panel"),
 }
 TYPE_ICONS = {
     "audio": "♪", "video": "▶", "image": "▣", "fade": "◢", "preset": "⇢", "control": "⌘", "projector": "⌖",
     "osc": "⇄", "wait": "⧗", "memo": "✎", "mixer": "≣", "group": "◫", "groupexit": "⇥", "text": "T", "midiout": "♫",
-    "stoppanel": "⊠",
+    "stoppanel": "⊠", "switcher": "◧",
 }
 
 # campi salvati nei preset (per tipo di preset)
@@ -140,6 +141,9 @@ class Cue:
         "mix_states": {},
         # azione «control» (schede audio): chiave del controllo e valore grezzo
         "mix_ctl": "", "mix_ctl_value": 0,
+        # cue Regia video: regia (id in settings["switchers"]) e comandi eseguiti in ordine al GO
+        # [{"key": controllo, "value": valore grezzo}]
+        "sw_target": "", "sw_cmds": [],
         # aspetto e comandi rapidi: colore (casella della griglia e riga della lista, "#rrggbb" o vuoto),
         # scorciatoia da tastiera (QKeySequence in formato portabile, es. "F5", "Ctrl+1"),
         # posizione nella griglia del PANEL GRID: [pagina, riga, colonna] (vuota = da assegnare)
@@ -282,6 +286,7 @@ DEFAULT_SETTINGS = {
     "web_pin": "",
     "web_projectors": True,  # pannello proiettori nell'interfaccia web   # GO su: "main" = sempre la MAIN · "panel" = la lista selezionata
     "projectors": [],
+    "switchers": [],       # regie video: [{id, name, driver, midi_out, midi_ch}]
     "mixers": [],          # [{id, name, driver, host, port, midi_ch, model, fader_law, midi_out, midi_in, device}]      # [{id, name, driver, host, port, user, password, proj_id}]   # True = le modifiche nella scheda crop non vanno sull'uscita
 }
 

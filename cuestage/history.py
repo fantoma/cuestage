@@ -375,7 +375,7 @@ def describe(a, b):
     if a.settings != b.settings:
         sa, sb = json.loads(a.settings), json.loads(b.settings)
         keys = [k for k in sb if sa.get(k) != sb.get(k)]
-        names = {"ducking": "ducking", "preview": tr("preascolto"), "mixers": tr("mixer"),
+        names = {"ducking": "ducking", "preview": tr("preascolto"), "mixers": tr("mixer"), "switchers": tr("regie video"),
                  "projectors": tr("proiettori"), "go_target": tr("GO su"), "midi_map": "MIDI",
                  "midi_controls": "MIDI", "osc_devices": "OSC"}
         sub = sorted({names[k] for k in keys if k in names})

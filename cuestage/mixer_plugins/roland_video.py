@@ -1,4 +1,4 @@
-"""Plugin CueStage — regie video Roland V-8HD e V-1HD, via MIDI (USB).
+"""Plugin CueStage — regie video Roland V-8HD e V-1HD, via MIDI (USB): Impostazioni › Regie video, cue «Regia video».
 
 Collegamento: cavo USB dal computer alla regia; la regia compare come porta MIDI (su Linux: «amidi -l»).
 
@@ -8,7 +8,7 @@ V-8HD (porta USB-C REMOTE / USB, canale MIDI fisso 1; dal «V-8HD Reference Manu
   - CC16–20 PinP 1: sorgente 0–15 (HDMI 1–8, STILL 1–8), posizione H/V 10–100 (−50…50 %), dimensione 10–100 %,
     zoom 10–100 (100–1000 %) · CC21–25 PinP 2 · CC26–29 DSK: sorgente, level, gain, mix level
   - CC30/31 SPLIT/VFX A on/off e tipo · CC32/33 SPLIT/VFX B · CC34/35 OUTPUT FADE verso sinistra / destra 0–63
-  - CC36–43 livello audio ingressi 1–8 · CC44 AUDIO IN · CC45 uscita (tabella in dB a 128 passi)
+  - CC36–43 livello audio ingressi 1–8 · CC44 AUDIO IN · CC45 uscita (tabella in dB a 128 passi, vedi V8_LEVEL_DB)
   - CC54 CUT · CC55 AUTO TAKE · CC56–64 mute ingressi 1–8 e AUDIO IN · CC65 mute uscita
   - Program Change 0–7 = memorie 1–8
   - SysEx DT1  F0 41 10 00 00 00 68 12 aa bb cc dato somma F7:  00 12 00 PGM · 00 12 01 PST · 00 12 02 AUX
@@ -75,6 +75,7 @@ class _RolandMidi(MixerDriver):
     """Parte comune: porta MIDI in uscita, invio di CC / Program Change / SysEx, stato in memoria."""
     DEFAULT_PORT = 0
     CONTROLS = True
+    SWITCHER = True
     CHANNEL_FIXED = None            # V-8HD: canale fisso
 
     def __init__(self, conf):
@@ -191,10 +192,8 @@ class RolandV8HD(_RolandMidi):
     FIELDS = ("midi_out",)
     CHANNEL_FIXED = 0
     MODEL = (0x00, 0x00, 0x00, 0x68)
-    SECTIONS = [("ch", 9, {"mute", "fader"}), ("main", 1, {"mute", "fader"})]
     NO_STATE = ("cut_to", "auto_to")
     NOTES = tr("Collega la regia al computer con il cavo USB e scegli la sua porta MIDI. Canale MIDI fisso (1). "
-               "Canali audio 1–8 = ingressi HDMI 1–8, canale 9 = AUDIO IN; Master = uscita audio. "
                "«CUT a» / «AUTO a» mettono l'ingresso in preset e lo mandano in onda (taglio o dissolvenza). "
                "La regia non rimanda il suo stato: i valori mostrati sono gli ultimi inviati da CueStage.")
 
@@ -262,6 +261,18 @@ class RolandV8HD(_RolandMidi):
             dict(key="out_fade", name=tr("OUTPUT FADE (− = sinistra, + = destra)"), type="int", min=-63, max=63,
                  group=G[5]),
         ]
+        lev = [f"{v8_level_to_db(i):+.1f} dB" if i else "−∞ dB" for i in range(128)]
+        names = [f"HDMI {i}" for i in range(1, 9)] + ["AUDIO IN"]
+        for i, nm in enumerate(names):
+            out.append(dict(key=f"lvl_{i + 1}", name=tr("{0} livello", nm), type="int", min=0, max=127,
+                            default=97, cc=36 + i, labels=lev, group=G[6]))
+            out.append(dict(key=f"mute_{i + 1}", name=tr("{0} muto", nm), type="bool", cc=56 + i, on=1,
+                            group=G[6]))
+        out += [
+            dict(key="lvl_out", name=tr("Uscita audio livello"), type="int", min=0, max=127, default=97, cc=45,
+                 labels=lev, group=G[6]),
+            dict(key="mute_out", name=tr("Uscita audio muta"), type="bool", cc=65, on=1, group=G[6]),
+        ]
         return out
 
     def _dt1(self, addr, value):
@@ -325,43 +336,11 @@ class RolandV8HD(_RolandMidi):
             self.cc(34, 0)
             self.cc(35, v)
 
-    # --- audio: sezioni mute / fader
-    def _audio_cc(self, kind, n, what):
-        if kind == "main":
-            return 65 if what == "mute" else 45
-        return (56 if what == "mute" else 36) + int(n) - 1
-
-    def set_mute(self, kind, n, muted):
-        self.check(kind, n, "mute")
-        self.cc(self._audio_cc(kind, n, "mute"), 1 if muted else 0)
-        self.state[("mute", kind, int(n))] = bool(muted)
-
-    def get_mute(self, kind, n):
-        self.check(kind, n, "mute")
-        v = self.state.get(("mute", kind, int(n)))
-        if v is None:
-            raise MixerError(tr("la regia non rimanda lo stato dei mute"))
-        return v
-
-    def set_fader(self, kind, n, db):
-        self.check(kind, n, "fader")
-        raw = v8_db_to_level(db)
-        self.cc(self._audio_cc(kind, n, "fader"), raw)
-        self.state[("fader", kind, int(n))] = v8_level_to_db(raw)
-
-    def get_fader(self, kind, n):
-        self.check(kind, n, "fader")
-        v = self.state.get(("fader", kind, int(n)))
-        if v is None:
-            raise MixerError(tr("la regia non rimanda i livelli"))
-        return v
-
 
 class RolandV1HD(_RolandMidi):
     ID = "roland_v1hd"
     NAME = tr("Roland V-1HD (regia video, MIDI via USB)")
     FIELDS = ("midi_out", "midi_ch")
-    SECTIONS = []
     NO_STATE = ("cut_to", "auto_to", "show_a", "show_b")
     RAMP_STEP = 0.03
     NOTES = tr("Collega la regia al computer con il cavo USB e scegli la sua porta MIDI. Sulla regia: SETUP › "

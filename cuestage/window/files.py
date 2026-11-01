@@ -115,6 +115,9 @@ class FilesMixin:
 
     def _set_show(self, show):
         old = dict(self.show_data.settings)
+        from ..mixers import migrate_switchers
+        if migrate_switchers(show, self.switchers.registry):     # regie video salvate tra i mixer
+            show.dirty = True
         self.ctrl.set_show(show)
         self.show_data = show
         self.model.set_show(show)

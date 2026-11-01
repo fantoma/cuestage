@@ -124,6 +124,7 @@ The web interface for phones and tablets and the start-up self-test messages are
 | **Fade** | Takes the volume and/or opacity of another cue to a value, with duration and shape (S, linear, dB). Presets “Fade OUT + stop” and “Fade IN” (starts the target from silence) |
 | **Command** | Play, Stop (with fade), Pause, Resume, Stop all, Move playhead |
 | **OSC** | Sends an OSC message (host, port, address, automatically typed arguments) |
+| **Video switcher** | Commands to a video switcher (Roland V-8HD, V-1HD via USB-MIDI), run in order: input on program/preset, CUT/AUTO, PinP, DSK, memories, effects, audio |
 | **Projector** | Command to a network video projector: power, shutter, input, freeze, lens, lens memory, specific commands (PJLink driver or plugin) |
 | **Wait** | Timed pause, useful in chains |
 | **Memo** | Note for the operator |
@@ -774,29 +775,6 @@ Change Rx ON on the given MIDI channel): if the table on the mixer has been chan
 uses the last value received, so move the fader on the mixer first. The 02R does not transmit: set the level in
 the cue. On these models the dB values are approximate (128-step scale).
 
-### Roland video switchers (V-8HD, V-1HD)
-
-The **Roland V-8HD** and **Roland V-1HD** video switchers are controlled over **MIDI via USB**: connect the switcher
-to the computer with the USB cable, add it in **Settings › Mixers…** (driver “Roland V-8HD” or “Roland V-1HD”) and
-choose its MIDI port (on Linux check that it appears with `amidi -l`). Their commands appear in the mixer panel
-(F10) and in a **Mixer cue › “Set a control”**, one command or value per cue.
-
-- **V-8HD** (MIDI channel fixed at 1): **Program (PGM)**, **Preset (PST)** and **AUX** input; **CUT to** /
-  **AUTO to** an input (puts it on preset and takes it to air); **CUT** and **AUTO TAKE** buttons; video fader;
-  transition type and times (MIX/WIPE, PinP 1/2, DSK); **memories 1–8**; PinP 1/2 on air, source, position, size,
-  zoom; DSK on air, source, key level/gain, mix level; SPLIT/VFX A/B on/off and type; OUTPUT FADE. Its audio mixer
-  appears as a mixer: channels 1–8 = HDMI inputs, 9 = AUDIO IN, Master = audio output, with mute and fader cues
-  (levels in dB from the table of the manual). PGM/PST/AUX and PinP/DSK on air use SysEx (DT1), the rest Control
-  Changes and Program Changes, as in the *V-8HD Reference Manual*.
-- **V-1HD** (on the unit: SETUP › MIDI › Rx SOURCE = USB, Rx CHANNEL = the channel set in CueStage): **bus A** and
-  **bus B** input; **CUT to** / **AUTO to** an input (loads it on the off-air bus and moves the A/B fader: the V-1HD
-  has no MIDI command for AUTO, so CueStage moves the fader over the **AUTO time**); cut to bus A / B; A/B fader;
-  transition type (WIPE, MIX, CUT); memories 1–8; EFFECTS A/B; OUTPUT FADE; FREEZE; audio levels of HDMI 1–4,
-  AUDIO IN, MIC and master (raw 0–127 values).
-
-The switchers do not report their state: the values shown are the last ones sent by CueStage (for the V-1HD,
-“CUT to” / “AUTO to” assume the fader starts on bus A). Check the commands on the unit before the show.
-
 ### “Mixer” panel (mutes)
 
 With at least one mixer configured the **≣ Mixer ▾** button (or F10) appears at the top: a panel with a tab per
@@ -824,6 +802,39 @@ show, so they stay visible with the mixer off too; they are read again with “�
 “Read all” in the panel. Allen & Heath Qu/SQ and Yamaha over MIDI do not provide names. The commands of each mixer
 go through a dedicated queue (in order, without blocking the show); the result appears in the status bar. New
 mixers are added with a plugin (see `cuestage/mixer_plugins/LEGGIMI.md`).
+
+## Video switchers (Roland V-8HD, V-1HD)
+
+Video switchers have their own settings, panel and cue type, separate from the mixers.
+
+- **Settings › Video switchers…**: add the switcher (driver “Roland V-8HD” or “Roland V-1HD”), connect it to the
+  computer with the USB cable and choose its MIDI port (on Linux check that it appears with `amidi -l`).
+  “Test connection” opens the port.
+- **◧ Switchers ▾** button at the top (or **F11**, also in the Settings menu): a tab per switcher with all its
+  commands grouped (Switching, Transitions, Memories, PinP and keyers, Effects, Video output, Switcher audio).
+  Menus, switches and sliders act immediately; commands without a value have a **▶ Run** button.
+- **“Video switcher” cue**: choose the switcher and a **list of commands** run in order at GO (e.g. PinP 1 source
+  = STILL 2, PinP 1 on air, AUTO to HDMI 3). **+ Add command**, ↑ ↓ to reorder, ✕ to remove, **Send now** to try
+  them. The cue list shows the commands in plain words.
+
+Commands:
+- **V-8HD** (MIDI channel fixed at 1): **Program (PGM)**, **Preset (PST)** and **AUX** input; **CUT to** /
+  **AUTO to** an input (puts it on preset and takes it to air); **CUT** and **AUTO TAKE**; video fader; transition
+  type and times (MIX/WIPE, PinP 1/2, DSK); **memories 1–8**; PinP 1/2 on air, source, position, size, zoom; DSK
+  on air, source, key level/gain, mix level; SPLIT/VFX A/B on/off and type; OUTPUT FADE; audio level (in dB, from
+  the table of the manual) and mute of HDMI 1–8, AUDIO IN and the audio output. PGM/PST/AUX and PinP/DSK on air use
+  SysEx (DT1), the rest Control Changes and Program Changes, as in the *V-8HD Reference Manual*.
+- **V-1HD** (on the unit: SETUP › MIDI › Rx SOURCE = USB, Rx CHANNEL = the channel set in CueStage): **bus A** and
+  **bus B** input; **CUT to** / **AUTO to** an input (loads it on the off-air bus and moves the A/B fader: the V-1HD
+  has no MIDI command for AUTO, so CueStage moves the fader over the **AUTO time**); cut to bus A / B; A/B fader;
+  transition type (WIPE, MIX, CUT); memories 1–8; EFFECTS A/B; OUTPUT FADE; FREEZE; audio levels of HDMI 1–4,
+  AUDIO IN, MIC and master (raw 0–127 values).
+
+The switchers do not report their state: the values shown are the last ones sent by CueStage (for the V-1HD,
+“CUT to” / “AUTO to” assume the fader starts on bus A). Check the commands on the unit before the show. Shows
+saved with a switcher among the mixers are converted when opened (the switcher moves to Video switchers and its
+Mixer cues become Video switcher cues). Other switchers can be added as plugins in the mixer plugin folder
+(`SWITCHER = True`, see `cuestage/mixer_plugins/LEGGIMI.md`).
 
 ## Secondary instances: master, slave and redundancy
 
@@ -984,7 +995,7 @@ the one below stays full until the end.
 ## Keyboard
 
 Space GO · Alt+←/→ previous/next text line · F6 Crossfade to the next · Ctrl+Shift+G group · Ctrl+E expand/collapse
-group · F10 mixer panel · Esc Stop all · F7 Pause · F8 Resume · F9 projector panel · Ctrl+T test cue · Ctrl+D
+group · F10 mixer panel · F11 video switcher panel · Esc Stop all · F7 Pause · F8 Resume · F9 projector panel · Ctrl+T test cue · Ctrl+D
 duplicate · Del delete · Ctrl+↑/↓ move · Ctrl+G geometry · Ctrl+S save · Ctrl+Z undo · Ctrl+Shift+Z / Ctrl+Y redo ·
 Ctrl+H history · Ctrl+Alt+V show versions. Files and folders can be dragged from the file manager into the list and
 cues can be reordered with the mouse.
