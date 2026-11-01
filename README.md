@@ -331,8 +331,9 @@ Under the list, the inspector of the selected cue has these tabs (each cue type 
 - **Audio** (audio, video): sound card, ducking, audio of the video, channel matrix.
 - **Video / Image** (video, image): size, layer, opacity, fit, crop, position, perspective and the visual editor.
 
-On the right of the tab row there is the cue's **preset** bar (see “Presets”). Moving from one cue to another the
-inspector stays on the same tab.
+On the right of the tab row there is the cue's **preset** bar (see “Presets”). The inspector remembers the **last tab
+chosen**, also after a restart: moving to a cue that does not have it shows that cue's first own tab, and the next cue
+that has it opens on it again.
 
 ## How each cue starts
 

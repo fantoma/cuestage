@@ -54,6 +54,11 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         lay.addWidget(self.header)
         self.tabs = QTabWidget()
         lay.addWidget(self.tabs)
+        from PySide6.QtCore import QSettings
+        self._tab_keys = []
+        self._tab_restoring = False
+        self._pref_tab = str(QSettings("CueStage", "CueStage").value("inspector_tab", "") or "")
+        self.tabs.currentChanged.connect(self._tab_chosen)
         self.loader.peaksReady.connect(self._media_ready)
         self.loader.thumbsReady.connect(self._media_ready)
         self.loader.infoReady.connect(self._media_ready)
@@ -235,7 +240,9 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         self.rebuild()
 
     def rebuild(self):
-        cur_title = self.tabs.tabText(self.tabs.currentIndex()) if self.tabs.count() else ""
+        keys = getattr(self, "_tab_keys", [])
+        cur_key = keys[self.tabs.currentIndex()] if 0 <= self.tabs.currentIndex() < len(keys) else ""
+        self._tab_restoring = True        # clear() e addTab() cambiano la scheda: non è una scelta dell'utente
         old_pages = [self.tabs.widget(i) for i in range(self.tabs.count())]
         self._text_redraw = None
         self.tabs.clear()
@@ -258,65 +265,81 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, P
         cue = self.cue
         if cue is None:
             self.header.setText(tr("Nessuna cue selezionata"))
+            self._tab_restoring = False
             return
         self.header.setText(tr("Cue {0} — {1}", cue.number or '·', TYPE_LABELS[cue.type]))
 
-        def add(widget, title, scroll=True):
+        self._tab_keys = []
+
+        def add(widget, title, scroll=True, key=None):
             # ogni scheda scorre se il pannello è basso: nessun campo resta nascosto
             if scroll:
                 widget = self._scrolled(widget)
             self.tabs.addTab(widget, title)
+            self._tab_keys.append(key or title)
 
-        add(self._tab_base(), tr("Base"))
-        add(self._tab_trigger(), tr("Trigger"))
+        add(self._tab_base(), tr("Base"), key="Base")
+        add(self._tab_trigger(), tr("Trigger"), key="Trigger")
         t = cue.type
         # video: la scheda Video / Immagine si costruisce prima, perché la sua timeline dei keyframe serve
         # anche alle schede Tempi e loop (cursore sulle miniature) e Audio (matrice al tempo del cursore)
         visual = self._tab_visual() if t in ("video", "image") else None
         if t in ("audio", "video"):
-            add(self._tab_media_time(), tr("Tempi e loop"))
-            add(self._tab_audio(), tr("Audio"))
+            add(self._tab_media_time(), tr("Tempi e loop"), key="Tempi e loop")
+            add(self._tab_audio(), tr("Audio"), key="Audio")
         if t == "image":
-            add(self._tab_image_time(), tr("Tempi"))
+            add(self._tab_image_time(), tr("Tempi"), key="Tempi e loop")
         if visual is not None:
-            add(visual, tr("Video / Immagine"), scroll=False)
+            add(visual, tr("Video / Immagine"), scroll=False, key="Video / Immagine")
         if t in ("audio", "video", "image"):
             # preset della cue (audio e video insieme), sulla riga dei tab
             self.preset_bar = self._preset_bar()
             self.tabs.setCornerWidget(self.preset_bar, Qt.TopRightCorner)
             self.preset_bar.show()
         if t == "fade":
-            add(self._tab_fade(), tr("Fade"))
+            add(self._tab_fade(), tr("Fade"), key="Fade")
         if t == "preset":
-            add(self._tab_preset(), tr("Cambia preset"))
+            add(self._tab_preset(), tr("Cambia preset"), key="Cambia preset")
         if t == "control":
-            add(self._tab_control(), tr("Comando"))
+            add(self._tab_control(), tr("Comando"), key="Comando")
         if t == "osc":
-            add(self._tab_osc(), "OSC")
+            add(self._tab_osc(), "OSC", key="OSC")
         if t == "projector":
-            add(self._tab_projector(), tr("Proiettore"))
+            add(self._tab_projector(), tr("Proiettore"), key="Proiettore")
         if t == "mixer":
-            add(self._tab_mixer(), tr("Mixer"))
+            add(self._tab_mixer(), tr("Mixer"), key="Mixer")
         if t == "text":
-            add(self._tab_text(), tr("Testo"))
+            add(self._tab_text(), tr("Testo"), key="Testo")
         if t == "midiout":
-            add(self._tab_midiout(), tr("MIDI out"))
+            add(self._tab_midiout(), tr("MIDI out"), key="MIDI out")
         if t == "group":
-            add(self._tab_group(), tr("Gruppo"))
+            add(self._tab_group(), tr("Gruppo"), key="Gruppo")
         if t == "groupexit":
-            add(self._tab_groupexit(), tr("Esci dal gruppo"))
+            add(self._tab_groupexit(), tr("Esci dal gruppo"), key="Esci dal gruppo")
         if t == "stoppanel":
-            add(self._tab_stoppanel(), tr("Stop panel"))
+            add(self._tab_stoppanel(), tr("Stop panel"), key="Stop panel")
         if t == "wait":
-            add(self._tab_wait(), tr("Attesa"))
+            add(self._tab_wait(), tr("Attesa"), key="Attesa")
         # resta sulla stessa scheda (per nome) passando da una cue all'altra; altrimenti la prima propria del tipo
-        titles = [self.tabs.tabText(i) for i in range(self.tabs.count())]
-        if cur_title in titles:
-            self.tabs.setCurrentIndex(titles.index(cur_title))
-        elif self.tabs.count() > 2:
-            self.tabs.setCurrentIndex(2)
-        else:
-            self.tabs.setCurrentIndex(0)
+        # l'ultima scheda scelta (anche dopo il riavvio); se questa cue non ce l'ha, la prima del suo tipo
+        try:
+            pref = self._pref_tab or cur_key
+            if pref in self._tab_keys:
+                self.tabs.setCurrentIndex(self._tab_keys.index(pref))
+            elif self.tabs.count() > 2:
+                self.tabs.setCurrentIndex(2)
+            else:
+                self.tabs.setCurrentIndex(0)
+        finally:
+            self._tab_restoring = False
+
+    def _tab_chosen(self, i):
+        """Scheda scelta dall'utente: si ricorda (anche al prossimo avvio)."""
+        if self._tab_restoring or not (0 <= i < len(self._tab_keys)):
+            return
+        self._pref_tab = self._tab_keys[i]
+        from PySide6.QtCore import QSettings
+        QSettings("CueStage", "CueStage").setValue("inspector_tab", self._pref_tab)
 
     def _hotkey_row(self, cue):
         from PySide6.QtGui import QKeySequence

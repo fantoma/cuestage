@@ -493,6 +493,16 @@ def t_inspector_layout(w):
     assert isinstance(ins.tabs.cornerWidget(Qt.TopRightCorner), CuePresetBar)
     ins.set_cue(b)
     assert tabs() == [tr("Base"), tr("Trigger")] and ins.tabs.cornerWidget(Qt.TopRightCorner) is None
+    # l'ultima scheda scelta si ricorda: anche passando per una cue che non ce l'ha, e al riavvio
+    ins.set_cue(v)
+    ins.tabs.setCurrentIndex(3)                                # Audio
+    ins.set_cue(b)
+    assert ins.tabs.currentIndex() == 0
+    ins.set_cue(v)
+    assert ins.tabs.tabText(ins.tabs.currentIndex()) == tr("Audio")
+    assert QSettings("CueStage", "CueStage").value("inspector_tab") == "Audio"
+    ins.tabs.setCurrentIndex(0)
+    ins.set_cue(b)
     # «Solo trigger»: «T» nella prima colonna, il GO la salta
     assert w.model.data(w.model.index(1, C_PLAYHEAD)) == "T"
     w.ctrl.set_playhead(0)
@@ -1303,6 +1313,7 @@ def t_mixer_x32(w):
             mix_channels="5", mix_level=0.0, mix_duck_db=12.0)
     sh.cues.append(d)
     w.inspector.set_cue(d)
+    w.inspector.tabs.setCurrentIndex(w.inspector._tab_keys.index("Mixer"))   # l'ispettore ricorda l'ultima scheda
     run(0.2)
     rb = next(b for b in w.inspector.findChildren(QPushButton) if tr("⟲ Leggi dal mixer") == b.text() and b.isVisible())
     rb.click()
