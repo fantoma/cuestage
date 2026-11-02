@@ -1624,6 +1624,27 @@ def t_bundle(w):
     w.qs.remove("last_show")                            # le finestre aperte dopo non devono riaprirlo
 
 
+def t_web_toggle(w):
+    """La casella dell'interfaccia web la accende / spegne subito; spenta, il QR è grigio."""
+    from cuestage.ui_dialogs import SettingsDialog
+    w.show_data.settings.update(web_enabled=False, web_port=18779, web_pin="")
+    w.web.stop()
+    d = SettingsDialog(w.show_data.settings, w.learn_midi, w, web_fn=w._web_switch)
+
+    def darkest():
+        img = d.web_qr.pixmap().toImage()
+        return min(img.pixelColor(x, y).lightness() for x in range(0, img.width(), 3) for y in range(0, img.height(), 3))
+    assert darkest() > 150, darkest()                     # spenta: grigio chiaro
+    d.web_on.setChecked(True)
+    assert w.web.server is not None and w.show_data.settings["web_enabled"]
+    assert darkest() < 40                                 # accesa: QR nero
+    d.web_on.setChecked(False)
+    assert w.web.server is None and not w.show_data.settings["web_enabled"]
+    assert darkest() > 150
+    d.reject()
+    w.show_data.dirty = False
+
+
 def t_event_triggers(w):
     """Trigger da eventi: ducking sopra / sotto soglia."""
     sh = Show()
@@ -1835,6 +1856,7 @@ if __name__ == "__main__":
     check("annulla / ripeti, cronologia e versioni dello show", lambda: t_history_versions(w))
     check("export / import bundle (ZIP con show e file)", lambda: t_bundle(w))
     check("trigger da eventi: ducking sopra / sotto soglia", lambda: t_event_triggers(w))
+    check("interfaccia web accesa / spenta dalla casella, QR grigio da spenta", lambda: t_web_toggle(w))
     w.show_data.dirty = False
     w.close()
     check("master + ridondanza: comandi, modifiche, heartbeat", t_cluster_redundancy)

@@ -916,7 +916,8 @@ the confirmation on the master: use it on the show network.
 ## Web interface
 
 **Settings › Audio, OSC and MIDI… › “Web interface” tab**: starts a small web server on the chosen port (default
-8080). The server answers on **all the computer's network addresses** (cable, Wi-Fi, USB…): the tab lists them all
+8080). The **Enable web interface** box turns the server on and off immediately (no need to confirm with OK);
+while it is off the QR code is greyed out. The server answers on **all the computer's network addresses** (cable, Wi-Fi, USB…): the tab lists them all
 with the name of their interface, and the drop-down chooses the one for the **QR code** to frame with the phone
 camera (the one of the network the phone is connected to); the other addresses are shown under the QR code, and
 when the server starts the status bar lists them all. With “Include the PIN in the QR code” whoever frames it gets

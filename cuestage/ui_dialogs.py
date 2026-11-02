@@ -36,12 +36,13 @@ MIDI_CONTROLS = [
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, settings, learn_fn, parent=None, rescan_fn=None):
+    def __init__(self, settings, learn_fn, parent=None, rescan_fn=None, web_fn=None):
         super().__init__(parent)
         self.setWindowTitle(tr("Impostazioni"))
         self.s = copy.deepcopy(settings)
         self.learn_fn = learn_fn
         self.rescan_fn = rescan_fn
+        self.web_fn = web_fn            # web_fn(acceso, porta, pin) -> bool: accende/spegne subito il server
         v = QVBoxLayout(self)
         from PySide6.QtWidgets import QTabWidget
         self.tabs = QTabWidget()
@@ -211,7 +212,8 @@ class SettingsDialog(QDialog):
         self.web_pin.textChanged.connect(lambda _t: self._update_qr())
         self.web_ip.currentIndexChanged.connect(lambda _i: self._update_qr())
         self.web_qr_pin.toggled.connect(lambda _b: self._update_qr())
-        self.web_on.toggled.connect(lambda _b: self._update_qr())
+        self.web_on.toggled.connect(self._web_toggled)
+        self._web_error = ""
         self._update_qr()
         pages[3].addWidget(gw)
 
@@ -586,16 +588,37 @@ class SettingsDialog(QDialog):
             url += "#pin=" + quote(pin)
         return url
 
+    def _web_toggled(self, on):
+        """La casella accende o spegne subito l'interfaccia web (senza aspettare OK)."""
+        self._web_error = ""
+        if self.web_fn is not None:
+            ok = self.web_fn(on, self.web_port.value(), self.web_pin.text().strip())
+            if on and not ok:
+                self._web_error = tr("Server web non avviato: porta {0} occupata?", self.web_port.value())
+                self.web_on.blockSignals(True)
+                self.web_on.setChecked(False)
+                self.web_on.blockSignals(False)
+        self._update_qr()
+
     def _update_qr(self):
-        from PySide6.QtGui import QPixmap
+        from PySide6.QtGui import QColor, QPainter, QPixmap
         from .qr import qr_image
         url = self.web_address()
+        on = self.web_on.isChecked()
         try:
-            pm = QPixmap.fromImage(qr_image(url, scale=6, border=3))
-            self.web_qr.setPixmap(pm.scaled(176, 176, Qt.KeepAspectRatio, Qt.FastTransformation))
+            pm = QPixmap.fromImage(qr_image(url, scale=6, border=3)).scaled(176, 176, Qt.KeepAspectRatio,
+                                                                            Qt.FastTransformation)
+            if not on:                                   # interfaccia spenta: QR grigio, non da inquadrare
+                grey = QPixmap(pm.size())
+                grey.fill(QColor("#d8d8d8"))
+                p = QPainter(grey)
+                p.setOpacity(0.22)
+                p.drawPixmap(0, 0, pm)
+                p.end()
+                pm = grey
+            self.web_qr.setPixmap(pm)
         except ValueError:
             self.web_qr.setText(tr("QR non disponibile"))
-        on = self.web_on.isChecked()
         self.web_qr.setEnabled(on)
         txt = tr("<b>{0}</b>", self.web_address(False))
         if self.web_pin.text().strip():
@@ -605,8 +628,10 @@ class SettingsDialog(QDialog):
                   if i != self.web_ip.currentIndex() and self.web_ip.itemData(i) != "127.0.0.1"]
         if others:
             txt += "<br>" + tr("Anche:") + " " + ", ".join(f"http://{ip}:{self.web_port.value()}/" for ip in others)
-        if not on:
-            txt += "<br><span style='color:#c90'>" + tr("Abilita l'interfaccia web e conferma con OK.") + "</span>"
+        if self._web_error:
+            txt += "<br><span style='color:#e66'>" + self._web_error + "</span>"
+        elif not on:
+            txt += "<br><span style='color:#c90'>" + tr("Interfaccia web spenta: spunta «Abilita interfaccia web» per accenderla.") + "</span>"
         else:
             txt += "<br><span style='color:#888'>" + tr("Telefono e computer devono essere sulla stessa rete.") + "</span>"
         self.web_url.setText(txt)

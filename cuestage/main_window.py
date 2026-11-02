@@ -723,8 +723,23 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self._open_cue_outputs()
         self.status(self.audio.status)
 
+    def _web_switch(self, on, port, pin):
+        """Interfaccia web accesa / spenta subito dalla casella delle impostazioni."""
+        s = self.show_data.settings
+        s.update(web_enabled=bool(on), web_port=int(port), web_pin=str(pin or ""))
+        self.show_data.dirty = True
+        if not on:
+            self.web.stop()
+            self.status(tr("Interfaccia web spenta"))
+            return True
+        ok = self.web.start(int(port), pin)
+        if not ok:
+            s["web_enabled"] = False
+        return ok
+
     def settings_dialog(self):
-        d = SettingsDialog(self.show_data.settings, self.learn_midi, self, rescan_fn=self._rescan_audio)
+        d = SettingsDialog(self.show_data.settings, self.learn_midi, self, rescan_fn=self._rescan_audio,
+                           web_fn=self._web_switch)
         if d.exec():
             old = dict(self.show_data.settings)
             self.show_data.settings = d.result_settings()
