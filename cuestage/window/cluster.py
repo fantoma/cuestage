@@ -296,6 +296,8 @@ class ClusterMixin:
         self._cluster_indicator()
 
     def _cluster_indicator(self):
+        if hasattr(self, "act_leave"):        # anche durante il primo download: si può sempre uscire
+            self.act_leave.setEnabled(self.cluster.role == "slave")
         if not hasattr(self, "cluster_btn"):
             return
         hub = self.cluster

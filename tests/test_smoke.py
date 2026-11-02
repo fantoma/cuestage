@@ -1491,6 +1491,80 @@ def t_cluster_redundancy():
             x.close()
 
 
+def t_cluster_slow_transfer():
+    """File grande su rete lenta: la secondaria non viene scollegata a metà, «Esci dalla modalità slave» è
+    attiva già durante il download, e un trasferimento interrotto chiude la sincronizzazione con un errore."""
+    import wave
+    from cuestage import cluster as cl
+    big = os.path.join(TMP, "grande.wav")
+    with wave.open(big, "wb") as wf:
+        wf.setnchannels(2)
+        wf.setsampwidth(2)
+        wf.setframerate(44100)
+        wf.writeframes(bytes(4 * 44100 * 18))           # ~3 MB di silenzio
+    a = MainWindow()
+    b = MainWindow()
+    old_send, old_timeout = cl.send_frame, cl.CLIENT_TIMEOUT
+
+    def slow_send(sock, lock, obj, payload=None):
+        if payload is not None and obj.get("t") == "chunk":
+            time.sleep(len(payload) / 2e6)              # ~2 MB/s
+        return old_send(sock, lock, obj, payload)
+    cl.send_frame = slow_send
+    cl.CLIENT_TIMEOUT = 0.5                             # prima: secondaria scollegata se il file durava di più
+    try:
+        sh = Show()
+        sh.settings["output_fullscreen"] = False
+        sh.cues = [Cue("audio", number="1", name="Grande", file=big)]
+        sh.save(os.path.join(TMP, "master2.cueshow"))
+        sh = Show.load(os.path.join(TMP, "master2.cueshow"))
+        sh.settings["output_fullscreen"] = False
+        a._set_show(sh)
+        old = dict(sh.settings)
+        sh.settings.update(cluster_enabled=True, cluster_port=18994)
+        a._apply_settings(old=old)
+        run(0.3)
+        done, prog = [], []
+        b.cluster.syncDone.connect(lambda ok, t: done.append((ok, t)))
+        b.cluster.syncProgress.connect(lambda t, d, n: prog.append(d))
+        b.cluster.connect_slave("127.0.0.1", 18994, "slave", "full", True, os.path.join(TMP, "slave2"), 300)
+        t0 = time.monotonic()
+        leave_during = False
+        while not done and time.monotonic() - t0 < 20:
+            run(0.05)
+            if prog and prog[-1] > 0 and not done:
+                leave_during = leave_during or b.act_leave.isEnabled()
+        assert done and done[0][0], done
+        assert leave_during, "«Esci dalla modalità slave» non attiva durante il download"
+        assert not b.cluster.lost and len(a.cluster.client_list()) == 1
+        local = os.path.join(TMP, "slave2", "grande.wav")
+        assert os.path.getsize(local) == os.path.getsize(big)
+        b.cluster_promote(ask=False)
+        run(0.2)
+        assert b.cluster.role is None and not b.act_leave.isEnabled()
+        # trasferimento interrotto dal master: la finestra riceve l'esito (non resta in attesa)
+        done.clear()
+        os.remove(local)
+        b.cluster.connect_slave("127.0.0.1", 18994, "slave", "full", True, os.path.join(TMP, "slave2"), 300)
+        t0 = time.monotonic()
+        while not (prog and b.cluster.role == "slave") and time.monotonic() - t0 < 5:
+            run(0.05)
+        prog.clear()
+        while not prog or prog[-1] < 300000:
+            run(0.02)
+        a.cluster.stop_master()
+        t0 = time.monotonic()
+        while not done and time.monotonic() - t0 < 5:
+            run(0.05)
+        assert done and not done[0][0], done
+    finally:
+        cl.send_frame, cl.CLIENT_TIMEOUT = old_send, old_timeout
+        for x in (a, b):
+            x.ctrl.stop_all(0)
+            x.show_data.dirty = False
+            x.close()
+
+
 if __name__ == "__main__":
     w = MainWindow()
     w.show()
@@ -1519,5 +1593,6 @@ if __name__ == "__main__":
     w.show_data.dirty = False
     w.close()
     check("master + ridondanza: comandi, modifiche, heartbeat", t_cluster_redundancy)
+    check("istanze: file grande su rete lenta, Esci dalla modalità slave", t_cluster_slow_transfer)
     print(f"\n{'Tutto bene' if not FAILED else f'{len(FAILED)} prove fallite: ' + ', '.join(FAILED)}")
     sys.exit(len(FAILED))

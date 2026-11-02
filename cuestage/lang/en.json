@@ -67,6 +67,7 @@
   ", {0} errori": ", {0} errors",
   "Ridondanza: i comandi arrivano dal master": "Redundancy: commands come from the master",
   "Collegamento al master interrotto: {0}": "Connection to the master lost: {0}",
+  "trasferimento interrotto: {0}": "transfer interrupted: {0}",
   "Scheda in ingresso «{0}» non trovata": "Input card “{0}” not found",
   "«{0}» ha {1} canali in ingresso: il canale {2} non esiste": "“{0}” has {1} input channels: channel {2} does not exist",
   "Impossibile aprire l'ingresso «{0}»: {1}": "Cannot open the input “{0}”: {1}",

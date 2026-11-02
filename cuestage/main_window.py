@@ -111,6 +111,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.cluster.masterLost.connect(self._cluster_lost)
         self.cluster.masterBack.connect(self._cluster_back)
         self.cluster.clientsChanged.connect(self._cluster_indicator)
+        self.cluster.roleChanged.connect(self._cluster_indicator)
         self.cluster.status.connect(lambda t: self.status(t))
         self.cluster.slaveShow.connect(self._cluster_slave_show)
         self.cluster.upload_dir_fn = self._cluster_upload_dir

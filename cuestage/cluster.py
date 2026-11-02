@@ -17,6 +17,7 @@ import os
 import socket
 import struct
 import threading
+from collections import deque
 import time
 import uuid
 
@@ -27,7 +28,8 @@ from .system import file_basename, local_path, portable_rel
 PROTO = 1
 DEFAULT_PORT = 53900
 HEARTBEAT_MS = 100
-CHUNK = 256 * 1024
+CHUNK = 64 * 1024               # blocchi piccoli: heartbeat e comandi passano tra un blocco e l'altro
+CLIENT_TIMEOUT = 15.0           # (master) secondaria che non manda più nulla per tanto tempo: scollegata
 DISCOVER_MSG = b"CUESTAGE-MASTER?"
 # metodi del controller che sulle istanze in ridondanza si ripetono identici
 REPLICATED = ("go", "start_cue", "trigger", "stop_cue", "stop_all", "stop_list", "pause_cue", "pause_all",
@@ -167,6 +169,7 @@ class ClusterHub(QObject):
     masterBack = Signal()
     status = Signal(str)
     slaveShow = Signal(object, str)                # (master) show modificato da una secondaria, nome
+    roleChanged = Signal()                         # master / slave / nessuno (anche dal thread di rete)
     _startWatch = Signal()
 
     def __init__(self, ctrl, parent=None):
@@ -329,6 +332,7 @@ class ClusterHub(QObject):
         self.hb_timer.start()
         self.change_timer.start()
         self.clientsChanged.emit()
+        self.roleChanged.emit()
         return True
 
     def stop_master(self):
@@ -343,6 +347,7 @@ class ClusterHub(QObject):
         self.server = self.udp = None
         if self.role == "master":
             self.role = None
+            self.roleChanged.emit()
         self.hb_timer.stop()
         self.change_timer.stop()
         self.clientsChanged.emit()
@@ -372,23 +377,63 @@ class ClusterHub(QObject):
             sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             cid = uuid.uuid4().hex[:8]
             self.clients[cid] = {"sock": sock, "lock": threading.Lock(), "addr": addr[0], "name": "?",
-                                 "mode": "slave", "accepted": False, "last": time.monotonic()}
+                                 "mode": "slave", "accepted": False, "last": time.monotonic(),
+                                 "q": deque(), "files": deque(), "cond": threading.Condition(), "closed": False}
             threading.Thread(target=self._client_loop, args=(cid,), daemon=True, name=f"cluster-{cid}").start()
+            threading.Thread(target=self._writer_loop, args=(cid,), daemon=True, name=f"cluster-w-{cid}").start()
 
     def _send_client(self, cid, obj, payload=None):
+        """Mette il messaggio in coda: lo spedisce il thread di scrittura del client (l'interfaccia e il
+        thread di lettura non restano mai bloccati da una rete lenta). Heartbeat e comandi passano
+        sempre davanti ai file in trasferimento."""
+        c = self.clients.get(cid)
+        if c is None or c["closed"]:
+            return False
+        with c["cond"]:
+            c["q"].append((obj, payload))
+            c["cond"].notify()
+        return True
+
+    def _writer_loop(self, cid):
         c = self.clients.get(cid)
         if c is None:
-            return False
+            return
+        cond = c["cond"]
         try:
-            send_frame(c["sock"], c["lock"], obj, payload)
-            return True
+            while not c["closed"]:
+                with cond:
+                    while not c["closed"] and not c["q"] and not c["files"]:
+                        cond.wait(1.0)
+                    if c["closed"]:
+                        return
+                    item = c["q"].popleft() if c["q"] else None
+                    job = c["files"][0] if item is None else None
+                if item is not None:
+                    send_frame(c["sock"], c["lock"], *item)
+                    continue
+                try:
+                    frame = next(job)              # un blocco per volta: poi di nuovo i messaggi urgenti
+                except StopIteration:
+                    with cond:
+                        if c["files"] and c["files"][0] is job:
+                            c["files"].popleft()
+                    continue
+                send_frame(c["sock"], c["lock"], *frame)
         except OSError:
             self._drop(cid)
-            return False
 
     def _drop(self, cid):
         c = self.clients.pop(cid, None)
         if c is not None:
+            with c["cond"]:
+                c["closed"] = True
+                c["q"].clear()
+                c["files"].clear()
+                c["cond"].notify_all()
+            try:
+                c["sock"].shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
             try:
                 c["sock"].close()
             except OSError:
@@ -410,7 +455,7 @@ class ClusterHub(QObject):
         try:
             hello, _ = recv_frame(sock)
             if hello.get("t") != "hello" or hello.get("proto") != PROTO:
-                self._send_client(cid, {"t": "reject", "why": tr("versione del protocollo diversa")})
+                send_frame(sock, c["lock"], {"t": "reject", "why": tr("versione del protocollo diversa")})
                 raise ConnectionError(tr("hello non valido"))
             c.update(name=str(hello.get("name") or c["addr"]), mode=hello.get("mode") or "slave")
             ev = {"ev": threading.Event(), "ok": False}
@@ -419,7 +464,7 @@ class ClusterHub(QObject):
             ev["ev"].wait(120)
             self._pending.pop(cid, None)
             if not ev["ok"]:
-                self._send_client(cid, {"t": "reject", "why": tr("richiesta rifiutata dal master")})
+                send_frame(sock, c["lock"], {"t": "reject", "why": tr("richiesta rifiutata dal master")})
                 raise ConnectionError("rifiutato")
             c["accepted"] = True
             self._send_client(cid, {"t": "welcome", "name": self.name, "id": self.instance_id,
@@ -466,6 +511,7 @@ class ClusterHub(QObject):
         try:
             while True:
                 m, payload = recv_frame(sock)
+                self.clients.get(cid, {})["last"] = time.monotonic()     # upload lungo: la secondaria è viva
                 t = m.get("t")
                 if t == "put_chunk":
                     if out is not None:
@@ -507,24 +553,41 @@ class ClusterHub(QObject):
         self._send_client(cid, self._show_message())
 
     def _send_file(self, cid, path):
+        """Richiesta di un file: lo spedisce il thread di scrittura, a blocchi (il thread di lettura resta
+        libero di ricevere gli heartbeat della secondaria, che altrimenti verrebbe scollegata)."""
         sh = self.show_fn()
         allowed = media_files(sh)
         if path not in allowed:
             self._send_client(cid, {"t": "file_err", "path": path, "why": tr("file non usato dallo show")})
             return
+        c = self.clients.get(cid)
+        if c is None:
+            return
+        with c["cond"]:
+            c["files"].append(self._file_frames(path))
+            c["cond"].notify()
+
+    @staticmethod
+    def _file_frames(path):
         try:
-            size = os.path.getsize(path)
-            self._send_client(cid, {"t": "file_begin", "path": path, "size": size})
-            with open(path, "rb") as f:
-                while True:
-                    block = f.read(CHUNK)
-                    if not block:
-                        break
-                    if not self._send_client(cid, {"t": "chunk"}, block):
-                        return
-            self._send_client(cid, {"t": "file_end", "path": path, "fp": fingerprint(path)})
+            f = open(path, "rb")
         except OSError as e:
-            self._send_client(cid, {"t": "file_err", "path": path, "why": str(e)})
+            yield {"t": "file_err", "path": path, "why": str(e)}, None
+            return
+        try:
+            yield {"t": "file_begin", "path": path, "size": os.fstat(f.fileno()).st_size}, None
+            while True:
+                try:
+                    block = f.read(CHUNK)
+                except OSError as e:
+                    yield {"t": "file_err", "path": path, "why": str(e)}, None
+                    return
+                if not block:
+                    break
+                yield {"t": "chunk"}, block
+        finally:
+            f.close()
+        yield {"t": "file_end", "path": path, "fp": fingerprint(path)}, None
 
     def _heartbeat(self):
         now = time.monotonic()
@@ -532,7 +595,7 @@ class ClusterHub(QObject):
         for cid, c in list(self.clients.items()):
             if not c.get("accepted"):
                 continue
-            if now - c["last"] > 5.0:             # lo slave non risponde più
+            if now - c["last"] > CLIENT_TIMEOUT:  # lo slave non risponde più
                 self._drop(cid)
                 continue
             self._send_client(cid, msg)
@@ -583,6 +646,7 @@ class ClusterHub(QObject):
                 pass
         if self.role == "slave":
             self.role = None
+            self.roleChanged.emit()
         self.lost = False
 
     def _send(self, obj):
@@ -609,6 +673,8 @@ class ClusterHub(QObject):
             self.role = "slave"
             self.last_hb = time.monotonic()
             self.lost = False
+            self._synced = False
+            self.roleChanged.emit()               # «Esci dalla modalità slave» subito, anche durante il download
             self._startWatch.emit()
             self._send({"t": "get_show"})
             first = True
@@ -622,6 +688,8 @@ class ClusterHub(QObject):
             if self.role != "slave":
                 self.syncDone.emit(False, str(e))
             elif self.sock is sock:
+                if not getattr(self, "_synced", True):     # interrotto durante la prima sincronizzazione
+                    self.syncDone.emit(False, tr("trasferimento interrotto: {0}", e))
                 self.status.emit(tr("Collegamento al master interrotto: {0}", e))
                 if not self.lost:                          # connessione chiusa = master perso subito
                     self.lost = True
@@ -639,9 +707,9 @@ class ClusterHub(QObject):
             return self._queue.pop(0), None
         while True:
             msg, payload = recv_frame(sock)
+            self.last_hb = time.monotonic()           # qualsiasi dato dal master: il master è vivo
             t = msg.get("t")
             if t == "hb":
-                self.last_hb = time.monotonic()
                 if self.lost:
                     self.lost = False
                     self.masterBack.emit()
@@ -705,9 +773,12 @@ class ClusterHub(QObject):
             out = None
             while True:
                 m, payload = recv_frame(sock)
+                self.last_hb = time.monotonic()       # i blocchi del file valgono come heartbeat
+                if self.lost:
+                    self.lost = False
+                    self.masterBack.emit()
                 t = m.get("t")
                 if t == "hb":
-                    self.last_hb = time.monotonic()
                     self._send({"t": "hb"})
                 elif t == "cmd":
                     self.commandReceived.emit(m.get("fn"), m.get("args"), m.get("kw"), m.get("seed"))
@@ -729,6 +800,10 @@ class ClusterHub(QObject):
                 elif t == "file_err":
                     if out is not None:
                         out.close()
+                        try:
+                            os.remove(tmp)
+                        except OSError:
+                            pass
                     errors.append(f"{f['rel']}: {m.get('why')}")
                     break
         # percorsi dello show rimappati sulla cartella locale
@@ -740,6 +815,7 @@ class ClusterHub(QObject):
                 "errors": errors, "downloaded": len(need), "files": len(files), "update": bool(msg.get("update"))}
         self.showReceived.emit(msg.get("data"), info)
         if first:
+            self._synced = True
             self.syncDone.emit(True, tr("{0} file scaricati su {1}", len(need), len(files))
                                      + (tr(", {0} errori", len(errors)) if errors else ""))
 
@@ -810,3 +886,4 @@ class ClusterHub(QObject):
         self.disconnect_slave()
         self.role = None
         self.lost = False
+        self.roleChanged.emit()
