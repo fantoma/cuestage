@@ -204,7 +204,8 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         except RuntimeError:
             return False
 
-    def refresh_fields(self):
+    def refresh_fields(self, skip=None):
+        """Rilegge i valori della cue nei campi. skip: widget (con il cursore) da non toccare."""
         bars = list(self.findChildren(PresetBar))   # anche quella accanto ai tab
         if self.preset_bar is not None and self.preset_bar not in bars:
             bars.append(self.preset_bar)
@@ -220,6 +221,8 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
             except RuntimeError:
                 self.audio_kbar = None
         for w, fn in self.bound:
+            if skip is not None and (w is skip or w.isAncestorOf(skip)):
+                continue
             w.blockSignals(True)
             try:
                 fn()

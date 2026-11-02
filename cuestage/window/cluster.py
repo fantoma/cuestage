@@ -93,11 +93,17 @@ class ClusterMixin:
             if info.get("seed"):
                 self.ctrl.seed_base, self.ctrl.seed_count = str(info["seed"][0]), int(info["seed"][1])
             self.act_leave.setEnabled(True)
+            changed = True
         elif self._lists_hash(new) == self._lists_hash(sh) and (new.settings is sh.settings or
                                                                  new.settings == sh.settings):
-            pass                     # è l'eco di una modifica fatta qui: niente da cambiare (non disturba l'editor)
+            changed = False          # è l'eco di una modifica fatta qui: niente da cambiare (non disturba l'editor)
+        elif hub.can_edit and self._show_hash() != getattr(self, "_slave_hash", None):
+            # modifiche fatte qui e non ancora partite: prima vanno al master, che poi rimanda lo show
+            # aggiornato (altrimenti si tornerebbe indietro mentre si scrive)
+            self._cluster_hw_check(info.get("hw") or {}, data.get("settings") or {})
+            return
         else:
-            self._cluster_replace(new, new.settings is not sh.settings)
+            changed = self._cluster_replace(new, new.settings is not sh.settings)
         self._slave_edit_state()
         try:
             self.show_data.save(path)
@@ -115,38 +121,95 @@ class ClusterMixin:
                 QMessageBox.warning(self, tr("Istanza secondaria"), msg)
             else:
                 self.status(msg.replace("\n", " "))
-        else:
+        elif changed or info["downloaded"]:
             self.status(tr("Show aggiornato dal master ({0} file scaricati)", info['downloaded'])
                         + (tr(" · ⚠ {0} differenze hardware", len(diffs)) if diffs else ""))
         self._cluster_indicator()
 
     def _cluster_replace(self, new, take_settings):
-        """Sostituisce liste e cue dello show aperto senza fermare le cue in corso."""
+        """Aggiorna liste e cue dello show aperto con quelle arrivate da un'altra istanza, senza fermare le
+        cue in corso e senza disturbare chi sta lavorando: le cue rimaste uguali non si toccano, quelle
+        cambiate si aggiornano sul posto (stesso oggetto: l'ispettore resta aperto e non perde il focus)."""
+        from ..model import Cue
         sh = self.show_data
         view_id = sh.current.id
-        sel = self.inspector.cue.id if getattr(self.inspector, "cue", None) else None
         old = dict(sh.settings)
         self._history_flush()
         self._hist_restoring = True
+        changed = set()
         try:
-            sh.lists = new.lists
+            before = [(l.id, [c.id for c in l.cues]) for l in sh.lists]
+            old_cues = {c.id: c for c in sh.all_cues()}
+            old_lists = {l.id: l for l in sh.lists}
+            lists = []
+            for nl in new.lists:
+                cues = []
+                for nc in nl.cues:
+                    oc = old_cues.get(nc.id)
+                    if oc is not None and oc.type == nc.type:
+                        if oc.to_dict(None) != nc.to_dict(None):
+                            for k in Cue.FIELDS:
+                                setattr(oc, k, getattr(nc, k))
+                            changed.add(oc.id)
+                        cues.append(oc)
+                    else:
+                        cues.append(nc)
+                        changed.add(nc.id)
+                ol = old_lists.get(nl.id)
+                if ol is not None:
+                    ol.name = nl.name
+                    ol.set_grid_data(nl.grid_data())
+                    ol.cues = cues
+                    lists.append(ol)
+                else:
+                    nl.cues = cues
+                    lists.append(nl)
+            sh.lists = lists
             sh.versions = new.versions
             sh.active_version = new.active_version
             sh.view = next((i for i, l in enumerate(sh.lists) if l.id == view_id), 0)
-            if take_settings:
+            if take_settings and new.settings != sh.settings:
                 sh.settings = new.settings
                 self._apply_settings(old=old)
-            self.model.set_show(sh)
+            same = before == [(l.id, [c.id for c in l.cues]) for l in sh.lists]
+            cur = self.inspector.cue
+            still = cur is not None and any(c is cur for c in sh.all_cues())
+            if same:
+                self.model.refresh()
+            else:
+                self.model.set_show(sh)             # righe cambiate: la selezione si ripristina qui sotto
+                self._apply_collapse()
+                self._update_tabs()
+                if still and sh.current.index_of(cur.id) >= 0:
+                    self._select_guard = True
+                    try:
+                        self._select_rows([sh.current.index_of(cur.id)])
+                    finally:
+                        self._select_guard = False
             for c in sh.all_cues():
-                self._preload(c)
-            self._apply_collapse()
-            cue = next((c for c in sh.all_cues() if c.id == sel), None) if sel else None
-            self.inspector.set_cue(cue)
-            self._update_tabs()
+                if c.id in changed:
+                    self._preload(c)
+            if not still:
+                self.inspector.set_cue(None)
+            elif cur.id in changed:
+                self._inspector_remote_update()
             self._update_standby()
         finally:
             self._hist_restoring = False
-        self._history_capture(tr("Modifica da un'altra istanza"))
+        if changed or not same:
+            self._history_capture(tr("Modifica da un'altra istanza"))
+        return bool(changed) or not same
+
+    def _inspector_remote_update(self):
+        """La cue nell'ispettore è cambiata su un'altra istanza: se qui si sta scrivendo nell'ispettore si
+        aggiornano solo gli altri campi (il campo con il cursore resta com'è), altrimenti si ricostruisce."""
+        from PySide6.QtWidgets import QApplication
+        fw = QApplication.focusWidget()
+        insp = self.inspector
+        if fw is not None and (fw is insp or insp.isAncestorOf(fw)):
+            insp.refresh_fields(skip=fw)
+        else:
+            insp.rebuild()
 
     @staticmethod
     def _lists_hash(show):
@@ -291,6 +354,8 @@ class ClusterMixin:
     def _cluster_lost(self):
         self.status(tr("⚠ MASTER NON RAGGIUNGIBILE (nessun heartbeat)"))
         self._cluster_indicator()
+        hub = self.cluster
+        self.lost_alarm.alarm(hub.master_info.get("name") or hub.master_info.get("host") or "?")
         self.fire_event("master_lost")
         if QSettings("CueStage", "CueStage").value("cluster/auto_promote", "false") in (True, "true"):
             self.cluster_promote(ask=False)
@@ -298,6 +363,7 @@ class ClusterMixin:
     def _cluster_back(self):
         self.status(tr("Master di nuovo raggiungibile"))
         self._cluster_indicator()
+        self.lost_alarm.master_back()
 
     def cluster_promote(self, ask=True):
         hub = self.cluster
@@ -308,6 +374,7 @@ class ClusterMixin:
                 "secondarie sono abilitate)? Le cue in esecuzione continuano.")) != QMessageBox.Yes:
             return
         hub.promote()
+        self.lost_alarm.promoted()
         self.inspector.setEnabled(True)
         self.act_leave.setEnabled(False)
         self.hw_bad = {}

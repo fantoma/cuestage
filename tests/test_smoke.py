@@ -1502,6 +1502,15 @@ def t_cluster_redundancy():
         while not b.cluster.lost and time.monotonic() - t0 < 3:
             run(0.02)
         assert b.cluster.lost
+        # allarme rosso lampeggiante finché non si preme OK
+        run(0.1)
+        al = b.lost_alarm
+        assert al.isVisibleTo(b) and al.timer.isActive()
+        c1 = al.styleSheet()
+        run(0.5)
+        assert al.styleSheet() != c1                        # lampeggia
+        al.ok_btn.click()
+        assert not al.isVisibleTo(b) and not al.timer.isActive()
     finally:
         for x in (a, b):
             x.ctrl.stop_all(0)
@@ -1705,6 +1714,40 @@ def t_cluster_perms_chat():
         while b.show_data.lists[2].cues[0].name != "Grid" and time.monotonic() - t0 < 5:
             run(0.1)
         assert b.show_data.lists[2].cues[0].name == "Grid"
+        # aggiornamenti dal master mentre sulla secondaria si lavora nell'ispettore: niente ricostruzione,
+        # il campo con il cursore resta com'è (anche se cambia proprio quella cue)
+        from PySide6.QtWidgets import QApplication, QLineEdit
+        b.show_list(1)
+        run(0.2)
+        cue_b = b.show_data.lists[1].cues[0]
+        b.inspector.set_cue(cue_b)
+        b.inspector.tabs.setCurrentIndex(0)                  # scheda Base (nome della cue)
+        run(0.2)
+        page = b.inspector.tabs.widget(0)
+        le = next(x for x in page.findChildren(QLineEdit) if x.text() == cue_b.name)
+        b.show()
+        b.activateWindow()
+        le.setFocus()
+        run(0.2)
+        has_focus = QApplication.focusWidget() is le
+        sh.lists[2].cues[0].name = "Grid bis"                 # un'altra cue: l'ispettore non si tocca
+        sh.dirty = True
+        t0 = time.monotonic()
+        while b.show_data.lists[2].cues[0].name != "Grid bis" and time.monotonic() - t0 < 5:
+            run(0.1)
+        run(0.2)
+        assert b.show_data.lists[2].cues[0].name == "Grid bis"
+        assert b.inspector.tabs.widget(0) is page and b.inspector.cue is cue_b      # ispettore non ricostruito
+        assert not has_focus or QApplication.focusWidget() is le
+        sh.lists[1].cues[0].notes = "nota dal master"        # proprio la cue nell'ispettore
+        sh.dirty = True
+        t0 = time.monotonic()
+        while cue_b.notes != "nota dal master" and time.monotonic() - t0 < 5:
+            run(0.1)
+        run(0.2)
+        assert b.show_data.lists[1].cues[0] is cue_b and cue_b.notes == "nota dal master"
+        if has_focus:                                        # si sta scrivendo: il campo resta, gli altri si aggiornano
+            assert b.inspector.tabs.widget(0) is page and QApplication.focusWidget() is le
         # seconda secondaria con tutto il progetto, poi messaggi
         JOIN["perms"] = {"*": "control"}
         done.clear()
@@ -1756,7 +1799,7 @@ def t_cluster_perms_chat():
         assert names(b) == ["Panel modificato"], names(b)
         b.cluster_promote(ask=False)
         run(0.2)
-        assert names(b) == ["Grid", "Panel modificato"], names(b)
+        assert names(b) == ["Grid bis", "Panel modificato"], names(b)
     finally:
         JOIN["perms"] = None
         for x in (a, b, c):

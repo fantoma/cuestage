@@ -203,6 +203,12 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         root = QVBoxLayout(central)
         root.setContentsMargins(6, 6, 6, 6)
 
+        # allarme «master perso» (istanza secondaria): banda rossa lampeggiante finché non si preme OK
+        from .ui_cluster import LostMasterAlarm
+        self.lost_alarm = LostMasterAlarm(self)
+        self.lost_alarm.promoteRequested.connect(lambda: self.cluster_promote())
+        root.addWidget(self.lost_alarm)
+
         # barra GO
         bar = QHBoxLayout()
         self.go_btn = QPushButton("GO")

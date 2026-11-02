@@ -879,7 +879,9 @@ with fewer channels, mixers configured differently or ALSA cards not connected, 
 in **red** the cues that use it (the reason is in the row's tooltip).
 
 Every **project change** on the master reaches the secondaries immediately (checked every 200 ms), with the new
-files downloaded automatically. In **redundancy** the master relays every command: GO (local and PANEL ones too),
+files downloaded automatically. Updates do not disturb whoever is working on a secondary: unchanged cues are not touched, changed ones are
+updated in place, the inspector is not rebuilt and the field being typed in keeps the cursor and its text; while a
+secondary has local changes not yet sent, the update waits for them to reach the master. In **redundancy** the master relays every command: GO (local and PANEL ones too),
 start/stop/pause of single cues, STOP ALL, playhead, crossfade and crossfader, live levels and opacity, texts and
 leaving groups; random groups use the same seed, so they choose the same cues. On the redundant instance local
 commands are blocked (the emergency STOP ALL remains) and the editor is read-only. Commands to network mixers and
@@ -896,7 +898,9 @@ that editing is allowed.
 **Heartbeat**: the master sends one every 100 ms. If a secondary does not hear it for the chosen time (default
 500 ms) or the connection drops, the status bar turns red: a click (or Settings › “Leave slave mode”) **promotes**
 it: it becomes independent, the running cues continue, and if it has secondary instances enabled it becomes a
-master in turn. With “promote automatically” it does so on its own. At the bottom right the indicator shows
+master in turn. At the same time a **flashing red band** appears at the top of the window (“⚠ LOST MASTER: … is not
+responding”) with **Promote now** and **OK**: it keeps flashing until OK is pressed (if the master comes back it
+stops flashing but stays until it is confirmed). With “promote automatically” it does so on its own. At the bottom right the indicator shows
 “◉ MASTER · n secondaries” or “◎ REDUNDANCY of …”. “Leave slave mode” is available as soon as the master accepts the
 connection, also during the first download. Files are sent in 64 KB blocks on a separate channel, with heartbeats
 and redundancy commands always going first, so long transfers on slow networks do not drop the connection.

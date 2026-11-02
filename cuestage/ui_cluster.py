@@ -4,7 +4,7 @@ import os
 import threading
 
 from PySide6.QtCore import QObject, QSettings, Qt, Signal
-from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QDialog, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
+from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QDialog, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
                                QLabel, QLineEdit, QListWidget, QListWidgetItem, QProgressBar, QPushButton,
                                QRadioButton, QSpinBox, QVBoxLayout)
 
@@ -424,3 +424,78 @@ class ClusterWindow(QDialog):
             return
         if self.hub.send_chat(t, self.to.currentData() or "*"):
             self.text.clear()
+
+
+# =========================================================================== allarme «master perso»
+class LostMasterAlarm(QFrame):
+    """Banda rossa lampeggiante in cima alla finestra quando un'istanza secondaria perde il master: resta
+    finché l'operatore preme OK (anche se nel frattempo il master torna o l'istanza viene promossa)."""
+    promoteRequested = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        from PySide6.QtCore import QTimer
+        self.setObjectName("lostAlarm")
+        h = QHBoxLayout(self)
+        h.setContentsMargins(12, 6, 8, 6)
+        self.label = QLabel()
+        self.label.setWordWrap(True)
+        h.addWidget(self.label, 1)
+        self.promote_btn = QPushButton(tr("Promuovi ora"))
+        self.promote_btn.setFocusPolicy(Qt.NoFocus)
+        self.promote_btn.clicked.connect(self.promoteRequested.emit)
+        h.addWidget(self.promote_btn)
+        self.ok_btn = QPushButton(tr("OK"))
+        self.ok_btn.setFocusPolicy(Qt.NoFocus)
+        self.ok_btn.setMinimumWidth(90)
+        self.ok_btn.clicked.connect(self.dismiss)
+        h.addWidget(self.ok_btn)
+        self.timer = QTimer(self)
+        self.timer.setInterval(450)
+        self.timer.timeout.connect(self._blink)
+        self._on = False
+        self._blinking = False
+        self.hide()
+
+    def _paint(self, bright):
+        bg = "#e0261b" if bright else "#5a0d09"
+        self.setStyleSheet(f"#lostAlarm{{background:{bg};border-radius:6px;}}"
+                           "#lostAlarm QLabel{color:white;font-size:17px;font-weight:bold;}"
+                           "#lostAlarm QPushButton{background:white;color:#900;font-weight:bold;"
+                           "border-radius:4px;padding:6px 14px;}")
+
+    def _blink(self):
+        self._on = not self._on
+        self._paint(self._on)
+
+    def alarm(self, master_name):
+        self.label.setText(tr("⚠ MASTER PERSO: «{0}» non risponde", master_name))
+        self.promote_btn.setVisible(True)
+        self._blinking = True
+        self._on = True
+        self._paint(True)
+        self.timer.start()
+        self.show()
+
+    def master_back(self):
+        """Il master risponde di nuovo: l'allarme resta (va confermato) ma smette di lampeggiare."""
+        if not self.isVisible():
+            return
+        self.timer.stop()
+        self._blinking = False
+        self._paint(False)
+        self.label.setText(self.label.text() + tr("  —  di nuovo raggiungibile"))
+        self.promote_btn.setVisible(False)
+
+    def promoted(self):
+        if self.isVisible():
+            self.promote_btn.setVisible(False)
+
+    @property
+    def active(self):
+        return self.isVisible()
+
+    def dismiss(self):
+        self.timer.stop()
+        self._blinking = False
+        self.hide()
