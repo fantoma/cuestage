@@ -1084,6 +1084,7 @@
   "Stato": "Stato",
   "Solo trigger: il GO non la avvia (parte con MIDI, OSC, scorciatoia, cue Comando o clic nel GRID)": "Solo trigger: il GO non la avvia (parte con MIDI, OSC, scorciatoia, cue Comando o clic nel GRID)",
   "Clic sulla colonna «Tipo» (o Ctrl+E): espandi / compatta il gruppo": "Clic sulla colonna «Tipo» (o Ctrl+E): espandi / compatta il gruppo",
+  "▶ sul master {0}": "▶ sul master {0}",
   "Nessuna cue attiva": "Nessuna cue attiva",
   "{0} {1}   [{2} · {3} cue]": "{0} {1}   [{2} · {3} cue]",
   "Preascolto acceso: la cue suona solo in cuffia · clic per spegnere": "Preascolto acceso: la cue suona solo in cuffia · clic per spegnere",

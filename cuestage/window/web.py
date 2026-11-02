@@ -195,6 +195,7 @@ class WebMixin:
             msgs.append({"seq": m.get("seq"), "from": m.get("from"), "text": m.get("text"), "ts": m.get("ts"),
                          "to": "" if to == "*" else names.get(to, to)})
         return {"chat": msgs, "chat_n": getattr(hub, "chat_seq", 0), "me": hub.name,
+                "failover": hub.failover_web() if hub.role == "master" else [],
                 "chat_to": [{"id": "*", "name": tr("Tutti")}]
                 + [{"id": i, "name": n + (tr(" (questa regia)") if i == hub.instance_id else "")}
                    for i, n in hub.recipients()]}

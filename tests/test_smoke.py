@@ -1494,6 +1494,38 @@ def t_cluster_redundancy():
         a.go()
         run(0.4)
         assert names(a) == names(b) == ["Musica"], (names(a), names(b))
+        # la ridondanza fa esattamente quello che fa il master: playhead, cue perse o in più si riallineano
+        a.ctrl.set_playhead(0)
+        t0 = time.monotonic()
+        while b.ctrl.playhead != 0 and time.monotonic() - t0 < 2:
+            run(0.05)
+        assert b.ctrl.playhead == 0
+        b.ctrl.playheads[b.show_data.main.id] = 1           # cursore spostato solo qui: torna su quello del master
+        b.cluster._applying = True
+        b.ctrl.stop_cue(b.show_data.cues[0].id)             # cue persa sulla ridondanza
+        b.ctrl.start_cue(b.show_data.cues[1])               # cue in più sulla ridondanza
+        b.cluster._applying = False
+        a.ctrl.set_playhead(1)
+        a.ctrl.set_playhead(0)
+        t0 = time.monotonic()
+        while names(b) != ["Musica"] and time.monotonic() - t0 < 4:
+            run(0.05)
+        assert names(b) == ["Musica"] and b.ctrl.playhead == 0, (names(b), b.ctrl.playhead)
+        # interfaccia web della ridondanza come riserva per la pagina web del master
+        b.web.start(18803)
+        a.web.start(18804)
+        t0 = time.monotonic()
+        while not a.cluster.failover_web() and time.monotonic() - t0 < 2:
+            run(0.05)
+        assert a.cluster.failover_web() == [{"name": b.cluster.name, "url": "http://127.0.0.1:18803/"}]
+        assert a._web_state()["failover"]
+        import urllib.request
+        rq = urllib.request.Request("http://127.0.0.1:18803/api/state", method="OPTIONS")
+        with urllib.request.urlopen(rq, timeout=2) as r:
+            assert r.status == 204 and r.headers["Access-Control-Allow-Origin"] == "*"
+            assert "X-CueStage-Pin" in r.headers["Access-Control-Allow-Headers"]
+        a.web.stop()
+        b.web.stop()
         a.show_data.cues[1].name = "Modificata"
         run(0.8)
         assert b.show_data.cues[1].name == "Modificata"
@@ -1718,6 +1750,18 @@ def t_cluster_perms_chat():
         assert [l.name for l in bs.lists] == ["MAIN", "Luci", "Effetti"] and not bs.lists[0].cues
         assert sorted(os.listdir(os.path.join(TMP, "perm_b"))) == ["perm.cueshow", "pm_grid.wav", "pm_panel.wav"]
         assert b.cluster.can_edit_list(p1_id) and not b.cluster.can_edit_list(p2_id)
+        # lo slave vede cosa fa il master: playhead e cue in esecuzione
+        a.ctrl.start_cue(sh.lists[1].cues[0])
+        t0 = time.monotonic()
+        while sh.lists[1].cues[0].id not in (getattr(b.ctrl, "remote_running", None) or {}) and time.monotonic() - t0 < 3:
+            run(0.05)
+        assert sh.lists[1].cues[0].id in b.ctrl.remote_running and not b.ctrl.instances
+        a.ctrl.stop_all(0)
+        a.ctrl.set_playhead(1, sh.lists[1])
+        t0 = time.monotonic()
+        while b.ctrl.playheads.get(p1_id) != 1 and time.monotonic() - t0 < 3:
+            run(0.05)
+        assert b.ctrl.playheads.get(p1_id) == 1
         b.show_list(2)
         assert not b.inspector.isEnabled()
         b.show_list(1)

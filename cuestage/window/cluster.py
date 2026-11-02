@@ -351,8 +351,64 @@ class ClusterMixin:
         self.model.refresh()
         return diffs
 
+    # ------------------------------------------------------------------ stato del master sulle secondarie
+    def _cluster_state_info(self):
+        """(master) Cosa sta facendo questa istanza: playhead, cue attive (secondi), lista visualizzata."""
+        sh, ctrl = self.show_data, self.ctrl
+        return {"ph": {l.id: ctrl.playhead_of(l) for l in sh.lists},
+                "run": {cid: round(float(inst.elapsed), 2) for cid, inst in list(ctrl.instances.items())},
+                "view": sh.current.id}
+
+    def _cluster_state(self, st):
+        """(secondaria) Stato del master: il playhead segue quello del master; in SLAVE le cue attive sul
+        master si vedono nella colonna Stato; in RIDONDANZA si fa esattamente quello che fa il master
+        (stessa lista visualizzata, cue avviate o fermate se un comando si fosse perso)."""
+        import time as _t
+        hub, ctrl, sh = self.cluster, self.ctrl, self.show_data
+        if hub.role != "slave" or hub.lost:
+            return
+        red = hub.mode == "redundancy"
+        if red and st.get("view") and sh.current.id != st["view"]:
+            i = next((i for i, l in enumerate(sh.lists) if l.id == st["view"]), None)
+            if i is not None:
+                self.show_list(i)
+        moved = False
+        for lid, idx in (st.get("ph") or {}).items():
+            lst = sh.list_by_id(lid)
+            if lst is not None and ctrl.playheads.get(lid, 0) != int(idx):
+                ctrl.playheads[lid] = max(0, min(int(idx), len(lst.cues)))
+                moved = True
+        if moved:
+            ctrl.playheadChanged.emit(ctrl.playhead)
+        run = {k: float(v) for k, v in (st.get("run") or {}).items()}
+        if not red:
+            ctrl.remote_running = run
+            self.model.refresh_state()
+            return
+        ctrl.remote_running = {}
+        now = _t.monotonic()
+        local = set(ctrl.instances)
+        extra = getattr(self, "_rd_extra", {})
+        miss = getattr(self, "_rd_miss", {})
+        self._rd_extra = {k: extra.get(k, now) for k in local - set(run)}
+        self._rd_miss = {k: miss.get(k, now) for k in set(run) - local}
+        hub._applying = True
+        try:
+            for cid, t0 in list(self._rd_extra.items()):
+                if now - t0 > 1.0:                       # ferma sul master da più di un secondo
+                    ctrl.stop_cue(cid, 0.3)
+                    self._rd_extra.pop(cid, None)
+            for cid, t0 in list(self._rd_miss.items()):
+                cue = sh.by_id(cid)
+                if cue is not None and now - t0 > 0.6 and run[cid] < 3.0:    # partita sul master, qui no
+                    ctrl.start_cue(cue, cascade=False)
+                    self._rd_miss.pop(cid, None)
+        finally:
+            hub._applying = False
+
     def _cluster_lost(self):
         self.status(tr("⚠ MASTER NON RAGGIUNGIBILE (nessun heartbeat)"))
+        self.ctrl.remote_running = {}
         self._cluster_indicator()
         hub = self.cluster
         self.lost_alarm.alarm(hub.master_info.get("name") or hub.master_info.get("host") or "?")
@@ -375,6 +431,7 @@ class ClusterMixin:
             return
         hub.promote()
         self.lost_alarm.promoted()
+        self.ctrl.remote_running = {}
         self.inspector.setEnabled(True)
         self.act_leave.setEnabled(False)
         self.hw_bad = {}
@@ -389,6 +446,7 @@ class ClusterMixin:
         """Il master ci ha disconnessi: si torna indipendenti (non è un «master perso»)."""
         hub = self.cluster
         hub.disconnect_slave()
+        self.ctrl.remote_running = {}
         self.inspector.setEnabled(True)
         self.hw_bad = {}
         self.model.hw_bad = {}

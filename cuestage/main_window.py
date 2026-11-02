@@ -113,6 +113,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.cluster.clientsChanged.connect(self._cluster_indicator)
         self.cluster.roleChanged.connect(self._cluster_indicator)
         self.cluster.kicked.connect(self._cluster_kicked)
+        self.cluster.stateReceived.connect(self._cluster_state)
+        self.cluster.state_fn = self._cluster_state_info
         self.cluster.chatReceived.connect(self._cluster_chat)
         self.cluster.status.connect(lambda t: self.status(t))
         self.cluster.slaveShow.connect(self._cluster_slave_show)
@@ -162,6 +164,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         from .webserver import WebServer
         self.web = WebServer(self._web_state, self._web_lists)
         self.web.command.connect(self._web_command)
+        self.web.runningChanged.connect(self.cluster.set_web_info)    # riserva web per la ridondanza
         from .webserver import ProjRelay
         self._web_proj = {}            # id proiettore -> {"result", "ok", "corners", "status"}
         self._web_proj_jobs = {}       # (id, "lens"/"corner") -> future in corso

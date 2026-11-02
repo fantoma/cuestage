@@ -1084,6 +1084,7 @@
   "Stato": "Status",
   "Solo trigger: il GO non la avvia (parte con MIDI, OSC, scorciatoia, cue Comando o clic nel GRID)": "Trigger only: GO does not start it (it starts with MIDI, OSC, shortcut, Command cue or a click in the GRID)",
   "Clic sulla colonna «Tipo» (o Ctrl+E): espandi / compatta il gruppo": "Click on the “Type” column (or Ctrl+E): expand / collapse the group",
+  "▶ sul master {0}": "▶ on master {0}",
   "Nessuna cue attiva": "No active cues",
   "{0} {1}   [{2} · {3} cue]": "{0} {1}   [{2} · {3} cues]",
   "Preascolto acceso: la cue suona solo in cuffia · clic per spegnere": "Preview on: the cue plays only in the headphones · click to turn off",

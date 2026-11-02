@@ -1084,6 +1084,7 @@
   "Stato": "Stanje",
   "Solo trigger: il GO non la avvia (parte con MIDI, OSC, scorciatoia, cue Comando o clic nel GRID)": "Samo sprožilec: GO ga ne zažene (zažene se z MIDI, OSC, bližnjico, cue-jem Ukaz ali klikom v GRID-u)",
   "Clic sulla colonna «Tipo» (o Ctrl+E): espandi / compatta il gruppo": "Klik na stolpec »Vrsta« (ali Ctrl+E): razširi / strni skupino",
+  "▶ sul master {0}": "▶ na masterju {0}",
   "Nessuna cue attiva": "Ni aktivnih cue-jev",
   "{0} {1}   [{2} · {3} cue]": "{0} {1}   [{2} · {3} cue-jev]",
   "Preascolto acceso: la cue suona solo in cuffia · clic per spegnere": "Predposlušanje vklopljeno: cue se predvaja le v slušalkah · klik za izklop",

@@ -88,10 +88,20 @@ class _Handler(BaseHTTPRequestHandler):
             body = body.encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", ctype)
+        # la pagina di un master caduto può passare i comandi all'interfaccia web di un'istanza in ridondanza
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
+
+    def _stopped(self):
+        """Server spento (casella tolta): anche le connessioni già aperte (keep-alive) smettono di rispondere."""
+        if self.server.web.server is not self.server:
+            self.close_connection = True
+            self._send(503, '{"error":"stopped"}')
+            return True
+        return False
 
     def _authorized(self):
         pin = self.server.web.pin
@@ -100,8 +110,20 @@ class _Handler(BaseHTTPRequestHandler):
         got = self.headers.get("X-CueStage-Pin", "")
         return hmac.compare_digest(got.encode(), pin.encode())
 
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-CueStage-Pin")
+        self.send_header("Access-Control-Allow-Private-Network", "true")
+        self.send_header("Access-Control-Max-Age", "600")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def do_GET(self):
         web = self.server.web
+        if self._stopped():
+            return
         path = self.path.split("?")[0]
         if path in ("/", "/index.html"):
             return self._send(200, PAGE, "text/html; charset=utf-8")
@@ -117,6 +139,8 @@ class _Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         web = self.server.web
+        if self._stopped():
+            return
         if self.path.split("?")[0] != "/api/cmd":
             return self._send(404, '{"error":"not found"}')
         if not self._authorized():
@@ -135,6 +159,7 @@ class _Handler(BaseHTTPRequestHandler):
 class WebServer(QObject):
     command = Signal(dict)       # emesso dal thread HTTP, ricevuto nel thread di Qt
     status = Signal(str)
+    runningChanged = Signal(bool, int)     # server acceso / spento, porta
 
     def __init__(self, state_fn, lists_fn):
         super().__init__()
@@ -166,6 +191,7 @@ class WebServer(QObject):
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
         self.timer.start()
+        self.runningChanged.emit(True, self.port)
         ips = "  ·  ".join(f"http://{ip}:{port}" for ip in local_addresses())
         self.status.emit(tr("Interfaccia web attiva: {0}", ips))
         return True
@@ -180,6 +206,8 @@ class WebServer(QObject):
             if self.thread is not None:
                 self.thread.join(1.0)
         self.thread = None
+        if self.port is not None:
+            self.runningChanged.emit(False, 0)
         self.port = None
 
     def refresh(self):
@@ -273,6 +301,9 @@ h3{font-size:13px;color:var(--dim);margin:16px 0 6px;text-transform:uppercase;le
 #pin div{background:var(--panel);padding:20px;border-radius:12px;display:flex;flex-direction:column;gap:10px}
 #pin input{font:inherit;font-size:22px;padding:8px;border-radius:8px;border:1px solid var(--line);background:#111;color:#fff;width:180px;text-align:center}
 #pin button{background:var(--go)}
+#fo{position:sticky;top:0;z-index:7;background:#b3261e;color:#fff;font-weight:700;padding:10px 12px;display:none;gap:8px;align-items:center}
+#fo span{flex:1}#fo button{background:#fff;color:#900;min-height:34px;font-weight:800}
+#bk{color:var(--dim);font-size:12px;text-align:center;padding:8px}
 #chatb{background:#3d4a5c;flex:0 0 52px;position:relative}
 #chatb i{position:absolute;top:-4px;right:-4px;background:#d33;border-radius:9px;font:700 11px system-ui;padding:2px 6px;display:none;font-style:normal}
 #chat{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;z-index:8;align-items:flex-end;justify-content:center}
@@ -287,6 +318,7 @@ h3{font-size:13px;color:var(--dim);margin:16px 0 6px;text-transform:uppercase;le
 #chat .row{display:flex;gap:6px}#chat .row input{flex:1}
 #chat .row button{background:var(--go)}
 </style></head><body>
+<div id="fo"><span id="fotxt"></span><button id="fook">OK</button></div>
 <header>
  <div class="top">
   <button id="go">GO</button>
@@ -303,6 +335,7 @@ h3{font-size:13px;color:var(--dim);margin:16px 0 6px;text-transform:uppercase;le
  <div id="projs"></div>
  <h3 id="acth">Cue attive</h3>
  <div id="active"></div>
+ <div id="bk"></div>
 </main>
 <div id="conn">connessione persa…</div>
 <div id="chat"><div class="box">
@@ -323,11 +356,16 @@ let view=null, lists=null, rev=null, st=null;
 try{view=sessionStorage.getItem("cuestage_view")}catch(e){}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fmt=t=>{if(t==null)return"";t=Math.max(0,t);const m=Math.floor(t/60),s=(t%60).toFixed(1).padStart(4,"0");return`${String(m).padStart(2,"0")}:${s}`};
+// riserva: se il master non risponde i comandi passano all'interfaccia web di un'istanza in ridondanza
+let BASE="", fails=0, backups=[], switching=false, curName=null;
+function tfetch(url,o,ms){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms||2000);
+  return fetch(url,Object.assign({},o,{signal:c.signal})).finally(()=>clearTimeout(t))}
 async function api(path,body){
   const o={headers:{"X-CueStage-Pin":PIN}};
   if(body){o.method="POST";o.headers["Content-Type"]="application/json";o.body=JSON.stringify(body)}
-  const r=await fetch(path,o);
+  const r=await tfetch(BASE+path,o,2500);
   if(r.status===401){$("pin").style.display="flex";throw new Error("pin")}
+  if(!r.ok)throw new Error("http "+r.status);
   return r.json();
 }
 const cmd=b=>api("/api/cmd",b).then(poll).catch(()=>{});
@@ -468,6 +506,27 @@ function wireProj(c,p){
   c.querySelector("[data-call]").onclick=()=>{lastEdit=Date.now();
     send("corners",{value:["tl","tr","bl","br"].map(k=>cv[p.id][k].x+" "+cv[p.id][k].y).join(" ")})};
 }
+async function failover(){
+  const here=BASE?BASE+"/":location.origin+"/";
+  const cands=backups.filter(b=>b.url!==here);
+  if(BASE)cands.push({name:"",url:location.origin+"/"});        // anche il master originale, se torna
+  for(const b of cands){
+    try{
+      const r=await tfetch(b.url+"api/state",{headers:{"X-CueStage-Pin":PIN}},1500);
+      if(!r.ok&&r.status!==401)continue;
+      const lost=curName||"master"; BASE=b.url.replace(/\/$/,""); rev=null; fails=0;
+      if(BASE===location.origin)BASE="";
+      $("fotxt").textContent=`⚠ «${lost}» non risponde: i comandi ora vanno a «${b.name||b.url}»`;
+      $("fo").style.display="flex";
+      api("/api/cmd",{cmd:"chat",text:`Interfaccia web passata a questa istanza: «${lost}» non risponde`,
+        to:"*",name:myName||"Web"}).catch(()=>{});
+      if(navigator.vibrate)navigator.vibrate([300,150,300]);
+      return true;
+    }catch(e){}
+  }
+  return false;
+}
+$("fook").onclick=()=>{$("fo").style.display="none"};
 let busy=false;
 async function poll(){
   if(busy)return; busy=true;
@@ -475,8 +534,14 @@ async function poll(){
     st=await api("/api/state");
     if(st.lists_rev!==rev){lists=await api("/api/lists");rev=st.lists_rev;projBuilt=null}
     document.title="CueStage · "+(st.show||"");
+    fails=0; curName=st.me||curName;
+    if(st.failover&&st.failover.length)backups=st.failover;
+    $("bk").textContent=backups.length?"Riserva: "+backups.map(b=>b.name).join(", "):"";
     $("conn").style.display="none"; render();
-  }catch(e){ if(e.message!=="pin")$("conn").style.display="block" }
+  }catch(e){
+    if(e.message!=="pin"){$("conn").style.display="block";
+      if(++fails>=4&&!switching&&(backups.length||BASE)){switching=true;try{await failover()}finally{switching=false}}}
+  }
   busy=false;
 }
 // ---------------------------------------------------------------- messaggi

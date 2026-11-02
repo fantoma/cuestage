@@ -465,7 +465,11 @@ class StateDelegate(QStyledItemDelegate):
         r = QRectF(opt.rect).adjusted(3, 4, -3, -4)
         p.save()
         p.setRenderHint(QPainter.Antialiasing)
-        if isinstance(st, float):
+        remote = getattr(self.ctrl, "remote_running", None) or {}
+        if st is None and cue.id in remote:                  # istanza SLAVE: cue in esecuzione sul master
+            p.setPen(QColor(110, 170, 255))
+            p.drawText(r, Qt.AlignVCenter | Qt.AlignLeft, tr("▶ sul master {0}", fmt_time(remote[cue.id])))
+        elif isinstance(st, float):
             p.setPen(QColor(240, 200, 80))
             p.drawText(r, Qt.AlignVCenter | Qt.AlignLeft, f"⧗ {fmt_time(st)}")
         elif st is not None and _marker_bar_data(self.ctrl, cue, st) is not None:

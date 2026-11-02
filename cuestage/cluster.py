@@ -199,6 +199,7 @@ class ClusterHub(QObject):
     chatReceived = Signal(object)                  # messaggio tra istanze: {from, from_id, to, text, ts}
     rosterChanged = Signal()                       # elenco delle istanze collegate (per i messaggi)
     kicked = Signal(str)                           # (slave) il master ci ha disconnesso: motivo
+    stateReceived = Signal(object)                 # (slave) cosa sta facendo il master: playhead e cue attive
     _startWatch = Signal()
 
     def __init__(self, ctrl, parent=None):
@@ -214,6 +215,10 @@ class ClusterHub(QObject):
         self.chat = []               # messaggi tra istanze (ricevuti e inviati), il più recente in fondo
         self.roster = []             # [{id, name, role}] istanze della rete (master compreso)
         self._kicked = False
+        self.state_fn = None         # (master) () -> {"ph": {lista: indice}, "run": {cue: secondi}, …}
+        self._last_state = None
+        self._state_at = 0.0
+        self.web_info = {"on": False, "port": 0}   # interfaccia web di questa istanza (per la riserva web)
         self.to_master = {}          # (slave) percorso locale -> percorso sul master
         self._put_wait = {}          # (slave) percorso locale -> [Event, percorso sul master | errore]
         self.show_fn = None          # () -> Show (master)
@@ -315,15 +320,31 @@ class ClusterHub(QObject):
     def _broadcast_cmd(self, name, a, k):
         msg = {"t": "cmd", "fn": name, "args": [self._enc(x) for x in a],
                "kw": {kk: self._enc(vv) for kk, vv in k.items()},
-               "seed": [self.ctrl.seed_base, self.ctrl.seed_count]}
+               "seed": [self.ctrl.seed_base, self.ctrl.seed_count],
+               "view": self.ctrl.show.current.id}        # i comandi senza lista agiscono su quella visualizzata
         for cid, c in list(self.clients.items()):
             if c.get("accepted") and c.get("mode") == "redundancy":
                 self._send_client(cid, msg)
 
-    def apply_command(self, fn, args, kw, seed):
-        """Sullo slave: esegue il comando del master (nel thread di Qt)."""
+    def apply_command(self, fn, args, kw, extra):
+        """Sullo slave: esegue il comando del master (nel thread di Qt), con la stessa lista visualizzata
+        del master (i comandi senza lista, come il clic su una riga, agiscono su quella)."""
         if fn not in REPLICATED:
             return
+        seed, view = extra if isinstance(extra, list) and len(extra) == 2 else (None, None)   # [seme, lista]
+        show = self.ctrl.show
+        old_view = show.view
+        if view:
+            for i, lst in enumerate(show.lists):
+                if lst.id == view:
+                    show.view = i
+                    break
+        try:
+            self._apply_command(fn, args, kw, seed)
+        finally:
+            show.view = old_view
+
+    def _apply_command(self, fn, args, kw, seed):
         try:
             a = [self._dec(x) for x in args or []]
             k = {kk: self._dec(vv) for kk, vv in (kw or {}).items()}
@@ -541,6 +562,9 @@ class ClusterHub(QObject):
                         self.slaveShow.emit(msg.get("data"), c["name"], dict(self.client_perms(cid)))
                     else:
                         self._send_client(cid, {"t": "edit_refused"})
+                elif t == "web_info":
+                    c["web"] = {"on": bool(msg.get("on")), "port": int(msg.get("port") or 0)}
+                    self.clientsChanged.emit()
                 elif t == "chat":
                     self._route_chat(dict(msg, from_id=c.get("iid"), **{"from": msg.get("from") or c["name"]}), cid)
         except (OSError, ConnectionError, ValueError, struct.error):
@@ -660,6 +684,45 @@ class ClusterHub(QObject):
                 self._drop(cid)
                 continue
             self._send_client(cid, msg)
+        self._send_state(now)
+
+    def _send_state(self, now):
+        """(master) Cosa sta facendo: playhead di ogni lista e cue attive. Parte quando cambia (e comunque
+        ogni secondo, così la ridondanza si riallinea se ha perso qualcosa)."""
+        if self.state_fn is None or not any(c.get("accepted") for c in self.clients.values()):
+            self._last_state = None
+            return
+        try:
+            st = self.state_fn()
+        except Exception:
+            return
+        key = json.dumps({"ph": st.get("ph"), "run": sorted(st.get("run") or {}), "view": st.get("view")},
+                         sort_keys=True)
+        if key == self._last_state and now - self._state_at < 1.0:
+            return
+        self._last_state, self._state_at = key, now
+        msg = dict(st, t="state")
+        for cid, c in list(self.clients.items()):
+            if c.get("accepted"):
+                self._send_client(cid, msg)
+
+    def failover_web(self):
+        """(master) Interfacce web delle istanze in ridondanza: la pagina web le usa se il master cade."""
+        out = []
+        for c in list(self.clients.values()):
+            w = c.get("web") or {}
+            if c.get("accepted") and c.get("mode") == "redundancy" and w.get("on") and w.get("port"):
+                out.append({"name": c["name"], "url": f"http://{c['addr']}:{w['port']}/"})
+        return out
+
+    def set_web_info(self, on, port):
+        """Interfaccia web di questa istanza accesa/spenta: lo slave lo comunica al master."""
+        self.web_info = {"on": bool(on), "port": int(port or 0)}
+        if self.role == "slave" and self.sock is not None:
+            try:
+                self._send(dict(self.web_info, t="web_info"))
+            except OSError:
+                pass
 
     def _check_changes(self):
         """Modifiche del progetto sul master → subito alle secondarie."""
@@ -728,11 +791,11 @@ class ClusterHub(QObject):
                "text": text, "ts": time.time()}
         if self.role == "master":
             self._route_chat(msg, None)
-        elif self.role == "slave" and self.sock is not None:
+        elif self.role == "slave" and self.sock is not None and not self.lost:
             try:
                 self._send(msg)
             except OSError:
-                return False
+                pass                     # master irraggiungibile: il messaggio resta qui
             self._store_chat(msg)
         else:
             self._store_chat(msg)
@@ -822,6 +885,7 @@ class ClusterHub(QObject):
             self._synced = False
             self.roleChanged.emit()               # «Esci dalla modalità slave» subito, anche durante il download
             self._startWatch.emit()
+            self._send(dict(self.web_info, t="web_info"))
             self._send({"t": "get_show"})
             first = True
             self._queue = []
@@ -870,7 +934,8 @@ class ClusterHub(QObject):
                 continue
             if t == "cmd":
                 self.last_hb = time.monotonic()
-                self.commandReceived.emit(msg.get("fn"), msg.get("args"), msg.get("kw"), msg.get("seed"))
+                self.commandReceived.emit(msg.get("fn"), msg.get("args"), msg.get("kw"),
+                                          [msg.get("seed"), msg.get("view")])
                 continue
             if self._dispatch_upload_reply(msg):
                 continue
@@ -881,6 +946,9 @@ class ClusterHub(QObject):
         t = msg.get("t")
         if t == "chat":
             self._store_chat(msg)
+            return True
+        if t == "state":
+            self.stateReceived.emit(msg)
             return True
         if t == "roster":
             self.roster = list(msg.get("items") or [])
@@ -942,7 +1010,7 @@ class ClusterHub(QObject):
                 if t == "hb":
                     self._send({"t": "hb"})
                 elif t == "cmd":
-                    self.commandReceived.emit(m.get("fn"), m.get("args"), m.get("kw"), m.get("seed"))
+                    self.commandReceived.emit(m.get("fn"), m.get("args"), m.get("kw"), [m.get("seed"), m.get("view")])
                 elif t == "show":
                     self._queue.append(m)          # aggiornamento arrivato durante il download
                 elif self._dispatch_upload_reply(m):
