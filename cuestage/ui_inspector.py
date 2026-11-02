@@ -537,6 +537,31 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
             f.addRow(label, row)
         f.addRow(tr("Trigger OSC"), self._line("osc_trigger", tr("es. /scena/1  (oltre a /cue/<numero>/start)")))
         f.addRow(tr("Scorciatoia"), self._hotkey_row(cue))
+        from .model import EVENT_LABELS
+        from PySide6.QtWidgets import QCheckBox
+        for label, keys in ((tr("Ducking"), ("duck_on", "duck_off")),
+                            (tr("Comportamento slave"), ("master_lost", "promoted"))):
+            row = QHBoxLayout()
+            for key in keys:
+                cb = QCheckBox(EVENT_LABELS[key])
+                cb.setChecked(key in (cue.event_trig or []))
+
+                def toggled(on, key=key):
+                    ev = [k for k in (cue.event_trig or []) if k != key]
+                    if on:
+                        ev.append(key)
+                    cue.event_trig = ev
+                    self._emit()
+                cb.toggled.connect(toggled)
+                row.addWidget(cb)
+            row.addStretch(1)
+            f.addRow(label, row)
+        ev_note = QLabel(tr("Ducking: la cue parte quando l'ingresso del ducking (Impostazioni › Ducking) supera la "
+                            "soglia o torna sotto (dopo l'hold). Slave: parte su questa istanza secondaria quando "
+                            "il master non risponde più o quando diventa indipendente."))
+        ev_note.setWordWrap(True)
+        ev_note.setStyleSheet("color:#888; font-size:10px;")
+        f.addRow(ev_note)
         if cue.trigger == "trigger":
             note = QLabel(tr("Questa cue è «Solo trigger»: il GO non la avvia, parte solo con i comandi di questa scheda, "
                              "una cue Comando o un clic nel GRID."))

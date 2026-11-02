@@ -112,6 +112,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.cluster.masterBack.connect(self._cluster_back)
         self.cluster.clientsChanged.connect(self._cluster_indicator)
         self.cluster.roleChanged.connect(self._cluster_indicator)
+        self.cluster.kicked.connect(self._cluster_kicked)
+        self.cluster.chatReceived.connect(self._cluster_chat)
         self.cluster.status.connect(lambda t: self.status(t))
         self.cluster.slaveShow.connect(self._cluster_slave_show)
         self.cluster.upload_dir_fn = self._cluster_upload_dir
@@ -520,6 +522,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         add(m, tr("Salva"), self.save, "Ctrl+S")
         add(m, tr("Salva con nome…"), self.save_as, "Ctrl+Shift+S")
         m.addSeparator()
+        add(m, tr("Export bundle…"), lambda: self.export_bundle())
+        add(m, tr("Import bundle…"), lambda: self.import_bundle())
+        m.addSeparator()
         add(m, tr("Versioni dello show…"), self.versions_dialog, "Ctrl+Alt+V")
         m.addSeparator()
         add(m, tr("Esci"), self.close, "Ctrl+Q")
@@ -600,7 +605,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         add(m, tr("Diventa slave…"), self.become_slave)
         self.act_leave = add(m, tr("Esci dalla modalità slave (diventa indipendente)"), self.cluster_promote)
         self.act_leave.setEnabled(False)
-        add(m, tr("Istanze collegate…"), self._cluster_clicked)
+        add(m, tr("Istanze e messaggi…"), self._cluster_clicked, "Ctrl+M")
         m.addSeparator()
         from . import i18n
         lm = m.addMenu(tr("Lingua") + ("" if i18n.language() == "en" else " / Language"))
@@ -852,9 +857,41 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self._update_engine_label()
         self.go_btn.setText("GO" if not self.ctrl.paused_all else tr("GO ❚❚"))
         self._update_duck_btn()
+        self._event_tick()
         if time.monotonic() - self._preload_at > 0.25:
             self._preload_at = time.monotonic()
             self._preload_videos()
+
+    # =========================================================== trigger da eventi
+    def fire_event(self, name):
+        """Avvia le cue che hanno questo evento tra i trigger (scheda Trigger)."""
+        hits = [c for c in self.show_data.all_cues() if name in (c.event_trig or [])]
+        for c in hits:
+            self.ctrl.trigger(c, cascade=True)
+        if hits:
+            from .model import EVENT_LABELS
+            self.status(tr("Evento «{0}»: {1} cue avviate", EVENT_LABELS.get(name, name), len(hits)))
+        return len(hits)
+
+    def _event_tick(self):
+        """Ducking sopra / sotto soglia: con cue che lo usano come trigger l'ingresso resta in ascolto."""
+        now = time.monotonic()
+        if now - getattr(self, "_ev_scan_at", 0.0) > 1.0:
+            self._ev_scan_at = now
+            want = any(k in (c.event_trig or []) for c in self.show_data.all_cues()
+                       for k in ("duck_on", "duck_off"))
+            if want != getattr(self, "_ev_duck", False):
+                self.audio.duck.hook("__event_trig__", want)
+            self._ev_duck = want
+        if not getattr(self, "_ev_duck", False):
+            self._ev_duck_state = None
+            return
+        d = self.audio.duck
+        active = bool(d.listening and (d.gate or d.hold_left > 0))
+        prev = getattr(self, "_ev_duck_state", None)
+        self._ev_duck_state = active
+        if prev is not None and active != prev:
+            self.fire_event("duck_on" if active else "duck_off")
 
     def _toggle_video_preload(self):
         self.show_data.settings["video_preload"] = self.act_vpre.isChecked()

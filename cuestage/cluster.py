@@ -100,6 +100,32 @@ def media_files(show):
     return out
 
 
+def client_media(show, perms):
+    """{percorso: [id cue]} dei file che servono a una secondaria: tutto lo show (perms con «*») oppure
+    solo le liste di sua competenza (versione attiva)."""
+    if "*" in (perms or {}):
+        return media_files(show)
+    out = {}
+    for lst in show.lists:
+        if lst.id in perms:
+            for c in lst.cues:
+                if getattr(c, "file", "") and os.path.isfile(c.file):
+                    out.setdefault(os.path.abspath(c.file), []).append(c.id)
+    return out
+
+
+def filter_show_data(data, perms):
+    """Dati dello show con le sole liste di competenza (MAIN vuota se non è tra queste) e la sola versione
+    attiva: la secondaria non vede né riceve il resto del progetto."""
+    from .model import MAIN_ID
+    out = dict(data)
+    if MAIN_ID not in perms:
+        out["cues"] = []
+    out["panels"] = [p for p in data.get("panels") or [] if p.get("id") in perms]
+    out["versions"] = [v for v in data.get("versions") or [] if v.get("id") == data.get("active_version")]
+    return out
+
+
 def local_rel(path, base, fp):
     """Percorso relativo del file nella cartella dello slave."""
     if base:
@@ -168,8 +194,11 @@ class ClusterHub(QObject):
     masterLost = Signal()
     masterBack = Signal()
     status = Signal(str)
-    slaveShow = Signal(object, str)                # (master) show modificato da una secondaria, nome
+    slaveShow = Signal(object, str, object)        # (master) show modificato da una secondaria: dati, nome, permessi
     roleChanged = Signal()                         # master / slave / nessuno (anche dal thread di rete)
+    chatReceived = Signal(object)                  # messaggio tra istanze: {from, from_id, to, text, ts}
+    rosterChanged = Signal()                       # elenco delle istanze collegate (per i messaggi)
+    kicked = Signal(str)                           # (slave) il master ci ha disconnesso: motivo
     _startWatch = Signal()
 
     def __init__(self, ctrl, parent=None):
@@ -181,6 +210,10 @@ class ClusterHub(QObject):
         self.allow_slave_edit = False   # (master) le secondarie possono aggiornare il progetto
         self.upload_dir_fn = None    # (master) () -> cartella per i file inviati dalle secondarie
         self.can_edit = False        # (slave) il master accetta le nostre modifiche
+        self.perms = {"*": "control"}  # (slave) liste di competenza: {"*" | id lista: "control" | "edit"}
+        self.chat = []               # messaggi tra istanze (ricevuti e inviati), il più recente in fondo
+        self.roster = []             # [{id, name, role}] istanze della rete (master compreso)
+        self._kicked = False
         self.to_master = {}          # (slave) percorso locale -> percorso sul master
         self._put_wait = {}          # (slave) percorso locale -> [Event, percorso sul master | errore]
         self.show_fn = None          # () -> Show (master)
@@ -329,6 +362,7 @@ class ClusterHub(QObject):
         except OSError:
             self.udp = None
         self._last_hash = None
+        self.roster = self._roster_items()
         self.hb_timer.start()
         self.change_timer.start()
         self.clientsChanged.emit()
@@ -345,6 +379,7 @@ class ClusterHub(QObject):
             except OSError:
                 pass
         self.server = self.udp = None
+        self.roster = []
         if self.role == "master":
             self.role = None
             self.roleChanged.emit()
@@ -424,6 +459,8 @@ class ClusterHub(QObject):
 
     def _drop(self, cid):
         c = self.clients.pop(cid, None)
+        if c is not None and c.get("accepted"):
+            threading.Thread(target=self._send_roster, daemon=True).start()
         if c is not None:
             with c["cond"]:
                 c["closed"] = True
@@ -442,12 +479,24 @@ class ClusterHub(QObject):
                 self.status.emit(tr("Istanza secondaria «{0}» scollegata", c['name']))
             self.clientsChanged.emit()
 
-    def answer(self, cid, ok):
-        """Risposta della finestra di conferma (thread di Qt)."""
+    def answer(self, cid, ok, perms=None):
+        """Risposta della finestra di conferma (thread di Qt). perms: {"*": "control"|"edit"} per tutto il
+        progetto oppure {id lista: "control"|"edit"} solo per alcuni MAIN / PANEL / GRID."""
         ev = self._pending.get(cid)
         if ev is not None:
             ev["ok"] = ok
+            ev["perms"] = perms
             ev["ev"].set()
+
+    def default_perms(self):
+        return {"*": "edit" if self.allow_slave_edit else "control"}
+
+    def client_perms(self, cid):
+        c = self.clients.get(cid) or {}
+        return c.get("perms") or self.default_perms()
+
+    def client_can_edit(self, cid):
+        return "edit" in self.client_perms(cid).values()
 
     def _client_loop(self, cid):
         c = self.clients.get(cid)
@@ -457,8 +506,9 @@ class ClusterHub(QObject):
             if hello.get("t") != "hello" or hello.get("proto") != PROTO:
                 send_frame(sock, c["lock"], {"t": "reject", "why": tr("versione del protocollo diversa")})
                 raise ConnectionError(tr("hello non valido"))
-            c.update(name=str(hello.get("name") or c["addr"]), mode=hello.get("mode") or "slave")
-            ev = {"ev": threading.Event(), "ok": False}
+            c.update(name=str(hello.get("name") or c["addr"]), mode=hello.get("mode") or "slave",
+                     iid=str(hello.get("id") or cid))
+            ev = {"ev": threading.Event(), "ok": False, "perms": None}
             self._pending[cid] = ev
             self.joinRequest.emit(cid, c["name"], c["addr"], c["mode"])
             ev["ev"].wait(120)
@@ -466,10 +516,15 @@ class ClusterHub(QObject):
             if not ev["ok"]:
                 send_frame(sock, c["lock"], {"t": "reject", "why": tr("richiesta rifiutata dal master")})
                 raise ConnectionError("rifiutato")
+            perms = ev.get("perms") or self.default_perms()
+            if c["mode"] == "redundancy":              # la ridondanza esegue tutto lo show
+                perms = {"*": perms.get("*", "control") if "*" in perms else self.default_perms()["*"]}
+            c["perms"] = perms
             c["accepted"] = True
             self._send_client(cid, {"t": "welcome", "name": self.name, "id": self.instance_id,
-                                    "edit": self.allow_slave_edit})
+                                    "edit": self.client_can_edit(cid), "perms": perms})
             self.clientsChanged.emit()
+            self._send_roster()
             self.status.emit(tr("Istanza secondaria «{0}» collegata ({1})", c['name'], c['mode']))
             while cid in self.clients:
                 msg, _ = recv_frame(sock)
@@ -482,10 +537,12 @@ class ClusterHub(QObject):
                 elif t == "put_begin":
                     self._receive_upload(cid, sock, msg)
                 elif t == "show_up":
-                    if self.allow_slave_edit:
-                        self.slaveShow.emit(msg.get("data"), c["name"])
+                    if self.client_can_edit(cid):
+                        self.slaveShow.emit(msg.get("data"), c["name"], dict(self.client_perms(cid)))
                     else:
                         self._send_client(cid, {"t": "edit_refused"})
+                elif t == "chat":
+                    self._route_chat(dict(msg, from_id=c.get("iid"), **{"from": msg.get("from") or c["name"]}), cid)
         except (OSError, ConnectionError, ValueError, struct.error):
             pass
         finally:
@@ -495,7 +552,7 @@ class ClusterHub(QObject):
         """File nuovo aggiunto su una secondaria: si salva nella cartella dello show del master."""
         name = file_basename(msg.get("name") or "file")
         local = msg.get("local")
-        ok = self.allow_slave_edit and self.upload_dir_fn is not None
+        ok = self.client_can_edit(cid) and self.upload_dir_fn is not None
         dest = None
         out = None
         if ok:
@@ -529,12 +586,15 @@ class ClusterHub(QObject):
         else:
             self._send_client(cid, {"t": "put_err", "local": local, "why": tr("aggiornamento del progetto non consentito")})
 
-    def _show_message(self):
+    def _show_message(self, cid=None):
         sh = self.show_fn()
         base = os.path.dirname(os.path.abspath(sh.path)) if sh.path else ""
         data = sh.to_data(base or None)
+        perms = self.client_perms(cid) if cid is not None else {"*": "edit"}
+        if "*" not in perms:
+            data = filter_show_data(data, perms)
         files = []
-        for path, ids in media_files(sh).items():
+        for path, ids in client_media(sh, perms).items():
             fp = fingerprint(path)
             if fp:
                 files.append({"path": path, "rel": local_rel(path, base, fp), "fp": fp,
@@ -544,19 +604,20 @@ class ClusterHub(QObject):
                                            .encode()).hexdigest()
         except Exception:
             pass
-        return {"t": "show", "data": data, "base": base, "files": files, "edit": self.allow_slave_edit,
+        return {"t": "show", "data": data, "base": base, "files": files, "edit": "edit" in perms.values(),
+                "perms": perms,
                 "name": os.path.basename(sh.path) if sh.path else "senza-titolo.cueshow",
                 "playheads": dict(self.ctrl.playheads), "hw": self.hw_fn() if self.hw_fn else {},
                 "seed": [self.ctrl.seed_base, self.ctrl.seed_count]}
 
     def _send_show(self, cid):
-        self._send_client(cid, self._show_message())
+        self._send_client(cid, self._show_message(cid))
 
     def _send_file(self, cid, path):
         """Richiesta di un file: lo spedisce il thread di scrittura, a blocchi (il thread di lettura resta
         libero di ricevere gli heartbeat della secondaria, che altrimenti verrebbe scollegata)."""
         sh = self.show_fn()
-        allowed = media_files(sh)
+        allowed = client_media(sh, self.client_perms(cid))
         if path not in allowed:
             self._send_client(cid, {"t": "file_err", "path": path, "why": tr("file non usato dallo show")})
             return
@@ -616,14 +677,89 @@ class ClusterHub(QObject):
         if self._last_hash is None:
             self._last_hash = h
             return
-        msg = self._show_message()
-        msg["update"] = True
         for cid, c in list(self.clients.items()):
             if c.get("accepted"):
+                msg = self._show_message(cid)          # ognuna riceve solo le liste di sua competenza
+                msg["update"] = True
                 self._send_client(cid, msg)
 
     def client_list(self):
         return [(c["name"], c["addr"], c["mode"]) for c in self.clients.values() if c.get("accepted")]
+
+    def client_rows(self):
+        """(master) [(cid, nome, indirizzo, modalità, permessi)] delle istanze accettate."""
+        return [(cid, c["name"], c["addr"], c["mode"], c.get("perms") or self.default_perms())
+                for cid, c in list(self.clients.items()) if c.get("accepted")]
+
+    def kick(self, cid, why=""):
+        """(master) Disconnette un'istanza: riceve il motivo e non si considera «master perso»."""
+        c = self.clients.get(cid)
+        if c is None:
+            return
+        self._send_client(cid, {"t": "kicked", "why": why or tr("disconnessa dal master")})
+        name = c["name"]
+        threading.Timer(0.4, self._drop, args=(cid,)).start()     # il messaggio parte prima della chiusura
+        self.status.emit(tr("Istanza «{0}» disconnessa", name))
+
+    # ------------------------------------------------------------------ messaggi tra istanze
+    def _roster_items(self):
+        items = [{"id": self.instance_id, "name": self.name, "role": "master"}]
+        items += [{"id": c.get("iid"), "name": c["name"], "role": c["mode"]}
+                  for c in list(self.clients.values()) if c.get("accepted")]
+        return items
+
+    def _send_roster(self):
+        if self.role != "master":
+            return
+        self.roster = self._roster_items()
+        self.rosterChanged.emit()
+        for cid, c in list(self.clients.items()):
+            if c.get("accepted"):
+                self._send_client(cid, {"t": "roster", "items": self.roster})
+
+    def send_chat(self, text, to="*", sender=None):
+        """Messaggio a tutte le istanze collegate (to="*") o a una sola (id istanza). sender: nome di chi
+        scrive se non è l'operatore di questa istanza (es. «Marco (web · Regia)»). Senza collegamenti il
+        messaggio resta qui (operatore e interfaccia web di questa istanza)."""
+        text = str(text or "").strip()[:2000]
+        if not text:
+            return False
+        msg = {"t": "chat", "from": sender or self.name, "from_id": self.instance_id, "to": to or "*",
+               "text": text, "ts": time.time()}
+        if self.role == "master":
+            self._route_chat(msg, None)
+        elif self.role == "slave" and self.sock is not None:
+            try:
+                self._send(msg)
+            except OSError:
+                return False
+            self._store_chat(msg)
+        else:
+            self._store_chat(msg)
+        return True
+
+    def recipients(self):
+        """[(id, nome)] a cui si può scrivere: tutte le istanze della rete, questa compresa."""
+        if self.role is None or not self.roster:
+            return [(self.instance_id, self.name)]
+        return [(r.get("id"), r.get("name")) for r in self.roster if r.get("id")]
+
+    def _store_chat(self, msg):
+        self.chat_seq = getattr(self, "chat_seq", 0) + 1
+        self.chat.append(dict({k: msg.get(k) for k in ("from", "from_id", "to", "text", "ts")}, seq=self.chat_seq))
+        del self.chat[:-500]
+        self.chatReceived.emit(self.chat[-1])
+
+    def _route_chat(self, msg, from_cid):
+        """(master) Consegna un messaggio: a tutti, al master o a una secondaria."""
+        to = msg.get("to") or "*"
+        if to in ("*", self.instance_id) or from_cid is None:
+            self._store_chat(msg)
+        for cid, c in list(self.clients.items()):
+            if cid == from_cid or not c.get("accepted"):
+                continue
+            if to == "*" or c.get("iid") == to:
+                self._send_client(cid, msg)
 
     # ================================================================== SLAVE
     def connect_slave(self, host, port, mode, sync_mode, copy_settings, media_dir, lost_ms=500):
@@ -636,8 +772,16 @@ class ClusterHub(QObject):
         self.master_info = {"host": host, "port": int(port)}
         threading.Thread(target=self._slave_loop, args=(host, int(port)), daemon=True, name="cluster-slave").start()
 
+    def can_edit_list(self, list_id):
+        """(slave) Si possono modificare le cue di questa lista?"""
+        if self.role != "slave":
+            return True
+        mode = self.perms.get("*") or self.perms.get(list_id)
+        return self.can_edit and mode == "edit"
+
     def disconnect_slave(self):
         s, self.sock = self.sock, None
+        self.roster = []
         self.watch.stop()
         if s is not None:
             try:
@@ -669,6 +813,8 @@ class ClusterHub(QObject):
                 raise ConnectionError(msg.get("why") or "rifiutato")
             self.master_info.update(name=msg.get("name"), id=msg.get("id"))
             self.can_edit = bool(msg.get("edit"))
+            self.perms = msg.get("perms") or {"*": "edit" if self.can_edit else "control"}
+            self._kicked = False
             sock.settimeout(None)
             self.role = "slave"
             self.last_hb = time.monotonic()
@@ -685,7 +831,11 @@ class ClusterHub(QObject):
                     self._sync_show(sock, msg, full=first and self.sync_mode == "full", first=first)
                     first = False
         except (OSError, ConnectionError, ValueError, struct.error) as e:
-            if self.role != "slave":
+            if self._kicked and self.sock is sock:         # disconnessa dal master: non è un master perso
+                if not getattr(self, "_synced", True):
+                    self.syncDone.emit(False, str(e))
+                self.kicked.emit(str(e))
+            elif self.role != "slave":
                 self.syncDone.emit(False, str(e))
             elif self.sock is sock:
                 if not getattr(self, "_synced", True):     # interrotto durante la prima sincronizzazione
@@ -727,7 +877,18 @@ class ClusterHub(QObject):
             return msg, payload
 
     def _dispatch_upload_reply(self, msg):
+        """Messaggi del master che si gestiscono subito (anche durante un download)."""
         t = msg.get("t")
+        if t == "chat":
+            self._store_chat(msg)
+            return True
+        if t == "roster":
+            self.roster = list(msg.get("items") or [])
+            self.rosterChanged.emit()
+            return True
+        if t == "kicked":
+            self._kicked = True
+            raise ConnectionError(msg.get("why") or tr("disconnessa dal master"))
         if t in ("put_ok", "put_err"):
             w = self._put_wait.get(msg.get("local"))
             if w is not None:
@@ -810,6 +971,8 @@ class ClusterHub(QObject):
         remap = {f["path"]: os.path.join(self.media_dir, f["rel"]) for f in files}
         self.to_master.update({v: k for k, v in remap.items()})
         self.can_edit = bool(msg.get("edit", self.can_edit))
+        if msg.get("perms"):
+            self.perms = msg["perms"]
         info = {"remap": remap, "base": msg.get("base"), "name": msg.get("name"), "hw": msg.get("hw") or {},
                 "playheads": msg.get("playheads") or {}, "seed": msg.get("seed"), "first": first,
                 "errors": errors, "downloaded": len(need), "files": len(files), "update": bool(msg.get("update"))}

@@ -51,10 +51,10 @@ class ClusterMixin:
                 "switchers": self.show_data.settings.get("switchers") or []}
 
     def _cluster_join(self, cid, name, addr, mode):
-        what = tr("RIDONDANZA (esegue le stesse cue)") if mode == "redundancy" else tr("SLAVE (copia del progetto)")
-        r = QMessageBox.question(self, tr("Istanza secondaria"),
-                                 tr("«{0}» ({1}) chiede di collegarsi come {2}.\n\nRiceverà lo show, i file multimediali e ogni modifica. Accetti?", name, addr, what))
-        self.cluster.answer(cid, r == QMessageBox.Yes)
+        from ..ui_cluster import JoinDialog
+        d = JoinDialog(name, addr, mode, self.show_data.lists, self.cluster.allow_slave_edit, self)
+        ok = d.exec() == JoinDialog.Accepted
+        self.cluster.answer(cid, ok, d.perms() if ok else None)
 
     def become_slave(self):
         if self.cluster.role == "slave":
@@ -92,14 +92,13 @@ class ClusterMixin:
             self.ctrl.playheads = {k: int(v) for k, v in (info.get("playheads") or {}).items()}
             if info.get("seed"):
                 self.ctrl.seed_base, self.ctrl.seed_count = str(info["seed"][0]), int(info["seed"][1])
-            self.inspector.setEnabled(False)
             self.act_leave.setEnabled(True)
         elif self._lists_hash(new) == self._lists_hash(sh) and (new.settings is sh.settings or
                                                                  new.settings == sh.settings):
             pass                     # è l'eco di una modifica fatta qui: niente da cambiare (non disturba l'editor)
         else:
             self._cluster_replace(new, new.settings is not sh.settings)
-        self.inspector.setEnabled(hub.can_edit)
+        self._slave_edit_state()
         try:
             self.show_data.save(path)
         except OSError as e:
@@ -180,11 +179,33 @@ class ClusterMixin:
         self._slave_hash = h
         hub.push_show(self.show_data)
 
-    def _cluster_slave_show(self, data, who):
-        """(master) Show modificato su una secondaria: entra nel progetto e riparte verso tutte."""
+    def _slave_edit_state(self):
+        """Secondaria: l'ispettore si usa solo sulle liste che il master le lascia modificare."""
+        hub = self.cluster
+        if hub.role == "slave":
+            self.inspector.setEnabled(hub.can_edit_list(self.show_data.current.id))
+        else:
+            self.inspector.setEnabled(True)
+
+    def _cluster_slave_show(self, data, who, perms=None):
+        """(master) Show modificato su una secondaria: entra nel progetto e riparte verso tutte. Con accesso
+        limitato entrano solo le liste che quella secondaria può modificare (le altre restano come sono)."""
         from ..model import Show
         new = Show.from_data(data, None)
         sh = self.show_data
+        perms = perms or {"*": "edit"}
+        if "*" not in perms:
+            got = {l.id: l for l in new.lists}
+            merged = [got[l.id] if perms.get(l.id) == "edit" and l.id in got else l for l in sh.lists]
+            new.lists = merged
+            new.versions, new.active_version = sh.versions, sh.active_version
+            if not any(perms.get(l.id) == "edit" and l.id in got for l in sh.lists):
+                return
+            self._cluster_replace(new, False)
+            sh.dirty = True
+            self._update_title()
+            self.status(tr("Progetto aggiornato da «{0}» (istanza secondaria)", who))
+            return
         take = "settings" in data
         if take:
             keep = {k: v for k, v in sh.settings.items() if k.startswith("cluster_") or k.startswith("web_")}
@@ -270,6 +291,7 @@ class ClusterMixin:
     def _cluster_lost(self):
         self.status(tr("⚠ MASTER NON RAGGIUNGIBILE (nessun heartbeat)"))
         self._cluster_indicator()
+        self.fire_event("master_lost")
         if QSettings("CueStage", "CueStage").value("cluster/auto_promote", "false") in (True, "true"):
             self.cluster_promote(ask=False)
 
@@ -294,6 +316,44 @@ class ClusterMixin:
         self._cluster_apply_settings()
         self.status(tr("Questa istanza ora è indipendente") + (tr(" (master)") if hub.role == "master" else ""))
         self._cluster_indicator()
+        self.fire_event("promoted")
+
+    def _cluster_kicked(self, why):
+        """Il master ci ha disconnessi: si torna indipendenti (non è un «master perso»)."""
+        hub = self.cluster
+        hub.disconnect_slave()
+        self.inspector.setEnabled(True)
+        self.hw_bad = {}
+        self.model.hw_bad = {}
+        self.model.refresh()
+        self._cluster_indicator()
+        self.status(tr("⚠ Disconnessa dal master: {0}", why))
+        QMessageBox.information(self, tr("Istanza secondaria"), tr("Il master ha chiuso il collegamento.\n{0}", why))
+
+    def _cluster_chat(self, m):
+        """Messaggio nuovo: barra di stato e finestra dei messaggi (aperta se chiusa)."""
+        hub = self.cluster
+        mine = m.get("from_id") == hub.instance_id and m.get("from") == hub.name
+        if mine:
+            return
+        self.status(tr("💬 {0}: {1}", m.get("from"), m.get("text")))
+        self.open_cluster_window(activate=False)
+
+    def open_cluster_window(self, activate=True):
+        from ..ui_cluster import ClusterWindow
+        w = getattr(self, "_cluster_win", None)
+        if w is None or not w.isVisible():
+            w = ClusterWindow(self.cluster, self, self)
+            w.setModal(False)
+            self._cluster_win = w
+            if not activate:
+                from PySide6.QtCore import Qt
+                w.setAttribute(Qt.WA_ShowWithoutActivating)
+            w.show()
+        if activate:
+            w.raise_()
+            w.activateWindow()
+        return w
 
     def _cluster_indicator(self):
         if hasattr(self, "act_leave"):        # anche durante il primo download: si può sempre uscire
@@ -319,19 +379,7 @@ class ClusterMixin:
 
     def _cluster_clicked(self):
         hub = self.cluster
-        if hub.role == "slave":
-            if hub.lost:
-                self.cluster_promote()
-            else:
-                QMessageBox.information(self, tr("Istanza secondaria"),
-                                        tr("Collegata a «{0}» ({1}:{2}) in modalità {3}.\n", hub.master_info.get('name'), hub.master_info.get('host'), hub.master_info.get('port'), 'RIDONDANZA' if hub.mode == 'redundancy' else 'SLAVE')
-                                        + (tr("Le modifiche fatte qui vengono inviate al master.") if hub.can_edit else
-                                           tr("Le modifiche al progetto arrivano dal master; l'editor è bloccato.")))
-        elif hub.role == "master":
-            rows = hub.client_list()
-            QMessageBox.information(self, tr("Istanze collegate"),
-                                    "\n".join(f"• {n} ({a}) — {'ridondanza' if m == 'redundancy' else 'slave'}"
-                                              for n, a, m in rows) or tr("Nessuna istanza secondaria collegata."))
-        else:
-            QMessageBox.information(self, tr("Istanze"), tr("Questa istanza non è né master né slave. Per accettare "
-                                    "istanze secondarie: Impostazioni › Audio, OSC e MIDI › Istanze."))
+        if hub.role == "slave" and hub.lost:
+            self.cluster_promote()
+            return
+        self.open_cluster_window()

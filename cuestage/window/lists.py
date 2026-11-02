@@ -46,6 +46,8 @@ class ListsMixin:
             self.table.clearSelection()
         self._select_guard = False
         self._apply_view_kind()
+        if self.cluster.role == "slave":
+            self._slave_edit_state()
         self._update_standby()
 
     def _apply_view_kind(self):

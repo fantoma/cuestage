@@ -40,6 +40,24 @@ from cuestage.model import Cue, Show  # noqa: E402
 TMP = tempfile.mkdtemp(prefix="cuestage-test-")
 FAILED = []
 
+# richiesta di collegamento di una secondaria: accettata con i permessi scelti dalla prova (JOIN["perms"])
+import cuestage.ui_cluster as _uc  # noqa: E402
+JOIN = {"perms": None}
+
+
+def _join_exec(self):
+    perms = JOIN.get("perms")
+    if perms and "*" not in perms:
+        self.some_rb.setChecked(True)
+        for lid, cb in self.combos.items():
+            cb.setCurrentIndex(max(0, cb.findData(perms.get(lid, ""))))
+    elif perms:
+        self.all_mode.setCurrentIndex(self.all_mode.findData(perms["*"]))
+    return _uc.JoinDialog.Accepted
+
+
+_uc.JoinDialog.exec = _join_exec
+
 
 def run(sec):
     end = time.monotonic() + sec
@@ -1565,6 +1583,188 @@ def t_cluster_slow_transfer():
             x.close()
 
 
+def t_bundle(w):
+    """Export bundle → ZIP con show e file (anche esterni e di altre versioni) → Import bundle altrove."""
+    import zipfile
+    src = os.path.join(TMP, "bundle_src")
+    os.makedirs(os.path.join(src, "audio"), exist_ok=True)
+    a = tone(os.path.join("bundle_src", "audio", "a.wav"), 0.5)
+    ext = tone("esterno.wav", 0.5)
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    sh.cues = [Cue("audio", number="1", name="A", file=a)]
+    p = sh.add_panel("Effetti")
+    p.cues.append(Cue("audio", number="2", name="Esterno", file=ext))
+    sh.add_version("Altra")
+    sh.save(os.path.join(src, "spettacolo.cueshow"))
+    w._set_show(Show.load(os.path.join(src, "spettacolo.cueshow")))
+    w._bundle_quiet = True
+    z = w.export_bundle(os.path.join(TMP, "spettacolo-bundle.zip"))
+    assert z and os.path.isfile(z)
+    names = set(zipfile.ZipFile(z).namelist())
+    assert {"cuestage-bundle.json", "spettacolo.cueshow", "audio/a.wav"} <= names, names
+    assert any(n.startswith("_esterni/") and n.endswith("esterno.wav") for n in names), names
+    w.show_data.dirty = False
+    dest = os.path.join(TMP, "bundle_dest")
+    path = w.import_bundle(z, dest)
+    assert path == os.path.join(dest, "spettacolo.cueshow") and w.show_data.path == path
+    files = sorted(c.file for c in w.show_data.every_cue())
+    assert all(f.startswith(dest) and os.path.isfile(f) for f in files), files
+    assert len(files) == 4, files                       # le cue della versione «Altra» comprese
+    assert w.show_data.lists[1].name == "Effetti"
+    w.qs.remove("last_show")                            # le finestre aperte dopo non devono riaprirlo
+
+
+def t_event_triggers(w):
+    """Trigger da eventi: ducking sopra / sotto soglia."""
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    on = Cue("wait", number="1", name="Voce", duration=30, trigger="trigger", event_trig=["duck_on"])
+    off = Cue("wait", number="2", name="Silenzio", duration=30, trigger="trigger", event_trig=["duck_off"])
+    sh.cues = [on, off]
+    w._set_show(sh)
+
+    fd = w.audio.duck                                   # ingresso del ducking simulato
+    hooked = set()
+    fd.hook = lambda key, on: (hooked.add if on else hooked.discard)(key)
+    fd.stream, fd.gate, fd.hold_left = "simulato", False, 0.0
+    w._ev_scan_at = 0.0
+    w._ev_duck = False
+    try:
+        run(0.3)
+        assert "__event_trig__" in hooked
+        assert not w.ctrl.instances
+        fd.gate = True
+        run(0.2)
+        assert names(w) == ["Voce"], names(w)
+        fd.gate = False
+        fd.hold_left = 0.5
+        run(0.2)
+        assert names(w) == ["Voce"]
+        fd.hold_left = 0.0
+        run(0.2)
+        assert names(w) == ["Silenzio", "Voce"], names(w)
+        w.ctrl.stop_all(0)
+    finally:
+        del fd.hook
+        fd.stream, fd.gate, fd.hold_left = None, False, 0.0
+        w._ev_scan_at = 0.0
+        w.show_data.dirty = False
+
+
+def t_cluster_perms_chat():
+    """Slave con accesso a un solo PANEL (solo i suoi file), messaggi tra istanze e web, disconnessione,
+    trigger «master perso» e «promossa a master»."""
+    a = MainWindow()
+    b = MainWindow()
+    c = MainWindow()
+    try:
+        sh = Show()
+        sh.settings["output_fullscreen"] = False
+        sh.cues = [Cue("audio", number="1", name="Main", file=tone("pm_main.wav", 0.5))]
+        p1 = sh.add_panel("Luci")
+        p1.cues.append(Cue("audio", number="2", name="Panel", file=tone("pm_panel.wav", 0.5)))
+        p2 = sh.add_panel("Effetti", kind="grid")
+        p2.cues.append(Cue("audio", number="3", name="Grid", file=tone("pm_grid.wav", 0.5)))
+        sh.save(os.path.join(TMP, "perm.cueshow"))
+        sh = Show.load(os.path.join(TMP, "perm.cueshow"))
+        sh.settings["output_fullscreen"] = False
+        a._set_show(sh)
+        old = dict(sh.settings)
+        sh.settings.update(cluster_enabled=True, cluster_port=18996)
+        a._apply_settings(old=old)
+        run(0.3)
+        p1_id, p2_id = sh.lists[1].id, sh.lists[2].id
+        JOIN["perms"] = {p1_id: "edit", p2_id: "control"}
+        done = []
+        b.cluster.syncDone.connect(lambda ok, t: done.append(ok))
+        b.cluster.connect_slave("127.0.0.1", 18996, "slave", "full", True, os.path.join(TMP, "perm_b"), 400)
+        t0 = time.monotonic()
+        while not done and time.monotonic() - t0 < 15:
+            run(0.05)
+        assert done == [True], done
+        run(0.3)
+        bs = b.show_data
+        assert [l.name for l in bs.lists] == ["MAIN", "Luci", "Effetti"] and not bs.lists[0].cues
+        assert sorted(os.listdir(os.path.join(TMP, "perm_b"))) == ["perm.cueshow", "pm_grid.wav", "pm_panel.wav"]
+        assert b.cluster.can_edit_list(p1_id) and not b.cluster.can_edit_list(p2_id)
+        b.show_list(2)
+        assert not b.inspector.isEnabled()
+        b.show_list(1)
+        assert b.inspector.isEnabled()
+        # modifica sul PANEL «Luci» (consentita) e sul GRID (non consentita): sul master entra solo la prima
+        bs.lists[1].cues[0].name = "Panel modificato"
+        bs.lists[2].cues[0].name = "Grid modificato"
+        bs.dirty = True
+        t0 = time.monotonic()
+        while sh.lists[1].cues[0].name != "Panel modificato" and time.monotonic() - t0 < 5:
+            run(0.1)
+        assert sh.lists[1].cues[0].name == "Panel modificato"
+        assert sh.lists[2].cues[0].name == "Grid" and sh.lists[0].cues[0].name == "Main"
+        t0 = time.monotonic()                               # sulla secondaria la modifica non consentita torna indietro
+        while b.show_data.lists[2].cues[0].name != "Grid" and time.monotonic() - t0 < 5:
+            run(0.1)
+        assert b.show_data.lists[2].cues[0].name == "Grid"
+        # seconda secondaria con tutto il progetto, poi messaggi
+        JOIN["perms"] = {"*": "control"}
+        done.clear()
+        c.cluster.syncDone.connect(lambda ok, t: done.append(ok))
+        c.cluster.connect_slave("127.0.0.1", 18996, "slave", "diff", True, os.path.join(TMP, "perm_c"), 400)
+        t0 = time.monotonic()
+        while not done and time.monotonic() - t0 < 15:
+            run(0.05)
+        assert done == [True]
+        t0 = time.monotonic()
+        while len(b.cluster.roster) < 3 and time.monotonic() - t0 < 3:
+            run(0.05)
+        assert len(b.cluster.roster) == 3, b.cluster.roster
+        b.cluster.send_chat("ciao a tutti")
+        c.cluster.send_chat("solo a B", to=b.cluster.instance_id)
+        t0 = time.monotonic()
+        while len(b.cluster.chat) < 2 and time.monotonic() - t0 < 3:
+            run(0.05)
+        run(0.2)
+        assert [m["text"] for m in a.cluster.chat] == ["ciao a tutti"], a.cluster.chat
+        assert sorted(m["text"] for m in b.cluster.chat) == ["ciao a tutti", "solo a B"], b.cluster.chat
+        assert sorted(m["text"] for m in c.cluster.chat) == ["ciao a tutti", "solo a B"], c.cluster.chat
+        # messaggio dall'interfaccia web del master
+        a._web_command({"cmd": "chat", "text": "dal telefono", "to": "*", "name": "Marco"})
+        run(0.4)
+        assert b.cluster.chat[-1]["text"] == "dal telefono" and "Marco" in b.cluster.chat[-1]["from"]
+        st = a._web_state()
+        assert st["chat"][-1]["text"] == "dal telefono" and len(st["chat_to"]) == 4, st["chat_to"]
+        assert a._cluster_win is not None and a._cluster_win.isVisible()      # finestra aperta dal messaggio
+        # il master disconnette C: non è un «master perso» (niente trigger)
+        cue_c = c.show_data.lists[0].cues[0]
+        cue_c.event_trig = ["master_lost", "promoted"]
+        cid = next(r[0] for r in a.cluster.client_rows() if r[1] == c.cluster.name and r[4] == {"*": "control"})
+        a.cluster.kick(cid)
+        t0 = time.monotonic()
+        while c.cluster.role is not None and time.monotonic() - t0 < 3:
+            run(0.05)
+        run(0.3)
+        assert c.cluster.role is None and not c.ctrl.instances and not c.act_leave.isEnabled()
+        # B perde il master: parte la cue con «master perso»
+        cue_b = b.show_data.lists[1].cues[0]
+        cue_b.event_trig = ["master_lost"]
+        b.show_data.lists[2].cues[0].event_trig = ["promoted"]
+        a.cluster.stop_master()
+        t0 = time.monotonic()
+        while not b.cluster.lost and time.monotonic() - t0 < 3:
+            run(0.02)
+        run(0.2)
+        assert names(b) == ["Panel modificato"], names(b)
+        b.cluster_promote(ask=False)
+        run(0.2)
+        assert names(b) == ["Grid", "Panel modificato"], names(b)
+    finally:
+        JOIN["perms"] = None
+        for x in (a, b, c):
+            x.ctrl.stop_all(0)
+            x.show_data.dirty = False
+            x.close()
+
+
 if __name__ == "__main__":
     w = MainWindow()
     w.show()
@@ -1590,9 +1790,12 @@ if __name__ == "__main__":
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))
     check("avviso iniziale e indirizzi dell'interfaccia web", t_notice_and_addresses)
     check("annulla / ripeti, cronologia e versioni dello show", lambda: t_history_versions(w))
+    check("export / import bundle (ZIP con show e file)", lambda: t_bundle(w))
+    check("trigger da eventi: ducking sopra / sotto soglia", lambda: t_event_triggers(w))
     w.show_data.dirty = False
     w.close()
     check("master + ridondanza: comandi, modifiche, heartbeat", t_cluster_redundancy)
     check("istanze: file grande su rete lenta, Esci dalla modalità slave", t_cluster_slow_transfer)
+    check("istanze: accesso per PANEL / GRID, messaggi (anche web), disconnessione, trigger slave", t_cluster_perms_chat)
     print(f"\n{'Tutto bene' if not FAILED else f'{len(FAILED)} prove fallite: ' + ', '.join(FAILED)}")
     sys.exit(len(FAILED))

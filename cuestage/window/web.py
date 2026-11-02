@@ -183,10 +183,32 @@ class WebMixin:
                 "go_target": sh.settings.get("go_target", "main"), "go_list": ctrl.go_list().id,
                 "playheads": {l.id: ctrl.playhead_of(l) for l in sh.lists},
                 "paused_all": bool(ctrl.paused_all), "active": act, "running_lists": sorted(running),
-                "proj": self._web_proj}
+                "proj": self._web_proj, **self._web_chat()}
+
+    def _web_chat(self):
+        """Messaggi tra istanze anche per chi usa l'interfaccia web: ultimi messaggi e destinatari."""
+        hub = self.cluster
+        names = dict(hub.recipients())
+        msgs = []
+        for m in hub.chat[-60:]:
+            to = m.get("to") or "*"
+            msgs.append({"seq": m.get("seq"), "from": m.get("from"), "text": m.get("text"), "ts": m.get("ts"),
+                         "to": "" if to == "*" else names.get(to, to)})
+        return {"chat": msgs, "chat_n": getattr(hub, "chat_seq", 0), "me": hub.name,
+                "chat_to": [{"id": "*", "name": tr("Tutti")}]
+                + [{"id": i, "name": n + (tr(" (questa regia)") if i == hub.instance_id else "")}
+                   for i, n in hub.recipients()]}
 
     def _web_command(self, d):
         """Comandi dall'interfaccia web (già nel thread di Qt)."""
+        if d.get("cmd") == "chat":
+            name = str(d.get("name") or "").strip()[:40] or tr("Web")
+            to = str(d.get("to") or "*")
+            if to == self.cluster.instance_id and self.cluster.role is None:
+                to = "*"
+            self.cluster.send_chat(str(d.get("text") or ""), to, sender=tr("{0} (web · {1})", name, self.cluster.name))
+            self.web.refresh()
+            return
         if self.learn_dialog is not None:
             return
         sh = self.show_data

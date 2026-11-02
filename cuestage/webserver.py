@@ -15,7 +15,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 from .i18n import tr
 
 COMMANDS = {"go", "go_list", "stop_list", "xfade", "stop_all", "pause_all", "resume_all", "stop_cue", "pause_cue", "playhead",
-            "proj", "proj_status", "proj_corners_read", "proj_corner"}
+            "proj", "proj_status", "proj_corners_read", "proj_corner", "chat"}
 
 
 class ProjRelay(QObject):
@@ -273,13 +273,26 @@ h3{font-size:13px;color:var(--dim);margin:16px 0 6px;text-transform:uppercase;le
 #pin div{background:var(--panel);padding:20px;border-radius:12px;display:flex;flex-direction:column;gap:10px}
 #pin input{font:inherit;font-size:22px;padding:8px;border-radius:8px;border:1px solid var(--line);background:#111;color:#fff;width:180px;text-align:center}
 #pin button{background:var(--go)}
+#chatb{background:#3d4a5c;flex:0 0 52px;position:relative}
+#chatb i{position:absolute;top:-4px;right:-4px;background:#d33;border-radius:9px;font:700 11px system-ui;padding:2px 6px;display:none;font-style:normal}
+#chat{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;z-index:8;align-items:flex-end;justify-content:center}
+#chat .box{background:var(--panel);width:min(640px,100%);max-height:85vh;display:flex;flex-direction:column;border-radius:14px 14px 0 0;padding:10px;gap:8px}
+#chat .hd{display:flex;align-items:center;gap:8px}#chat .hd b{flex:1}
+#chat .hd button{background:#4a4c58;min-height:36px}
+#msgs{flex:1;overflow-y:auto;min-height:160px;display:flex;flex-direction:column;gap:6px}
+.msg{background:var(--row);border-radius:10px;padding:6px 10px;max-width:90%}
+.msg.me{align-self:flex-end;background:#2b4467}
+.msg small{display:block;color:var(--dim);font-size:11px}
+#chat select,#chat input{font:inherit;background:#111;color:#fff;border:1px solid var(--line);border-radius:8px;min-height:40px;padding:0 8px;min-width:0}
+#chat .row{display:flex;gap:6px}#chat .row input{flex:1}
+#chat .row button{background:var(--go)}
 </style></head><body>
 <header>
  <div class="top">
   <button id="go">GO</button>
   <div class="side">
    <div class="standby"><small id="stbl">In attesa</small><b id="stb">—</b></div>
-   <div class="btns"><button id="xf" style="background:#5a3f8a">⇄ X-fade</button><button id="stop">■ STOP</button><button id="pause">❚❚ Pausa</button><button id="resume">▶ Riprendi</button></div>
+   <div class="btns"><button id="xf" style="background:#5a3f8a">⇄ X-fade</button><button id="stop">■ STOP</button><button id="pause">❚❚ Pausa</button><button id="resume">▶ Riprendi</button><button id="chatb" title="Messaggi">💬<i id="unread"></i></button></div>
   </div>
  </div>
 </header>
@@ -292,6 +305,12 @@ h3{font-size:13px;color:var(--dim);margin:16px 0 6px;text-transform:uppercase;le
  <div id="active"></div>
 </main>
 <div id="conn">connessione persa…</div>
+<div id="chat"><div class="box">
+ <div class="hd"><b>💬 Messaggi</b><input id="cname" placeholder="Il tuo nome" style="width:130px"><button id="cclose">✕</button></div>
+ <div id="msgs"></div>
+ <div class="row"><select id="cto"></select></div>
+ <div class="row"><input id="ctext" placeholder="Scrivi un messaggio…" autocomplete="off"><button id="csend">Invia</button></div>
+</div></div>
 <div id="pin"><div><b>PIN di CueStage</b><input id="pinin" type="password" inputmode="numeric" autocomplete="off"><button id="pinok">Entra</button></div></div>
 <script>
 const $=id=>document.getElementById(id);
@@ -460,6 +479,39 @@ async function poll(){
   }catch(e){ if(e.message!=="pin")$("conn").style.display="block" }
   busy=false;
 }
+// ---------------------------------------------------------------- messaggi
+let seen=0, chatOpen=false, myName="";
+try{seen=+(localStorage.getItem("cuestage_seen")||0);myName=localStorage.getItem("cuestage_name")||""}catch(e){}
+$("cname").value=myName;
+$("cname").onchange=()=>{myName=$("cname").value.trim();try{localStorage.setItem("cuestage_name",myName)}catch(e){}};
+$("chatb").onclick=()=>{chatOpen=true;$("chat").style.display="flex";renderChat(true);$("ctext").focus()};
+$("cclose").onclick=()=>{chatOpen=false;$("chat").style.display="none"};
+$("chat").onclick=e=>{if(e.target.id==="chat")$("cclose").onclick()};
+function sendChat(){const t=$("ctext").value.trim(); if(!t)return;
+  if(!myName){myName=$("cname").value.trim()||"Web";$("cname").value=myName;try{localStorage.setItem("cuestage_name",myName)}catch(e){}}
+  $("ctext").value="";
+  api("/api/cmd",{cmd:"chat",text:t,to:$("cto").value||"*",name:myName}).then(poll).catch(()=>{})}
+$("csend").onclick=sendChat;
+$("ctext").addEventListener("keydown",e=>{if(e.key==="Enter")sendChat()});
+let chatKey="";
+function renderChat(force){
+  if(!st||!st.chat)return;
+  const n=st.chat_n||0;
+  if(chatOpen){seen=n;try{localStorage.setItem("cuestage_seen",n)}catch(e){}}
+  const un=Math.max(0,n-seen); $("unread").textContent=un; $("unread").style.display=un?"block":"none";
+  const opts=(st.chat_to||[]).map(o=>`<option value="${esc(o.id)}">${esc(o.name)}</option>`).join("");
+  if($("cto").dataset.k!==opts){const v=$("cto").value;$("cto").innerHTML=opts;$("cto").dataset.k=opts;if(v)$("cto").value=v;if(!$("cto").value)$("cto").selectedIndex=0}
+  const k=n+"|"+st.chat.length; if(!force&&k===chatKey)return; chatKey=k;
+  const me=myName?myName+" (web":null;
+  $("msgs").innerHTML=st.chat.length?st.chat.map(m=>{const d=new Date((m.ts||0)*1000);
+    const mine=me&&String(m.from).startsWith(me);
+    return `<div class="msg ${mine?"me":""}"><small>${esc(m.from)}${m.to?" → "+esc(m.to):""} · ${d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"})}</small>${esc(m.text)}</div>`}).join("")
+    :'<div class="empty">Nessun messaggio</div>';
+  $("msgs").scrollTop=$("msgs").scrollHeight;
+}
+let lastN=null;
+setInterval(()=>{ if(!st)return; renderChat(false);
+  if(lastN!==null&&st.chat_n>lastN&&!chatOpen&&navigator.vibrate)navigator.vibrate(200); lastN=st.chat_n },300);
 poll(); setInterval(poll,300);
 </script></body></html>
 """

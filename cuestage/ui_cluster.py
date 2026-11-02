@@ -205,3 +205,222 @@ class BecomeSlaveDialog(QDialog):
             except (RuntimeError, TypeError):
                 pass
         super().done(r)
+
+
+# =========================================================================== master: autorizzazione
+PERM_LABELS = {"": tr("— esclusa —"), "control": tr("Solo controllo"), "edit": tr("Modifica")}
+
+
+def perms_summary(perms, lists):
+    """Testo breve dei permessi di una secondaria."""
+    perms = perms or {}
+    if "*" in perms:
+        return tr("tutto il progetto · {0}", PERM_LABELS.get(perms["*"], perms["*"]).lower())
+    names = {l.id: l.name for l in lists}
+    parts = [f"{names.get(k, k)} ({PERM_LABELS.get(v, v).lower()})" for k, v in perms.items()]
+    return ", ".join(parts) if parts else tr("nessuna lista")
+
+
+class JoinDialog(QDialog):
+    """Richiesta di collegamento di un'istanza secondaria. In modalità SLAVE il master sceglie a cosa ha
+    accesso: tutto il progetto oppure solo alcune liste (MAIN, PANEL, GRID), ciascuna in «solo controllo»
+    (esegue le cue) o «modifica» (può anche cambiarle). La secondaria riceve solo i file delle sue liste."""
+
+    def __init__(self, name, addr, mode, lists, edit_default=False, parent=None):
+        super().__init__(parent)
+        from PySide6.QtWidgets import QComboBox, QGridLayout
+        self.setWindowTitle(tr("Istanza secondaria"))
+        self.lists = lists
+        v = QVBoxLayout(self)
+        red = mode == "redundancy"
+        what = tr("RIDONDANZA (esegue le stesse cue)") if red else tr("SLAVE (copia del progetto)")
+        lab = QLabel(tr("«{0}» ({1}) chiede di collegarsi come {2}.", name, addr, what))
+        lab.setWordWrap(True)
+        v.addWidget(lab)
+        self.all_rb = QRadioButton(tr("Tutto il progetto"))
+        self.some_rb = QRadioButton(tr("Solo queste liste (riceve solo i loro file):"))
+        self.all_rb.setChecked(True)
+        row = QHBoxLayout()
+        row.addWidget(self.all_rb)
+        self.all_mode = QComboBox()
+        for k in ("control", "edit"):
+            self.all_mode.addItem(PERM_LABELS[k], k)
+        self.all_mode.setCurrentIndex(1 if edit_default else 0)
+        row.addWidget(self.all_mode)
+        row.addStretch(1)
+        v.addLayout(row)
+        self.combos = {}
+        box = QGroupBox()
+        g = QGridLayout(box)
+        for r, lst in enumerate(lists):
+            kind = tr("GRID") if lst.is_grid else ("MAIN" if r == 0 else "PANEL")
+            kind = "" if kind == lst.name else kind + " · "
+            g.addWidget(QLabel(f"<b>{lst.name}</b>  <span style='color:#888'>{kind}"
+                               + tr("{0} cue", len(lst.cues)) + "</span>"), r, 0)
+            cb = QComboBox()
+            for k in ("", "control", "edit"):
+                cb.addItem(PERM_LABELS[k], k)
+            cb.setCurrentIndex(0)
+            g.addWidget(cb, r, 1)
+            self.combos[lst.id] = cb
+        g.setColumnStretch(0, 1)
+        if not red:
+            v.addWidget(self.some_rb)
+            v.addWidget(box)
+        else:
+            box.hide()
+            note = QLabel(tr("La ridondanza riceve sempre tutto il progetto ed esegue gli stessi comandi del master."))
+            note.setWordWrap(True)
+            note.setStyleSheet("color:#888;")
+            v.addWidget(note)
+        self.some_rb.toggled.connect(box.setEnabled)
+        self.all_rb.toggled.connect(self.all_mode.setEnabled)
+        box.setEnabled(False)
+        v.addWidget(QLabel(tr("Riceverà lo show, i file multimediali e ogni modifica. Accetti?")))
+        br = QHBoxLayout()
+        br.addStretch(1)
+        no = QPushButton(tr("Rifiuta"))
+        no.clicked.connect(self.reject)
+        ok = QPushButton(tr("Accetta"))
+        ok.setDefault(True)
+        ok.clicked.connect(self._ok)
+        br.addWidget(no)
+        br.addWidget(ok)
+        v.addLayout(br)
+        self.resize(520, 200 + (0 if red else 34 * len(lists)))
+
+    def _ok(self):
+        if self.some_rb.isChecked() and not self.perms():
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(self, tr("Istanza secondaria"), tr("Scegli almeno una lista."))
+            return
+        self.accept()
+
+    def perms(self):
+        if self.all_rb.isChecked():
+            return {"*": self.all_mode.currentData()}
+        return {lid: cb.currentData() for lid, cb in self.combos.items() if cb.currentData()}
+
+
+# =========================================================================== istanze e messaggi
+class ClusterWindow(QDialog):
+    """Istanze collegate (sul master: con «Disconnetti») e messaggi tra tutte le istanze e le interfacce web."""
+
+    def __init__(self, hub, main, parent=None):
+        super().__init__(parent)
+        from PySide6.QtWidgets import QComboBox, QPlainTextEdit, QTableWidget, QHeaderView
+        self.hub, self.main = hub, main
+        self.setWindowTitle(tr("Istanze e messaggi"))
+        v = QVBoxLayout(self)
+        self.info = QLabel()
+        self.info.setWordWrap(True)
+        v.addWidget(self.info)
+        self.table = QTableWidget(0, 5)
+        self.table.setHorizontalHeaderLabels([tr("Istanza"), tr("Indirizzo"), tr("Modalità"), tr("Accesso"), ""])
+        self.table.verticalHeader().setVisible(False)
+        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table.setSelectionMode(QTableWidget.NoSelection)
+        hh = self.table.horizontalHeader()
+        hh.setSectionResizeMode(3, QHeaderView.Stretch)
+        for i in (0, 1, 2, 4):
+            hh.setSectionResizeMode(i, QHeaderView.ResizeToContents)
+        self.table.setMaximumHeight(170)
+        v.addWidget(self.table)
+        v.addWidget(QLabel(tr("<b>Messaggi</b>")))
+        self.log = QPlainTextEdit()
+        self.log.setReadOnly(True)
+        v.addWidget(self.log, 1)
+        row = QHBoxLayout()
+        self.to = QComboBox()
+        self.to.setMinimumWidth(150)
+        row.addWidget(QLabel(tr("A")))
+        row.addWidget(self.to)
+        self.text = QLineEdit()
+        self.text.setPlaceholderText(tr("Scrivi un messaggio e premi Invio"))
+        self.text.returnPressed.connect(self.send)
+        row.addWidget(self.text, 1)
+        b = QPushButton(tr("Invia"))
+        b.clicked.connect(self.send)
+        row.addWidget(b)
+        v.addLayout(row)
+        hub.chatReceived.connect(self._append)
+        hub.rosterChanged.connect(self.refresh)
+        hub.clientsChanged.connect(self.refresh)
+        hub.roleChanged.connect(self.refresh)
+        self.resize(720, 560)
+        self.refresh()
+        for m in hub.chat:
+            self._append(m, scroll=False)
+        self.log.verticalScrollBar().setValue(self.log.verticalScrollBar().maximum())
+
+    def done(self, r):
+        for sig, slot in ((self.hub.chatReceived, self._append), (self.hub.rosterChanged, self.refresh),
+                          (self.hub.clientsChanged, self.refresh), (self.hub.roleChanged, self.refresh)):
+            try:
+                sig.disconnect(slot)
+            except (RuntimeError, TypeError):
+                pass
+        super().done(r)
+
+    @staticmethod
+    def line(m):
+        import time as _t
+        when = _t.strftime("%H:%M", _t.localtime(m.get("ts") or _t.time()))
+        return f"[{when}] {m.get('from')}: {m.get('text')}"
+
+    def _append(self, m, scroll=True):
+        txt = self.line(m)
+        if m.get("to") not in (None, "*"):
+            name = dict(self.hub.recipients()).get(m.get("to"), m.get("to"))
+            txt = txt.replace(f"{m.get('from')}:", f"{m.get('from')} → {name}:", 1)
+        self.log.appendPlainText(txt)
+        if scroll:
+            self.log.verticalScrollBar().setValue(self.log.verticalScrollBar().maximum())
+
+    def refresh(self):
+        hub = self.hub
+        if hub.role == "master":
+            self.info.setText(tr("Questa istanza è MASTER: le secondarie collegate sono qui sotto."))
+        elif hub.role == "slave":
+            self.info.setText(tr("Collegata a «{0}» ({1}:{2}).", hub.master_info.get("name"),
+                                 hub.master_info.get("host"), hub.master_info.get("port")))
+        else:
+            self.info.setText(tr("Nessun collegamento: i messaggi restano su questa istanza (operatore e "
+                                 "interfaccia web)."))
+        rows = hub.client_rows() if hub.role == "master" else []
+        if hub.role == "slave":
+            rows = [(None, r.get("name"), "", r.get("role"), None) for r in hub.roster]
+        self.table.setRowCount(len(rows))
+        from PySide6.QtWidgets import QTableWidgetItem
+        lists = self.main.show_data.lists
+        for i, (cid, name, addr, mode, perms) in enumerate(rows):
+            kind = {"redundancy": tr("ridondanza"), "slave": tr("slave"), "master": tr("master")}.get(mode, mode)
+            for col, val in enumerate((name, addr, kind, perms_summary(perms, lists) if perms else "")):
+                self.table.setItem(i, col, QTableWidgetItem(str(val or "")))
+            if cid is not None:
+                b = QPushButton(tr("Disconnetti"))
+                b.clicked.connect(lambda _=False, cid=cid, name=name: self._kick(cid, name))
+                self.table.setCellWidget(i, 4, b)
+            else:
+                self.table.setCellWidget(i, 4, None)
+        self.table.setVisible(bool(rows))
+        cur = self.to.currentData()
+        self.to.clear()
+        self.to.addItem(tr("Tutti"), "*")
+        for iid, name in hub.recipients():
+            if iid != hub.instance_id:
+                self.to.addItem(name, iid)
+        j = self.to.findData(cur)
+        self.to.setCurrentIndex(max(0, j))
+
+    def _kick(self, cid, name):
+        from PySide6.QtWidgets import QMessageBox
+        if QMessageBox.question(self, tr("Disconnetti"), tr("Disconnettere «{0}»?", name)) == QMessageBox.Yes:
+            self.hub.kick(cid)
+
+    def send(self):
+        t = self.text.text().strip()
+        if not t:
+            return
+        if self.hub.send_chat(t, self.to.currentData() or "*"):
+            self.text.clear()

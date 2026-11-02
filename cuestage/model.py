@@ -36,6 +36,12 @@ TRIGGER_LABELS = {
     "after_prev": tr("Alla fine della precedente"),
     "trigger": tr("Solo trigger (non parte col GO)"),
 }
+EVENT_LABELS = {
+    "duck_on": tr("Ducking sopra soglia (attivo)"),
+    "duck_off": tr("Ducking sotto soglia (non attivo)"),
+    "master_lost": tr("Slave: master perso"),
+    "promoted": tr("Slave: promossa a master"),
+}
 TRIGGER_SHORT = {"manual": "GO", "with_prev": tr("⇉ con prec."), "after_prev": tr("↳ dopo prec."),
                  "trigger": tr("T solo trigger")}
 # preset di una cue: tipi di valori salvati insieme in ogni preset (audio e/o video)
@@ -84,6 +90,10 @@ class Cue:
         "midi_vol": "",          # controllo MIDI continuo per il volume (es. "cc 1 7")
         "midi_op": "",           # controllo MIDI continuo per la trasparenza (es. "cc 1 8")
         "osc_trigger": "",       # indirizzo OSC aggiuntivo che avvia questa cue
+        # eventi che avviano la cue: «duck_on» il ducking riceve segnale (sopra soglia), «duck_off» smette
+        # (sotto soglia); «master_lost» (istanza secondaria) il master non risponde più; «promoted» questa
+        # secondaria diventa indipendente / master
+        "event_trig": [],
         # audio / video
         "file": "", "start": 0.0, "end": 0.0, "loop": False, "loop_start": 0.0,
         "loop_end": 0.0, "loop_count": 0, "level_db": 0.0, "fade_in": 0.0,

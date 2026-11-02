@@ -144,6 +144,97 @@ class FilesMixin:
         if path:
             self.open_show(path)
 
+    # ------------------------------------------------------------------ bundle (ZIP con i file)
+    def _bundle_progress(self, title):
+        from PySide6.QtCore import Qt
+        from PySide6.QtWidgets import QApplication, QProgressDialog
+        dlg = QProgressDialog(title, tr("Annulla"), 0, 1000, self)
+        dlg.setWindowModality(Qt.WindowModal)
+        dlg.setMinimumDuration(300)
+        dlg.setValue(0)
+
+        def cb(done, total, name):
+            dlg.setLabelText(f"{title}\n{name}  ({done / 1e6:.1f} / {total / 1e6:.1f} MB)")
+            dlg.setValue(int(done * 1000 / max(1, total)))
+            QApplication.processEvents()
+            return not dlg.wasCanceled()
+        return dlg, cb
+
+    def export_bundle(self, path=None):
+        """File › Export bundle: lo show e tutti i suoi file in un unico ZIP (per un altro computer)."""
+        from ..bundle import BundleError, export_bundle
+        sh = self.show_data
+        if not path:
+            base = os.path.splitext(os.path.basename(sh.path))[0] if sh.path else tr("show")
+            start = os.path.dirname(sh.path) if sh.path else self.qs.value("last_show_dir", os.path.expanduser("~"))
+            path, _ = QFileDialog.getSaveFileName(self, tr("Export bundle"), os.path.join(start, base + "-bundle.zip"),
+                                                  "ZIP (*.zip)")
+            if not path:
+                return None
+        if not path.lower().endswith(".zip"):
+            path += ".zip"
+        self._corners_changed_silent()
+        dlg, cb = self._bundle_progress(tr("Creazione del bundle…"))
+        try:
+            n, missing = export_bundle(sh, path, cb)
+        except (OSError, BundleError) as e:
+            dlg.close()
+            QMessageBox.critical(self, tr("Export bundle"), tr("Bundle non creato:\n{0}", e))
+            return None
+        dlg.close()
+        mb = os.path.getsize(path) / 1e6
+        self.status(tr("Bundle creato: {0} ({1} file, {2:.1f} MB)", path, n, mb))
+        if missing:
+            QMessageBox.warning(self, tr("Export bundle"), tr("File non trovati (non inclusi nel bundle):\n")
+                                + "\n".join(missing[:15]))
+        if not getattr(self, "_bundle_quiet", False):
+            from PySide6.QtCore import QUrl
+            from PySide6.QtGui import QDesktopServices
+            QDesktopServices.openUrl(QUrl.fromLocalFile(os.path.dirname(os.path.abspath(path))))
+        return path
+
+    def import_bundle(self, zip_path=None, dest=None):
+        """File › Import bundle: estrae lo ZIP in una cartella e apre lo show."""
+        from ..bundle import BundleError, bundle_info, import_bundle
+        if not self._confirm_discard():
+            return None
+        if not zip_path:
+            zip_path, _ = QFileDialog.getOpenFileName(self, tr("Import bundle"),
+                                                      self.qs.value("last_show_dir", os.path.expanduser("~")),
+                                                      "ZIP (*.zip);;" + tr("Tutti i file (*)"))
+            if not zip_path:
+                return None
+        try:
+            info = bundle_info(zip_path)
+        except BundleError as e:
+            QMessageBox.critical(self, tr("Import bundle"), str(e))
+            return None
+        if not dest:
+            parent = QFileDialog.getExistingDirectory(self, tr("Cartella in cui estrarre il progetto"),
+                                                      os.path.expanduser("~"))
+            if not parent:
+                return None
+            name = os.path.splitext(os.path.basename(zip_path))[0]
+            if name.endswith("-bundle"):
+                name = name[:-7]
+            dest = os.path.join(parent, name)
+            if os.path.isdir(dest) and os.listdir(dest) and QMessageBox.question(
+                    self, tr("Import bundle"), tr("La cartella «{0}» esiste già: sovrascrivere i file con quelli del bundle?", dest)) \
+                    != QMessageBox.Yes:
+                return None
+        dlg, cb = self._bundle_progress(tr("Estrazione del bundle…"))
+        try:
+            show_path = import_bundle(zip_path, dest, cb)
+        except (OSError, BundleError) as e:
+            dlg.close()
+            QMessageBox.critical(self, tr("Import bundle"), tr("Bundle non estratto:\n{0}", e))
+            return None
+        dlg.close()
+        self.show_data.dirty = False
+        self.open_show(show_path)
+        self.status(tr("Bundle importato in {0} ({1} file)", dest, info.get("files", "?")))
+        return show_path
+
     def open_show(self, path):
         try:
             show = Show.load(path)

@@ -326,7 +326,11 @@ Under the list, the inspector of the selected cue has these tabs (each cue type 
 - **Base**: **Number** and **Name** on one row, with **▶ Test this cue** and **■ Stop**; for audio, video and image
   cues the **File** with its full path (it can be edited by hand, e.g. after moving the files: IN, OUT and loop are
   kept), **Browse…** and **Open folder**; **Start**, **Delay** and **Colour** on one row; **Notes**.
-- **Trigger**: MIDI trigger, MIDI volume and transparency faders, OSC trigger, keyboard shortcut.
+- **Trigger**: MIDI trigger, MIDI volume and transparency faders, OSC trigger, keyboard shortcut, and **events**
+  that start the cue: **Ducking above threshold (active)** / **Ducking below threshold (inactive)** — when the
+  ducking input (Settings › Ducking) starts or stops receiving signal (after the hold; the input stays open while a
+  cue uses these events) — and **Slave behaviour: Lost master** / **Promoted to master** — on a secondary instance,
+  when the master stops answering or when the instance becomes independent (see “Secondary instances”).
 - **Times and loop** (audio, video): waveform with IN/OUT, loop, volume, fades and curve, keyframe timeline;
   **Times** for images (duration, fade in/out).
 - **Audio** (audio, video): sound card, ducking, audio of the video, channel matrix.
@@ -475,6 +479,18 @@ preset (or a fade) applies, direct editing is suspended and a notice explains it
 
 A **Change preset** cue on the same cue takes control of the lane it changes (which from then on stops following
 the keyframes), starting from the value it has at that moment.
+
+## Bundle: moving a project to another computer
+
+**File › Export bundle…** writes a single **ZIP** with the show and every file it uses (all lists and all
+versions): files inside the show folder keep their folder structure, the ones outside it go in `_esterni/`; the
+paths in the show become relative, so the ZIP works on any computer and system. A progress window shows the
+copy (it can be cancelled); at the end the folder containing the ZIP opens. Missing files are listed and left out.
+
+**File › Import bundle…** asks for the ZIP and the folder where to extract it (a subfolder with the bundle's name is
+created; if it already exists CueStage asks before overwriting), extracts it (never outside that folder) and opens
+the show. Hardware settings (sound cards, MIDI ports, mixers…) travel with the show: check them on the new
+computer.
 
 ## Master volume, last project and autosave
 
@@ -840,7 +856,12 @@ Mixer cues become Video switcher cues). Other switchers can be added as plugins 
 
 **On the master** (Settings › Audio, OSC and MIDI › **Instances**): “Enable secondary instances”, TCP port
 (default 53900; the next port, UDP, is used for discovery) and instance name. Each connection request must be
-**accepted** in a confirmation window.
+**accepted** in a confirmation window. For a **slave** the master chooses what it gets: the **whole project** or
+**only some lists** (MAIN, PANELs, GRIDs), each as **Control only** (it runs the cues) or **Edit** (it can also change
+them). A slave limited to some lists receives only those lists (the MAIN stays empty if it is not among them) and
+only their files, and only the active version; its inspector works only on the lists it may edit, and the master
+takes from it only the changes to those lists (any other local change is overwritten by the master's next update).
+Redundancy always receives the whole project.
 
 **On the other computer**: Settings › **Become slave…**
 - search for masters on the network (or address and port typed by hand);
@@ -876,7 +897,16 @@ that editing is allowed.
 500 ms) or the connection drops, the status bar turns red: a click (or Settings › “Leave slave mode”) **promotes**
 it: it becomes independent, the running cues continue, and if it has secondary instances enabled it becomes a
 master in turn. With “promote automatically” it does so on its own. At the bottom right the indicator shows
-“◉ MASTER · n secondaries” or “◎ REDUNDANCY of …”. Note: the connection is not encrypted and the only protection is
+“◉ MASTER · n secondaries” or “◎ REDUNDANCY of …”. “Leave slave mode” is available as soon as the master accepts the
+connection, also during the first download. Files are sent in 64 KB blocks on a separate channel, with heartbeats
+and redundancy commands always going first, so long transfers on slow networks do not drop the connection.
+
+**Instances and messages** (Settings › “Instances and messages…”, Ctrl+M, or a click on the indicator): the list of
+connected instances with their mode and access — on the master each has a **Disconnect** button (the disconnected
+instance becomes independent and is told why; it is not a “lost master”, so no promotion and no event triggers) —
+and a **messaging** service among all the connected computers and their web interfaces: write to **All** or to a
+single instance. A new message appears in the status bar and opens the window. Without connections the messages
+stay on this instance (operator and web interface). Note: the connection is not encrypted and the only protection is
 the confirmation on the master: use it on the show network.
 
 ## Web interface
@@ -895,7 +925,10 @@ in without typing the PIN. The QR is generated by CueStage itself (no extra libr
   interface” option is on): for each projector the same commands as the “Projectors” panel — power (power off
   asks for confirmation), shutter, freeze, input, lens (holding the movement continues, without piling up
   commands), lens memory, model actions, free command, status — and the real-time **4-corner correction** (− / +
-  held down, or the typed value; Read, Reset, Send all, Disable).
+  held down, or the typed value; Read, Reset, Send all, Disable);
+- **💬 Messages** (button at the top, with the number of unread messages; the phone vibrates when one arrives): the
+  messages that reach this instance, the recipient (All or one instance) and the sender's name, remembered by the
+  browser; messages leave as “name (web · instance)”.
 
 It refreshes 3-4 times per second. With a **PIN** set the browser asks for it the first time and remembers it.
 Without a PIN anyone on the network can control the show: set one on shared networks. The server does not use
