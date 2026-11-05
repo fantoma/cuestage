@@ -819,7 +819,7 @@ show, so they stay visible with the mixer off too; they are read again with “�
 go through a dedicated queue (in order, without blocking the show); the result appears in the status bar. New
 mixers are added with a plugin (see `cuestage/mixer_plugins/LEGGIMI.md`).
 
-## Video switchers (Roland V-8HD, V-1HD)
+## Video switchers (Roland V-8HD, V-1HD, OBS Studio)
 
 Video switchers have their own settings, panel and cue type, separate from the mixers.
 
@@ -845,6 +845,20 @@ Commands:
   has no MIDI command for AUTO, so CueStage moves the fader over the **AUTO time**); cut to bus A / B; A/B fader;
   transition type (WIPE, MIX, CUT); memories 1–8; EFFECTS A/B; OUTPUT FADE; FREEZE; audio levels of HDMI 1–4,
   AUDIO IN, MIC and master (raw 0–127 values).
+
+- **OBS Studio** (WebSocket, obs-websocket 5, built into OBS 28 and later): in OBS, Tools › WebSocket Server
+  Settings › “Enable WebSocket server” (port 4455, optional password, entered in CueStage too). OBS can run on the
+  same computer (address `localhost`) or on another one: **🔍 Search for switchers on the network** (in Settings ›
+  Video switchers…) tries port 4455 on the local /24 networks and on this computer and recognises OBS from its
+  answer (version, password required or not). Scenes, sources and inputs are read from OBS and commands refer to
+  them **by name**, so cues stay valid if the order changes in OBS (⟲ Read after adding or renaming scenes).
+  Commands: **Go to «scene»** (uses the current transition; works with Studio Mode on or off — in Studio Mode it
+  puts the scene in preview and runs the transition), **Cut to «scene»** (without transition, then the previous
+  transition comes back), **To preview «scene»** and **TAKE** (Studio Mode only), Studio Mode on/off, choice and
+  duration of the transition, **source visible** in each scene, **volume** (dB) and **mute** of every audio input,
+  **Play / Pause / Stop / Restart** of media sources, **recording** (and pause), **streaming**, **virtual camera**,
+  **replay buffer** and saving the replay. The panel also shows the scene **on air**. Unlike the Roland switchers,
+  OBS reports its state: the values shown are the real ones (⟲ Read refreshes them).
 
 The switchers do not report their state: the values shown are the last ones sent by CueStage (for the V-1HD,
 “CUT to” / “AUTO to” assume the fader starts on bus A). Check the commands on the unit before the show. Shows

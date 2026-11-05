@@ -512,6 +512,102 @@ def _tcp_scan(local_ips, port, timeout=0.4, workers=64):
     return sorted(open_hosts, key=lambda x: tuple(int(p) for p in x.split(".")))
 
 
+# ------------------------------------------------------------------ WebSocket (client minimo)
+
+class WebSocketClient:
+    """Client WebSocket minimo (RFC 6455, senza estensioni né TLS): messaggi di testo, frammenti, ping/pong.
+    Per i plugin che parlano JSON su WebSocket (es. OBS Studio)."""
+
+    def __init__(self, host, port, path="/", timeout=3.0):
+        import base64
+        self.sock = socket.create_connection((host, int(port)), timeout=timeout)
+        key = base64.b64encode(os.urandom(16)).decode()
+        req = (f"GET {path} HTTP/1.1\r\nHost: {host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+               f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
+        self.sock.sendall(req.encode())
+        head = b""
+        while b"\r\n\r\n" not in head:
+            chunk = self.sock.recv(4096)
+            if not chunk:
+                raise MixerError(tr("connessione chiusa durante l'apertura"))
+            head += chunk
+            if len(head) > 65536:
+                raise MixerError(tr("risposta non valida"))
+        if b" 101 " not in head.split(b"\r\n", 1)[0] + b" ":
+            raise MixerError(tr("il dispositivo non accetta WebSocket"))
+        self.buf = head.split(b"\r\n\r\n", 1)[1]
+        self.lock = threading.Lock()
+
+    def settimeout(self, t):
+        self.sock.settimeout(t)
+
+    def _frame(self, op, data):
+        hdr = bytearray([0x80 | op])
+        n = len(data)
+        if n < 126:
+            hdr.append(0x80 | n)
+        elif n < 65536:
+            hdr.append(0x80 | 126)
+            hdr += struct.pack(">H", n)
+        else:
+            hdr.append(0x80 | 127)
+            hdr += struct.pack(">Q", n)
+        mask = os.urandom(4)
+        hdr += mask
+        m = (mask * (n // 4 + 1))[:n]
+        body = (int.from_bytes(data, "big") ^ int.from_bytes(m, "big")).to_bytes(n, "big") if n else b""
+        with self.lock:
+            self.sock.sendall(bytes(hdr) + body)
+
+    def send(self, text):
+        self._frame(0x1, text.encode("utf-8"))
+
+    def _read(self, n):
+        while len(self.buf) < n:
+            chunk = self.sock.recv(max(65536, n - len(self.buf)))
+            if not chunk:
+                raise ConnectionError(tr("connessione chiusa"))
+            self.buf += chunk
+        out, self.buf = self.buf[:n], self.buf[n:]
+        return out
+
+    def recv(self):
+        """Testo del messaggio successivo (frammenti riuniti); None se il server chiude."""
+        parts = []
+        while True:
+            b0, b1 = self._read(2)
+            op, n = b0 & 0x0F, b1 & 0x7F
+            if n == 126:
+                n = struct.unpack(">H", self._read(2))[0]
+            elif n == 127:
+                n = struct.unpack(">Q", self._read(8))[0]
+            mask = self._read(4) if b1 & 0x80 else None
+            data = self._read(n)
+            if mask:
+                m = (mask * (n // 4 + 1))[:n]
+                data = (int.from_bytes(data, "big") ^ int.from_bytes(m, "big")).to_bytes(n, "big") if n else b""
+            if op == 0x8:
+                return None
+            if op == 0x9:                               # ping → pong
+                self._frame(0xA, data)
+                continue
+            if op == 0xA:
+                continue
+            parts.append(data)
+            if b0 & 0x80:
+                return b"".join(parts).decode("utf-8", "replace")
+
+    def close(self):
+        try:
+            self._frame(0x8, b"")
+        except OSError:
+            pass
+        try:
+            self.sock.close()
+        except OSError:
+            pass
+
+
 # ------------------------------------------------------------------ registro plugin
 
 class MixerRegistry:

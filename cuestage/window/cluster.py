@@ -325,7 +325,7 @@ class ClusterMixin:
             why = None
             if lm is None:
                 why = tr("regia video «{0}» non configurata qui", m.get('name'))
-            elif any((lm.get(k) or "") != (m.get(k) or "") for k in ("driver", "midi_out", "midi_ch")):
+            elif any((lm.get(k) or "") != (m.get(k) or "") for k in ("driver", "midi_out", "midi_ch", "host", "port")):
                 why = tr("regia video «{0}» configurata in modo diverso", m.get('name'))
             if why:
                 diffs.append(why)

@@ -256,8 +256,9 @@ def pretty_name(name):
 
 GROUP_ORDER = [tr("Ingressi"), tr("Uscite e monitor"), tr("Mix"), tr("Routing uscite"), tr("Routing ingressi (PC e mixer)"),
                # regie video (mixer_plugins/roland_video.py)
-               tr("Commutazione"), tr("Transizioni"), tr("Memorie"), tr("PinP e keyer"), tr("Effetti"),
-               tr("Uscita video"), tr("Audio della regia"), tr("Altro")]
+               tr("Scene"), tr("Commutazione"), tr("Transizioni"), tr("Memorie"), tr("PinP e keyer"), tr("Sorgenti"),
+               tr("Effetti"), tr("Uscita video"), tr("Media"), tr("Audio"), tr("Audio della regia"), tr("Uscite"),
+               tr("Altro")]
 
 
 def group_rank(g):

@@ -16,7 +16,7 @@ from .mixers import KIND_LABELS, USER_MIXER_DIR
 
 FIELD_LABELS = {"host": tr("Indirizzo IP"), "port": tr("Porta"), "midi_ch": tr("Canale MIDI del mixer"), "model": tr("Modello"),
                 "fader_law": tr("Legge fader NRPN"), "midi_out": tr("Uscita MIDI → mixer"), "midi_in": tr("Ingresso MIDI ← mixer"),
-                "device": tr("N. dispositivo MIDI"), "card": tr("Scheda audio (ALSA)")}
+                "device": tr("N. dispositivo MIDI"), "card": tr("Scheda audio (ALSA)"), "password": tr("Password")}
 
 
 class _Relay(QObject):
@@ -68,7 +68,7 @@ class MixersDialog(QDialog):
         self.driver.currentIndexChanged.connect(self._driver_changed)
         f.addRow(tr("Driver"), self.driver)
         self.fields = {}
-        for key in ("host", "port", "midi_ch", "model", "fader_law", "midi_out", "midi_in", "device", "card"):
+        for key in ("host", "port", "password", "midi_ch", "model", "fader_law", "midi_out", "midi_in", "device", "card"):
             if key in ("port", "midi_ch", "device"):
                 w = QSpinBox()
                 w.setRange({"port": 1, "midi_ch": 1, "device": 0}[key], {"port": 65535, "midi_ch": 16, "device": 15}[key])
@@ -82,7 +82,11 @@ class MixersDialog(QDialog):
                     w.editTextChanged.connect(self._store)
             else:
                 w = QLineEdit()
-                w.setPlaceholderText(tr("es. 192.168.1.10"))
+                if key == "password":
+                    w.setEchoMode(QLineEdit.Password)
+                    w.setPlaceholderText(tr("vuota = nessuna password"))
+                else:
+                    w.setPlaceholderText(tr("es. 192.168.1.10"))
                 w.textEdited.connect(self._store)
             lab = QLabel(FIELD_LABELS[key])
             f.addRow(lab, w)
@@ -128,11 +132,14 @@ class MixersDialog(QDialog):
         self.found_list.setMaximumHeight(130)
         self.found_list.itemDoubleClicked.connect(lambda _it: self._add_found())
         gl.addWidget(self.found_list)
-        ab = QPushButton(tr("Aggiungi il mixer trovato selezionato"))
+        ab = QPushButton(tr("Aggiungi la regia trovata selezionata") if self.sw else tr("Aggiungi il mixer trovato selezionato"))
         ab.clicked.connect(self._add_found)
         gl.addWidget(ab)
         v.addWidget(gs)
-        gs.setVisible(not self.sw)
+        if self.sw:
+            self.scan_btn.setText(tr("🔍 Cerca regie in rete"))
+            self.scan_btn.setToolTip(tr("OBS Studio (WebSocket, porta 4455), anche su questo computer"))
+            self.scan_lab.setText(tr("Le regie Roland via USB non si trovano in rete: aggiungile a mano."))
 
         pl = QHBoxLayout()
         self.plug_lab = QLabel()
@@ -331,7 +338,8 @@ class MixersDialog(QDialog):
     def _found(self, res, ips):
         self.scan_btn.setEnabled(True)
         self.found_list.clear()
-        good = [r for r in res if "error" not in r]
+        good = [r for r in res if "error" not in r and (self.mm.registry.get(r.get("driver")) is None
+                                                         or bool(self.mm.registry.get(r.get("driver")).SWITCHER) == self.sw)]
         for r in good:
             cls = self.mm.registry.get(r.get("driver"))
             known = any(m.get("host") == r.get("host") and m.get("card") == r.get("card")
@@ -343,7 +351,10 @@ class MixersDialog(QDialog):
             it = QListWidgetItem(txt, self.found_list)
             it.setData(Qt.UserRole, r)
         errs = [r["error"] for r in res if "error" in r]
-        msg = (tr("Trovati {0} mixer / schede", len(good)) if good else tr("Nessun mixer trovato")) + tr(" sulle reti {0}/24.", ', '.join(ips))
+        if self.sw:
+            msg = (tr("Trovate {0} regie", len(good)) if good else tr("Nessuna regia trovata")) + tr(" sulle reti {0}/24.", ', '.join(ips))
+        else:
+            msg = (tr("Trovati {0} mixer / schede", len(good)) if good else tr("Nessun mixer trovato")) + tr(" sulle reti {0}/24.", ', '.join(ips))
         if errs:
             msg += " ⚠ " + "; ".join(errs)
         if not good:

@@ -1428,7 +1428,7 @@ def t_roland_video(w):
         assert "roland_v8hd" not in drv and "behringer_x32" in drv
         d2 = MixersDialog([], w.switchers, w, switchers=True)
         drv2 = [d2.driver.itemData(i) for i in range(d2.driver.count())]
-        assert set(drv2) == {"roland_v8hd", "roland_v1hd"}, drv2
+        assert set(drv2) == {"roland_v8hd", "roland_v1hd", "obs_studio"}, drv2
         d.deleteLater()
         d2.deleteLater()
         # ispettore: elenco dei comandi, aggiunta di un comando
@@ -1450,6 +1450,68 @@ def t_roland_video(w):
         assert c.sw_cmds[2]["key"] == "memory"
     finally:
         mido.get_output_names, mido.open_output = old
+
+
+def t_obs_studio(w):
+    """OBS Studio come regia video (obs-websocket 5 simulato, con password): scene, Studio sì/no, taglio,
+    sorgenti, audio, registrazione; riconoscimento nella ricerca in rete."""
+    from sims import OBSSim
+    from cuestage.mixers import MixerRegistry
+    obs = OBSSim(password="segreta")
+    try:
+        cls = MixerRegistry().load().get("obs_studio")
+        assert cls is not None and cls.SWITCHER
+        assert cls.probe("127.0.0.1", obs.port) == {"version": "5.5.0", "auth": True}
+        bad = cls({"host": "127.0.0.1", "port": obs.port, "password": "sbagliata"})
+        try:
+            bad.status()
+            raise AssertionError("password sbagliata accettata")
+        except Exception as e:
+            from cuestage.i18n import tr
+            assert str(e) == tr("OBS ha chiuso il collegamento: password sbagliata?"), e
+        sh = Show()
+        sh.settings["output_fullscreen"] = False
+        sh.settings["switchers"] = [dict(id="obs", name="OBS", driver="obs_studio", host="127.0.0.1", port=obs.port,
+                                         password="segreta")]
+        sh.cues = [Cue("switcher", number="1", name="B", sw_target="obs",
+                       sw_cmds=[{"key": "go:Scena B", "value": 1}, {"key": "item:Scena A\x1fLogo", "value": 1},
+                                {"key": "mute:Mic", "value": 1}, {"key": "vol:Video", "value": -120},
+                                {"key": "record", "value": 1}]),
+                   Cue("switcher", number="2", name="Taglio", sw_target="obs", sw_cmds=[{"key": "cut:Titoli", "value": 1}]),
+                   Cue("switcher", number="3", name="Studio", sw_target="obs",
+                       sw_cmds=[{"key": "studio", "value": 1}, {"key": "go:Scena A", "value": 1}])]
+        w._set_show(sh)
+        run(0.2)
+        sm = w.switchers
+        done = []
+        sm.read_controls("obs", lambda ok, res: done.append((ok, res)))
+        wait_until(lambda: done)
+        assert done[0][0], done
+        keys = {c["key"] for c in sm.controls["obs"]}
+        assert {"go:Scena A", "cut:Titoli", "pvw:Titoli", "item:Scena A\x1fLogo", "mute:Mic", "vol:Video",
+                "media:Video\x1f0", "record", "trans_ms"} <= keys, keys
+        assert "mute:Camera" not in keys                              # ingresso senza audio
+        assert sm.control_info("obs", "on_air")["items"] == ["Scena A", "Scena B", "Titoli"]
+        w.go()
+        wait_until(lambda: obs.record)
+        assert obs.program == "Scena B" and obs.program_log[-1] == ("Scena B", "Dissolvenza")
+        assert obs.items["Scena A"][1]["sceneItemEnabled"] and obs.mute["Mic"] and obs.vol["Video"] == -12.0
+        w.go()
+        wait_until(lambda: obs.program == "Titoli")
+        run(0.2)
+        assert obs.program_log[-1] == ("Titoli", "Taglio") and obs.transition == "Dissolvenza"   # poi rimessa
+        w.go()
+        wait_until(lambda: obs.studio and obs.program == "Scena A")
+        assert ("TriggerStudioModeTransition", {}) in obs.log
+        assert obs.program_log[-1] == ("Scena A", "Dissolvenza")
+        # Pannello: i comandi «Vai a» sono pulsanti
+        done.clear()
+        sm.read_controls("obs", lambda ok, res: done.append(ok))
+        wait_until(lambda: done)
+        assert sm.control_info("obs", "take") is not None and sm.control_info("obs", "on_air")["value"] == 0
+    finally:
+        obs.close()
+        w.show_data.dirty = False
 
 
 def t_osc_profile():
@@ -1969,6 +2031,7 @@ if __name__ == "__main__":
     check("profilo OSC ChamSys MagicQ", t_osc_profile)
     check("lettura dei controlli ALSA", t_alsa_parser)
     check("regie video Roland V-8HD / V-1HD: impostazioni, cue Regia video, MIDI", lambda: t_roland_video(w))
+    check("OBS Studio come regia video (WebSocket simulato)", lambda: t_obs_studio(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))
