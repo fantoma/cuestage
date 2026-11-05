@@ -539,6 +539,7 @@ class WebSocketClient:
         if b" 101 " not in head.split(b"\r\n", 1)[0] + b" ":
             raise MixerError(tr("il dispositivo non accetta WebSocket"))
         self.response = head.split(b"\r\n\r\n", 1)[0].decode("latin-1")     # intestazioni (diagnostica)
+        self.close_code, self.close_reason = None, ""
         self.buf = head.split(b"\r\n\r\n", 1)[1]
         self.lock = threading.Lock()
 
@@ -591,6 +592,8 @@ class WebSocketClient:
                 m = (mask * (n // 4 + 1))[:n]
                 data = (int.from_bytes(data, "big") ^ int.from_bytes(m, "big")).to_bytes(n, "big") if n else b""
             if op == 0x8:
+                self.close_code = struct.unpack(">H", data[:2])[0] if len(data) >= 2 else None
+                self.close_reason = data[2:].decode("utf-8", "replace")
                 return None
             if op == 0x9:                               # ping → pong
                 self._frame(0xA, data)

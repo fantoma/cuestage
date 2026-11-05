@@ -44,6 +44,17 @@ def main():
             raw = ws.recv()
         except Exception as e:  # noqa: BLE001
             print(f"   ERRORE dopo {time.monotonic() - t0:.1f} s: {e!r}  (buffer: {ws.buf[:200]!r})")
+            # nessun Hello: è il protocollo vecchio (obs-websocket 4.x)? Una richiesta nel formato 4.x lo rivela
+            print("3b. prova del protocollo vecchio (obs-websocket 4.x): GetVersion / GetAuthRequired …")
+            try:
+                ws.send(json.dumps({"request-type": "GetVersion", "message-id": "v4"}))
+                print(f"   {ws.recv()}")
+                ws.send(json.dumps({"request-type": "GetAuthRequired", "message-id": "v4a"}))
+                print(f"   {ws.recv()}")
+            except Exception as e2:  # noqa: BLE001
+                print(f"   ERRORE: {e2!r}")
+            if ws.close_code:
+                print(f"   OBS ha chiuso con il codice {ws.close_code} {ws.close_reason!r}")
             ws.close()
             continue
         print(f"   {raw}")
