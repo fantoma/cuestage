@@ -71,11 +71,12 @@ class OBSStudio(MixerDriver):
         if self.ws is not None:
             return self.ws
         try:
-            ws = WebSocketClient(self.host, self.port or PORT, timeout=3.0)
+            ws = WebSocketClient(self.host, self.port or PORT, timeout=3.0, protocol="obswebsocket.json")
         except OSError as e:
             raise MixerError(tr("OBS non raggiungibile su {0}:{1} ({2}): OBS acceso e server WebSocket abilitato?",
                                 self.host, self.port or PORT, e))
         ws.settimeout(5.0)
+        step = tr("attesa del messaggio Hello di OBS")
         try:
             hello = json.loads(ws.recv() or "{}")
             if hello.get("op") != 0:
@@ -89,6 +90,7 @@ class OBSStudio(MixerDriver):
                     raise MixerError(tr("OBS chiede una password: impostala nella configurazione della regia"))
                 ident["authentication"] = obs_auth(pw, auth.get("salt", ""), auth.get("challenge", ""))
             ws.send(json.dumps({"op": 1, "d": ident}))
+            step = tr("attesa della conferma Identified di OBS")
             try:
                 ok = ws.recv()
             except (OSError, ConnectionError):
@@ -99,7 +101,7 @@ class OBSStudio(MixerDriver):
                 raise MixerError(tr("OBS non ha accettato il collegamento"))
         except (OSError, ValueError, ConnectionError) as e:
             ws.close()
-            raise MixerError(tr("collegamento a OBS non riuscito ({0})", e))
+            raise MixerError(tr("collegamento a OBS non riuscito: {0} ({1})", step, e))
         except MixerError:
             ws.close()
             raise
@@ -321,7 +323,7 @@ class OBSStudio(MixerDriver):
     def probe(cls, host, port=PORT, timeout=1.0):
         """Risponde come OBS (obs-websocket)? → dict con versione e password richiesta, altrimenti None."""
         try:
-            ws = WebSocketClient(host, port, timeout=timeout)
+            ws = WebSocketClient(host, port, timeout=timeout, protocol="obswebsocket.json")
         except (OSError, MixerError):
             return None
         try:

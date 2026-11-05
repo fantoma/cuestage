@@ -518,13 +518,15 @@ class WebSocketClient:
     """Client WebSocket minimo (RFC 6455, senza estensioni né TLS): messaggi di testo, frammenti, ping/pong.
     Per i plugin che parlano JSON su WebSocket (es. OBS Studio)."""
 
-    def __init__(self, host, port, path="/", timeout=3.0):
+    def __init__(self, host, port, path="/", timeout=3.0, protocol=None):
         import base64
         self.sock = socket.create_connection((host, int(port)), timeout=timeout)
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         key = base64.b64encode(os.urandom(16)).decode()
         hh = f"[{host}]" if ":" in str(host) else host          # IPv6 (es. ::1)
         req = (f"GET {path} HTTP/1.1\r\nHost: {hh}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
-               f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
+               f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\nUser-Agent: CueStage\r\n"
+               + (f"Sec-WebSocket-Protocol: {protocol}\r\n" if protocol else "") + "\r\n")
         self.sock.sendall(req.encode())
         head = b""
         while b"\r\n\r\n" not in head:
@@ -536,6 +538,7 @@ class WebSocketClient:
                 raise MixerError(tr("risposta non valida"))
         if b" 101 " not in head.split(b"\r\n", 1)[0] + b" ":
             raise MixerError(tr("il dispositivo non accetta WebSocket"))
+        self.response = head.split(b"\r\n\r\n", 1)[0].decode("latin-1")     # intestazioni (diagnostica)
         self.buf = head.split(b"\r\n\r\n", 1)[1]
         self.lock = threading.Lock()
 
