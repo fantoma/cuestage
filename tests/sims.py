@@ -131,8 +131,9 @@ class FakeYamaha:
 
 class OBSSim:
     """OBS Studio finto: server obs-websocket 5 minimo (handshake, Hello con password, richieste principali)."""
-    def __init__(self, port=0, password=""):
+    def __init__(self, port=0, password="", protocol=5):
         import base64, hashlib, json, struct
+        self.protocol = protocol
         self.b64, self.sha, self.json, self.struct = base64, hashlib, json, struct
         self.password = password
         self.log = []
@@ -193,6 +194,8 @@ class OBSSim:
             acc = self.b64.b64encode(self.sha.sha1(key + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest()).decode()
             c.sendall(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
                        f"Sec-WebSocket-Accept: {acc}\r\n\r\n").encode())
+            if self.protocol == 4:
+                return self.client4(c, f)
             d = {"obsWebSocketVersion": "5.5.0", "rpcVersion": 1}
             if self.password:
                 d["authentication"] = {"salt": "sale", "challenge": "sfida"}
@@ -261,3 +264,77 @@ class OBSSim:
         if t == "StartRecord": self.record = True; return True, {}
         if t == "StopRecord": self.record = False; return True, {}
         return False, {}
+
+    # ---------------------------------------------------------------- obs-websocket 4.x (OBS 27)
+    def client4(self, c, f):
+        authed = not self.password
+        while True:
+            m = self._recv(f)
+            if m is None:
+                return
+            t = m.get("request-type"); rid = m.get("message-id")
+            self.log.append((t, {k: v for k, v in m.items() if k not in ("request-type", "message-id")}))
+            if t == "GetAuthRequired":
+                r = {"authRequired": bool(self.password)}
+                if self.password: r.update(challenge="sfida", salt="sale")
+                ok = True
+            elif t == "Authenticate":
+                secret = self.b64.b64encode(self.sha.sha256((self.password + "sale").encode()).digest()).decode()
+                good = self.b64.b64encode(self.sha.sha256((secret + "sfida").encode()).digest()).decode()
+                ok = m.get("auth") == good; authed = authed or ok; r = {}
+            elif t == "GetVersion":
+                ok, r = True, {"obs-websocket-version": "4.9.1", "obs-studio-version": "27.2.3"}
+            elif not authed:
+                ok, r = False, {"error": "Not Authenticated"}
+            else:
+                ok, r = self.handle4(t, m)
+            out = dict(r, **{"message-id": rid, "status": "ok" if ok else "error"})
+            if not ok: out.setdefault("error", "errore")
+            self._send(c, {"update-type": "Heartbeat"})          # evento da ignorare
+            self._send(c, out)
+
+    def handle4(self, t, a):
+        if t == "GetStudioModeStatus": return True, {"studio-mode": self.studio}
+        if t == "EnableStudioMode": self.studio = True; return True, {}
+        if t == "DisableStudioMode": self.studio = False; return True, {}
+        if t == "GetSceneList":
+            return True, {"current-scene": self.program, "scenes": [
+                {"name": sc, "sources": [{"name": i["sourceName"], "render": i["sceneItemEnabled"], "id": i["sceneItemId"]}
+                                         for i in self.items.get(sc, [])]} for sc in self.scenes]}
+        if t == "GetPreviewScene":
+            return (True, {"name": self.preview}) if self.studio else (False, {"error": "studio mode not enabled"})
+        if t == "SetCurrentScene": self._set_program(a["scene-name"]); return True, {}
+        if t == "SetPreviewScene":
+            if not self.studio: return False, {"error": "studio mode not enabled"}
+            self.preview = a["scene-name"]; return True, {}
+        if t == "TransitionToProgram":
+            if not self.studio: return False, {"error": "studio mode not enabled"}
+            old = self.program; self._set_program(self.preview); self.preview = old; return True, {}
+        if t == "GetTransitionList":
+            return True, {"current-transition": self.transition, "transitions": [{"name": x["transitionName"]} for x in self.transitions]}
+        if t == "GetCurrentTransition": return True, {"name": self.transition, "duration": self.duration}
+        if t == "SetCurrentTransition": self.transition = a["transition-name"]; return True, {}
+        if t == "SetTransitionDuration": self.duration = a["duration"]; return True, {}
+        if t == "SetSceneItemRender":
+            for i in self.items.get(a["scene-name"], []):
+                if i["sourceName"] == a["source"]: i["sceneItemEnabled"] = a["render"]
+            return True, {}
+        if t == "GetSourcesList":
+            return True, {"sources": [{"name": x["inputName"], "typeId": x["inputKind"], "type": "input"} for x in self.inputs]
+                          + [{"name": sc, "typeId": "scene", "type": "scene"} for sc in self.scenes]}
+        if t == "GetSourceTypesList":
+            return True, {"types": [{"typeId": "pulse_input_capture", "caps": {"hasAudio": True}},
+                                    {"typeId": "ffmpeg_source", "caps": {"hasAudio": True}},
+                                    {"typeId": "v4l2_input", "caps": {"hasAudio": False}}]}
+        if t == "GetMute": return True, {"muted": self.mute.get(a["source"], False)}
+        if t == "SetMute": self.mute[a["source"]] = a["mute"]; return True, {}
+        if t == "GetVolume": return True, {"volume": self.vol.get(a["source"], 0.0)}
+        if t == "SetVolume": self.vol[a["source"]] = a["volume"]; return True, {}
+        if t in ("PlayPauseMedia", "RestartMedia", "StopMedia"): return True, {}
+        if t == "GetRecordingStatus": return True, {"isRecording": self.record, "isRecordingPaused": False}
+        if t == "StartRecording":
+            if self.record: return False, {"error": "recording already active"}
+            self.record = True; return True, {}
+        if t == "StopRecording": self.record = False; return True, {}
+        if t == "GetStreamingStatus": return True, {"streaming": False, "recording": self.record}
+        return False, {"error": "invalid request type"}

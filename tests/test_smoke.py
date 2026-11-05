@@ -1453,15 +1453,21 @@ def t_roland_video(w):
 
 
 def t_obs_studio(w):
-    """OBS Studio come regia video (obs-websocket 5 simulato, con password): scene, Studio sì/no, taglio,
-    sorgenti, audio, registrazione; riconoscimento nella ricerca in rete."""
+    """OBS Studio come regia video, protocollo 5 (OBS 28+) e 4.x (OBS 27), simulato con password: scene, Studio
+    sì/no, taglio, sorgenti, audio, registrazione; riconoscimento nella ricerca in rete."""
+    for proto in (5, 4):
+        _obs_run(w, proto)
+
+
+def _obs_run(w, proto):
     from sims import OBSSim
     from cuestage.mixers import MixerRegistry
-    obs = OBSSim(password="segreta")
+    from cuestage.i18n import tr
+    obs = OBSSim(password="segreta", protocol=proto)
     try:
         cls = MixerRegistry().load().get("obs_studio")
         assert cls is not None and cls.SWITCHER
-        assert cls.probe("127.0.0.1", obs.port) == {"version": "5.5.0", "auth": True}
+        assert cls.probe("127.0.0.1", obs.port) == {"version": "5.5.0" if proto == 5 else "4.9.1", "auth": True}
         # ricerca: trovato anche su questo computer (localhost), pure senza nessuna rete
         g = cls.discover.__func__.__globals__
         old_port = g["PORT"]
@@ -1477,8 +1483,8 @@ def t_obs_studio(w):
             bad.status()
             raise AssertionError("password sbagliata accettata")
         except Exception as e:
-            from cuestage.i18n import tr
-            assert str(e) == tr("OBS ha chiuso il collegamento: password sbagliata?"), e
+            assert str(e) == (tr("OBS ha chiuso il collegamento: password sbagliata?") if proto == 5
+                              else tr("OBS ha rifiutato la password")), e
         sh = Show()
         sh.settings["output_fullscreen"] = False
         sh.settings["switchers"] = [dict(id="obs", name="OBS", driver="obs_studio", host="127.0.0.1", port=obs.port,
@@ -1512,7 +1518,7 @@ def t_obs_studio(w):
         assert obs.program_log[-1] == ("Titoli", "Taglio") and obs.transition == "Dissolvenza"   # poi rimessa
         w.go()
         wait_until(lambda: obs.studio and obs.program == "Scena A")
-        assert ("TriggerStudioModeTransition", {}) in obs.log
+        assert ("TriggerStudioModeTransition" if proto == 5 else "TransitionToProgram", {}) in obs.log
         assert obs.program_log[-1] == ("Scena A", "Dissolvenza")
         # Pannello: i comandi «Vai a» sono pulsanti
         done.clear()

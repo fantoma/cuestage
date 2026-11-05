@@ -846,10 +846,14 @@ Commands:
   transition type (WIPE, MIX, CUT); memories 1–8; EFFECTS A/B; OUTPUT FADE; FREEZE; audio levels of HDMI 1–4,
   AUDIO IN, MIC and master (raw 0–127 values).
 
-- **OBS Studio** (WebSocket, obs-websocket 5, built into OBS 28 and later): in OBS, Tools › WebSocket Server
-  Settings › “Enable WebSocket server” (port 4455, optional password, entered in CueStage too). OBS can run on the
+- **OBS Studio** (WebSocket): **obs-websocket 5**, built into OBS 28 and later (Tools › WebSocket Server Settings ›
+  “Enable WebSocket server”, port 4455), and **obs-websocket 4.x**, the plugin for **OBS 27** and earlier (usually
+  port 4444) or the “4.x Compat” plugin; optional password, entered in CueStage too. The protocol is recognised on
+  its own (version 5 greets with a Hello, 4.x does not) and the commands are the same; with 4.x the *Cut to*
+  command recognises the “Cut” transition by its default name (Cut, Taglio, Schnitt…) and otherwise makes the
+  current transition as short as possible. OBS can run on the
   same computer (address `localhost`) or on another one: **🔍 Search for switchers on the network** (in Settings ›
-  Video switchers…) tries port 4455 on the local /24 networks and on **this computer** (localhost, IPv4 and IPv6, and
+  Video switchers…) tries ports 4455 and 4444 on the local /24 networks and on **this computer** (localhost, IPv4 and IPv6, and
   its own addresses — also with no network connected) and recognises OBS from its answer (version, password
   required or not); OBS on this computer is listed as “OBS on this computer” with address `localhost`. Scenes, sources and inputs are read from OBS and commands refer to
   them **by name**, so cues stay valid if the order changes in OBS (⟲ Read after adding or renaming scenes).
