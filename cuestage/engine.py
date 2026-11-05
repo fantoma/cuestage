@@ -1450,7 +1450,9 @@ class MidiOutInstance(Instance):
         except Exception as e:
             self.ctrl.message.emit(tr("MIDI out '{0}': {1}", c.label(), e))
         else:
-            self.ctrl.message.emit(tr("MIDI out ← {0}: {1} messaggi", c.label(), n))
+            from .outputs import held
+            self.ctrl.message.emit(tr("MIDI out ← {0}: non inviato (ridondanza: lo invia il master)", c.label())
+                                   if held() else tr("MIDI out ← {0}: {1} messaggi", c.label(), n))
         self.finish()
 
 

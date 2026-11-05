@@ -288,6 +288,16 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.sw_btn.setVisible(False)
         # volume globale (master): vale per audio e video
         mv = QVBoxLayout()
+        # ridondanza collegata al master: comandi ai dispositivi esterni sospesi (li manda il master)
+        self.held_label = QLabel(tr("⚠ Ridondanza: comandi esterni sospesi"))
+        self.held_label.setAlignment(Qt.AlignCenter)
+        self.held_label.setToolTip(tr("Questa istanza è in ridondanza: mixer, regie video, proiettori, OSC e MIDI in "
+                                      "uscita ricevono i comandi solo dal master. Ripartono da qui se il master viene "
+                                      "perso o se l'istanza viene promossa o scollegata."))
+        self.held_label.setStyleSheet("background:#c96a00;color:white;font-weight:bold;border-radius:4px;"
+                                      "padding:1px 6px;")
+        self.held_label.setVisible(False)
+        mv.addWidget(self.held_label)
         self.master_label = QLabel(tr("Volume master"))
         self.master_label.setAlignment(Qt.AlignCenter)
         self.master_label.setStyleSheet("font-weight:bold;")
@@ -1058,6 +1068,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
             return
         self.qs.setValue("geometry", self.saveGeometry())
         self._remove_autosave()        # chiusura regolare: nessun recupero necessario
+        if self.cluster.role == "slave":
+            from .outputs import hold
+            hold(False)
         self.ctrl.stop_all(0)
         self.ctrl.video_decks.clear()
         self.audio.stop()

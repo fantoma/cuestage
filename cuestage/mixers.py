@@ -761,6 +761,9 @@ class MixerManager(QObject):
 
     # ---- comandi
     def mute(self, mid, kind, numbers, muted, report=True):
+        from .outputs import done_future, held
+        if held():                     # ridondanza: lo manda il master
+            return done_future()
         nums = list(numbers)
         lab = f"{KIND_SHORT.get(kind, kind)} {fmt_numbers(nums)} {'MUTE' if muted else 'on'}"
         for n in nums:
@@ -769,6 +772,9 @@ class MixerManager(QObject):
 
     def fader(self, mid, kind, n, db, fade=0.0, report=True):
         """Porta il fader a «db»; con fade > 0 legge la posizione attuale e ci arriva gradualmente."""
+        from .outputs import done_future, held
+        if held():                     # ridondanza: lo manda il master
+            return done_future()
         lab = f"{KIND_SHORT.get(kind, kind)} {n} → {fmt_db(db)}" + (tr(" in {0:.1f} s", fade) if fade > 0 else "")
         self._stop_fade(mid, kind, n)
         if fade <= 0:
@@ -909,6 +915,9 @@ class MixerManager(QObject):
             self.read_controls(mid)
 
     def set_control(self, mid, key, value, report=True):
+        from .outputs import done_future, held
+        if held():                     # ridondanza: lo manda il master
+            return done_future()
         info = self.control_info(mid, key)
         lab = f"{key} = {value}"
         if info is not None:

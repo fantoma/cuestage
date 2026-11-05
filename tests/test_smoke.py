@@ -1569,6 +1569,12 @@ def t_cluster_redundancy():
             run(0.05)
         run(0.3)
         assert done == [True], done
+        # ridondanza collegata: niente comandi ai dispositivi esterni (li manda il master), avviso arancione
+        from cuestage import outputs
+        from cuestage.remote import midi_out, osc_send
+        assert outputs.held() and b.held_label.isVisibleTo(b) and not a.held_label.isVisibleTo(a)
+        assert osc_send("127.0.0.1", 9, "/prova", "1") is False and midi_out.send_script("x", "cc 1 1 1") == 0
+        assert b.mixers.set_control("nessuno", "k", 1).result() is None
         a.go()
         run(0.4)
         assert names(a) == names(b) == ["Musica"], (names(a), names(b))
@@ -1612,6 +1618,8 @@ def t_cluster_redundancy():
         while not b.cluster.lost and time.monotonic() - t0 < 3:
             run(0.02)
         assert b.cluster.lost
+        run(0.1)
+        assert not outputs.held() and not b.held_label.isVisibleTo(b)       # master perso: i comandi ripartono
         # allarme rosso lampeggiante finché non si preme OK
         run(0.1)
         al = b.lost_alarm

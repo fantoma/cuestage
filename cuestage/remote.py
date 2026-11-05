@@ -51,6 +51,10 @@ _clients = {}
 
 
 def osc_send(host, port, address, args_text):
+    """Messaggio OSC verso un dispositivo. Su un'istanza in ridondanza non parte (lo manda il master): False."""
+    from .outputs import held
+    if held():
+        return False
     if SimpleUDPClient is None:
         raise RuntimeError(tr("python-osc non installato"))
     if not address.startswith("/"):
@@ -61,6 +65,7 @@ def osc_send(host, port, address, args_text):
         cl = _clients[key] = SimpleUDPClient(host, int(port), allow_broadcast=True)
     args = parse_osc_args(args_text)
     cl.send_message(address, args if args else [])
+    return True
 
 
 def osc_send_args(host, port, address, args):
@@ -526,6 +531,9 @@ class MidiOut:
         return p
 
     def send_bytes(self, port, data):
+        from .outputs import held
+        if held():                     # ridondanza: lo manda il master
+            return
         with self.lock:
             p = self._port(port)
             if data[0] == 0xF0:
@@ -538,7 +546,11 @@ class MidiOut:
                     i += n
 
     def send_script(self, port, text):
-        """Invia i messaggi; le attese «wait» vengono rispettate in un thread. Restituisce quanti sono."""
+        """Invia i messaggi; le attese «wait» vengono rispettate in un thread. Restituisce quanti sono
+        (0 su un'istanza in ridondanza: li manda il master)."""
+        from .outputs import held
+        if held():
+            return 0
         items = parse_midi_script(text)
         self._port(port)                                  # errore subito se la porta non c'è
         msgs = [m for _w, m in items if m is not None]

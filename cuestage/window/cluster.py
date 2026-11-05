@@ -489,6 +489,13 @@ class ClusterMixin:
         return w
 
     def _cluster_indicator(self):
+        from ..outputs import hold
+        hub = self.cluster
+        # ridondanza collegata e master vivo: i comandi ai dispositivi esterni li manda solo il master
+        held = hub.role == "slave" and hub.mode == "redundancy" and not hub.lost
+        hold(held)
+        if hasattr(self, "held_label"):
+            self.held_label.setVisible(held)
         if hasattr(self, "act_leave"):        # anche durante il primo download: si può sempre uscire
             self.act_leave.setEnabled(self.cluster.role == "slave")
         if not hasattr(self, "cluster_btn"):

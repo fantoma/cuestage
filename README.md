@@ -911,8 +911,11 @@ updated in place, the inspector is not rebuilt and the field being typed in keep
 secondary has local changes not yet sent, the update waits for them to reach the master. In **redundancy** the master relays every command: GO (local and PANEL ones too),
 start/stop/pause of single cues, STOP ALL, playhead, crossfade and crossfader, live levels and opacity, texts and
 leaving groups; random groups use the same seed, so they choose the same cues. On the redundant instance local
-commands are blocked (the emergency STOP ALL remains) and the editor is read-only. Commands to network mixers and
-projectors leave from both instances (they are idempotent: same mute, same level).
+commands are blocked (the emergency STOP ALL remains) and the editor is read-only. Commands to **external devices** — mixers,
+video switchers, projectors, OSC and MIDI output — leave **only from the master**: while a redundant instance is
+connected to a live master it does not send them (an **orange** notice above the master volume says so,
+“⚠ Redundancy: external commands held”), so devices do not receive everything twice. They start again from the
+redundant instance as soon as the master is lost, or when it is promoted or disconnected.
 
 **Secondaries can update the project** (option on the master, Settings › Instances): with the option on the
 secondaries' editor is unlocked and each of their changes (cues, lists, settings if copied) reaches the master

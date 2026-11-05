@@ -401,6 +401,9 @@ class ProjectorManager(QObject):
             return p
 
     def run(self, pid, action, value="", direction=1, steps=1, speed="normal", label=None):
+        from .outputs import done_future, held
+        if held():                     # ridondanza: lo manda il master
+            return done_future()
         conf = self.find(pid)
         if conf is None:
             self.finished.emit("?", label or action, False, tr("proiettore non configurato"))
