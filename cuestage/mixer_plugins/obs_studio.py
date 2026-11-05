@@ -336,21 +336,26 @@ class OBSStudio(MixerDriver):
             return None
         return {"version": d.get("obsWebSocketVersion"), "auth": bool(d.get("authentication"))}
 
+    LOCAL_HOSTS = ("127.0.0.1", "::1")
+
     @classmethod
     def discover(cls, local_ips, timeout=1.5):
-        hosts = list(tcp_scan(local_ips, PORT))
-        for h in ["127.0.0.1"] + list(local_ips):      # OBS anche su questo computer
+        """OBS sulle reti /24 locali e su questo computer (localhost IPv4 e IPv6, indirizzi propri): basta che il
+        server WebSocket di OBS sia acceso, anche senza nessuna rete collegata."""
+        local_ips = [ip for ip in local_ips or [] if ip]
+        hosts = list(tcp_scan([ip for ip in local_ips if not ip.startswith("127.")], PORT)) if local_ips else []
+        for h in list(cls.LOCAL_HOSTS) + local_ips:         # OBS su questo computer
             try:
                 with socket.create_connection((h, PORT), timeout=0.3):
-                    hosts.append(h)
+                    hosts.insert(0, h)
             except OSError:
                 pass
         out, seen = [], set()
         for h in dict.fromkeys(hosts):
-            p = cls.probe(h)
+            p = cls.probe(h, PORT)
             if p is None:
                 continue
-            local = h == "127.0.0.1" or h in local_ips
+            local = h in cls.LOCAL_HOSTS or h.startswith("127.") or h in local_ips
             if local and "local" in seen:
                 continue
             seen.add("local" if local else h)

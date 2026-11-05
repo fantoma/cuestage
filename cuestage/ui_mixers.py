@@ -138,8 +138,8 @@ class MixersDialog(QDialog):
         v.addWidget(gs)
         if self.sw:
             self.scan_btn.setText(tr("🔍 Cerca regie in rete"))
-            self.scan_btn.setToolTip(tr("OBS Studio (WebSocket, porta 4455), anche su questo computer"))
-            self.scan_lab.setText(tr("Le regie Roland via USB non si trovano in rete: aggiungile a mano."))
+            self.scan_btn.setToolTip(tr("OBS Studio (WebSocket, porta 4455) sulle reti locali e su questo computer (localhost)"))
+            self.scan_lab.setText(tr("Cerca anche su questo computer (localhost). Le regie Roland via USB non si trovano in rete: aggiungile a mano."))
 
         pl = QHBoxLayout()
         self.plug_lab = QLabel()

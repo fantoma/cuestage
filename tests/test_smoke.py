@@ -1462,6 +1462,16 @@ def t_obs_studio(w):
         cls = MixerRegistry().load().get("obs_studio")
         assert cls is not None and cls.SWITCHER
         assert cls.probe("127.0.0.1", obs.port) == {"version": "5.5.0", "auth": True}
+        # ricerca: trovato anche su questo computer (localhost), pure senza nessuna rete
+        g = cls.discover.__func__.__globals__
+        old_port = g["PORT"]
+        g["PORT"] = obs.port
+        try:
+            for ips in ([], ["192.0.2.250"]):
+                found = cls.discover(ips)
+                assert [(f["host"], f["port"]) for f in found] == [("localhost", obs.port)], found
+        finally:
+            g["PORT"] = old_port
         bad = cls({"host": "127.0.0.1", "port": obs.port, "password": "sbagliata"})
         try:
             bad.status()

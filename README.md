@@ -849,8 +849,9 @@ Commands:
 - **OBS Studio** (WebSocket, obs-websocket 5, built into OBS 28 and later): in OBS, Tools › WebSocket Server
   Settings › “Enable WebSocket server” (port 4455, optional password, entered in CueStage too). OBS can run on the
   same computer (address `localhost`) or on another one: **🔍 Search for switchers on the network** (in Settings ›
-  Video switchers…) tries port 4455 on the local /24 networks and on this computer and recognises OBS from its
-  answer (version, password required or not). Scenes, sources and inputs are read from OBS and commands refer to
+  Video switchers…) tries port 4455 on the local /24 networks and on **this computer** (localhost, IPv4 and IPv6, and
+  its own addresses — also with no network connected) and recognises OBS from its answer (version, password
+  required or not); OBS on this computer is listed as “OBS on this computer” with address `localhost`. Scenes, sources and inputs are read from OBS and commands refer to
   them **by name**, so cues stay valid if the order changes in OBS (⟲ Read after adding or renaming scenes).
   Commands: **Go to «scene»** (uses the current transition; works with Studio Mode on or off — in Studio Mode it
   puts the scene in preview and runs the transition), **Cut to «scene»** (without transition, then the previous

@@ -522,7 +522,8 @@ class WebSocketClient:
         import base64
         self.sock = socket.create_connection((host, int(port)), timeout=timeout)
         key = base64.b64encode(os.urandom(16)).decode()
-        req = (f"GET {path} HTTP/1.1\r\nHost: {host}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+        hh = f"[{host}]" if ":" in str(host) else host          # IPv6 (es. ::1)
+        req = (f"GET {path} HTTP/1.1\r\nHost: {hh}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
                f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n")
         self.sock.sendall(req.encode())
         head = b""
