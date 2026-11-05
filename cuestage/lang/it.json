@@ -1786,6 +1786,10 @@
   "Web ← {0}": "Web ← {0}",
   "Angoli (web): {0}": "Angoli (web): {0}",
   "{0} (web · {1})": "{0} (web · {1})",
-  " (questa regia)": " (questa regia)"
+  " (questa regia)": " (questa regia)",
+  "Collegato via OSC: {0} su «{1}» ({2})": "Collegato via OSC: {0} su «{1}» ({2})",
+  "Scollegato: {0} su «{1}»": "Scollegato: {0} su «{1}»",
+  "{0} su «{1}» ora manda i comandi a questa istanza": "{0} su «{1}» ora manda i comandi a questa istanza",
+  "comunicato a {0} programmi collegati via OSC": "comunicato a {0} programmi collegati via OSC"
  }
 }

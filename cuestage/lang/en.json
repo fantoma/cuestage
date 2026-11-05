@@ -1786,6 +1786,10 @@
   "Web ← {0}": "Web ← {0}",
   "Angoli (web): {0}": "Corners (web): {0}",
   "{0} (web · {1})": "{0} (web · {1})",
-  " (questa regia)": " (this control room)"
+  " (questa regia)": " (this control room)",
+  "Collegato via OSC: {0} su «{1}» ({2})": "Connected via OSC: {0} on «{1}» ({2})",
+  "Scollegato: {0} su «{1}»": "Disconnected: {0} on «{1}»",
+  "{0} su «{1}» ora manda i comandi a questa istanza": "{0} on «{1}» now sends its commands to this instance",
+  "comunicato a {0} programmi collegati via OSC": "{0} programs connected via OSC notified"
  }
 }

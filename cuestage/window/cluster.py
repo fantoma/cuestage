@@ -429,6 +429,7 @@ class ClusterMixin:
                 self, tr("Promuovi"), tr("Scollegarsi dal master e diventare indipendente (master, se le istanze "
                 "secondarie sono abilitate)? Le cue in esecuzione continuano.")) != QMessageBox.Yes:
             return
+        old_host = (hub.master_info or {}).get("host") or ""
         hub.promote()
         self.lost_alarm.promoted()
         self.ctrl.remote_running = {}
@@ -438,7 +439,14 @@ class ClusterMixin:
         self.model.hw_bad = {}
         self.model.refresh()
         self._cluster_apply_settings()
-        self.status(tr("Questa istanza ora è indipendente") + (tr(" (master)") if hub.role == "master" else ""))
+        msg = tr("Questa istanza ora è indipendente") + (tr(" (master)") if hub.role == "master" else "")
+        s = self.show_data.settings
+        if hub.master_osc_clients and s.get("osc_in_enabled", True):
+            # i programmi collegati al vecchio master (es. Script Follower) mandano i comandi qui
+            n = hub.announce_master(int(s.get("osc_in_port", 53000)), old_host)
+            if n:
+                msg += " · " + tr("comunicato a {0} programmi collegati via OSC", n)
+        self.status(msg)
         self._cluster_indicator()
         self.fire_event("promoted")
 

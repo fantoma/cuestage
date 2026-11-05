@@ -1786,6 +1786,10 @@
   "Web ← {0}": "Splet ← {0}",
   "Angoli (web): {0}": "Koti (splet): {0}",
   "{0} (web · {1})": "{0} (splet · {1})",
-  " (questa regia)": " (ta režija)"
+  " (questa regia)": " (ta režija)",
+  "Collegato via OSC: {0} su «{1}» ({2})": "Povezano prek OSC: {0} na »{1}« ({2})",
+  "Scollegato: {0} su «{1}»": "Prekinjeno: {0} na »{1}«",
+  "{0} su «{1}» ora manda i comandi a questa istanza": "{0} na »{1}« zdaj pošilja ukaze tej instanci",
+  "comunicato a {0} programmi collegati via OSC": "obveščenih programov, povezanih prek OSC: {0}"
  }
 }

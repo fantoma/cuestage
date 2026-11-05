@@ -11,6 +11,33 @@ FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 
 
 class RemoteMixin:
+    def _osc_client(self, sender, addr, args):
+        """Programmi collegati via OSC (es. Script Follower): si presentano, così un nuovo master può
+        dire loro dove mandare i comandi (vedi OSC_CLIENTS.md)."""
+        from ..remote import osc_send_args
+        a = addr.rstrip("/").lower()
+        hub = self.cluster
+        if a == "/cuestage/client/hello":
+            c, new = hub.osc_hello(sender, args)
+            if c is None:
+                return
+            s = self.show_data.settings
+            try:
+                osc_send_args(sender, c["port"], "/cuestage/client/ack",
+                              [hub.name, int(s.get("osc_in_port", 53000)), ",".join(hub.osc_members())])
+            except Exception:  # noqa: BLE001
+                pass
+            if new:
+                self.status(tr("Collegato via OSC: {0} su «{1}» ({2})", c["app"] or "?", c["name"], sender))
+        elif a == "/cuestage/client/bye" and args:
+            c = hub.osc_bye(args[0])
+            if c is not None:
+                self.status(tr("Scollegato: {0} su «{1}»", c["app"] or "?", c["name"]))
+        elif a == "/cuestage/client/moved" and args:
+            c = hub.osc_clients.get(str(args[0]))
+            if c is not None:
+                self.status(tr("{0} su «{1}» ora manda i comandi a questa istanza", c["app"] or "?", c["name"]))
+
     def _osc_message(self, addr, args):
         a = addr.rstrip("/").lower()
         parts = [p for p in addr.strip("/").split("/") if p]

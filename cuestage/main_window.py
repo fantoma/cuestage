@@ -161,6 +161,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.loader.infoReady.connect(lambda p: self.model.refresh())
         self.loader.error.connect(lambda p, e: self.status(tr("Errore media «{0}»: {1}", os.path.basename(p), e)))
         self.osc.message.connect(self._osc_message)
+        self.osc.client.connect(self._osc_client)
         from .webserver import WebServer
         self.web = WebServer(self._web_state, self._web_lists)
         self.web.command.connect(self._web_command)

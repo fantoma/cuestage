@@ -9,6 +9,11 @@ con gli stessi semi casuali, così i gruppi random scelgono le stesse cue.
 
 Protocollo: frame = 4 byte di lunghezza + JSON (UTF-8); un frame con "bin": n è seguito da n byte di dati.
 Ricerca: datagramma UDP «CUESTAGE-MASTER?» sulla porta TCP+1 → risposta JSON del master.
+
+Programmi collegati via OSC (es. Script Follower): si presentano con /cuestage/client/hello sulla porta OSC del
+master, che li ricorda e li passa alle secondarie con lo stato. Se una secondaria viene promossa, manda a
+ognuno /cuestage/master con il proprio indirizzo: il programma sposta lì i suoi comandi OSC.
+Protocollo completo in OSC_CLIENTS.md.
 """
 from .i18n import tr
 import hashlib
@@ -31,6 +36,7 @@ HEARTBEAT_MS = 100
 CHUNK = 64 * 1024               # blocchi piccoli: heartbeat e comandi passano tra un blocco e l'altro
 CLIENT_TIMEOUT = 15.0           # (master) secondaria che non manda più nulla per tanto tempo: scollegata
 DISCOVER_MSG = b"CUESTAGE-MASTER?"
+OSC_CLIENT_TTL = 30.0           # programma OSC che non si presenta più da tanto: dimenticato
 # metodi del controller che sulle istanze in ridondanza si ripetono identici
 REPLICATED = ("go", "start_cue", "trigger", "stop_cue", "stop_all", "stop_list", "pause_cue", "pause_all",
               "resume_all", "set_playhead", "step_playhead", "playhead_to", "crossfade", "set_crossfader",
@@ -138,6 +144,19 @@ def local_rel(path, base, fp):
     return f"_esterni/{fp.split(':')[-1][:8]}_{file_basename(path)}"
 
 
+def route_ip(host):
+    """Indirizzo IPv4 di questa macchina verso «host» (quello che l'altro vede), senza inviare nulla."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect((host, 9))
+            return s.getsockname()[0]
+        finally:
+            s.close()
+    except OSError:
+        return ""
+
+
 def discover_masters(port=DEFAULT_PORT, timeout=1.2):
     """[{name, host, port, show}] dei master in rete (broadcast UDP sulla porta+1)."""
     from .mixers import broadcast_addresses
@@ -219,6 +238,8 @@ class ClusterHub(QObject):
         self._last_state = None
         self._state_at = 0.0
         self.web_info = {"on": False, "port": 0}   # interfaccia web di questa istanza (per la riserva web)
+        self.osc_clients = {}        # programmi OSC che si sono presentati: id -> {app, version, name, host, port, …}
+        self.master_osc_clients = []  # (slave) quelli del master, da avvisare se questa istanza viene promossa
         self.to_master = {}          # (slave) percorso locale -> percorso sul master
         self._put_wait = {}          # (slave) percorso locale -> [Event, percorso sul master | errore]
         self.show_fn = None          # () -> Show (master)
@@ -701,7 +722,7 @@ class ClusterHub(QObject):
         if key == self._last_state and now - self._state_at < 1.0:
             return
         self._last_state, self._state_at = key, now
-        msg = dict(st, t="state")
+        msg = dict(st, t="state", osc_clients=self.osc_client_rows())
         for cid, c in list(self.clients.items()):
             if c.get("accepted"):
                 self._send_client(cid, msg)
@@ -948,6 +969,8 @@ class ClusterHub(QObject):
             self._store_chat(msg)
             return True
         if t == "state":
+            if isinstance(msg.get("osc_clients"), list):
+                self.master_osc_clients = list(msg["osc_clients"])
             self.stateReceived.emit(msg)
             return True
         if t == "roster":
@@ -1111,6 +1134,54 @@ class ClusterHub(QObject):
         if (time.monotonic() - self.last_hb) * 1000 > self.lost_ms:
             self.lost = True
             self.masterLost.emit()
+
+    # ------------------------------------------------------------------ programmi collegati via OSC
+    def osc_hello(self, sender, args):
+        """/cuestage/client/hello app versione nome porta_di_ritorno id [profilo]. Ritorna (client, nuovo)."""
+        try:
+            port = int(args[3])
+        except (IndexError, TypeError, ValueError):
+            return None, False
+        cid = str(args[4]) if len(args) > 4 and str(args[4]) else f"{sender}:{port}"
+        old = self.osc_clients.get(cid)
+        c = {"id": cid, "app": str(args[0]) if args else "", "version": str(args[1]) if len(args) > 1 else "",
+             "name": str(args[2]) if len(args) > 2 else sender, "host": sender, "port": port,
+             "profiles": sorted(set((old or {}).get("profiles") or []) | ({str(args[5])} if len(args) > 5 else set())),
+             "last": time.monotonic()}
+        self.osc_clients[cid] = c
+        return c, old is None or old.get("host") != sender
+
+    def osc_bye(self, cid):
+        return self.osc_clients.pop(str(cid), None)
+
+    def osc_client_rows(self):
+        """Programmi OSC ancora vivi (senza i campi interni), per le secondarie e per la finestra Istanze."""
+        now = time.monotonic()
+        for k in [k for k, c in self.osc_clients.items() if now - c["last"] > OSC_CLIENT_TTL]:
+            del self.osc_clients[k]
+        return [{k: v for k, v in c.items() if k != "last"} for c in self.osc_clients.values()]
+
+    def osc_members(self):
+        """IP delle istanze del gruppo (le secondarie collegate): un programma OSC accetta il cambio di master
+        solo da queste."""
+        return sorted({c["addr"] for c in self.clients.values() if c.get("accepted") and c.get("addr")})
+
+    def announce_master(self, osc_port, old_host=""):
+        """(appena promossa) Dice ai programmi OSC del vecchio master di mandare i comandi qui. Ritorna quanti."""
+        from .remote import osc_send_args
+        n = 0
+        for c in self.master_osc_clients:
+            host, port = c.get("host"), c.get("port")
+            if not host or not port:
+                continue
+            try:
+                osc_send_args(host, int(port), "/cuestage/master",
+                              [route_ip(host), int(osc_port), self.name, old_host or ""])
+            except Exception:  # noqa: BLE001
+                continue
+            self.osc_clients[c["id"]] = dict(c, last=time.monotonic())
+            n += 1
+        return n
 
     def promote(self):
         """Lo slave diventa indipendente (e master, se le istanze secondarie sono abilitate)."""

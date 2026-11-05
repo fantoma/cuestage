@@ -63,8 +63,20 @@ def osc_send(host, port, address, args_text):
     cl.send_message(address, args if args else [])
 
 
+def osc_send_args(host, port, address, args):
+    """Come osc_send, ma con gli argomenti già pronti (lista di int, float, str)."""
+    if SimpleUDPClient is None:
+        raise RuntimeError(tr("python-osc non installato"))
+    key = (host, int(port))
+    cl = _clients.get(key)
+    if cl is None:
+        cl = _clients[key] = SimpleUDPClient(host, int(port), allow_broadcast=True)
+    cl.send_message(address, list(args))
+
+
 class OscServer(QObject):
     message = Signal(str, list)
+    client = Signal(str, str, list)     # mittente, indirizzo, argomenti: /cuestage/client/… (programmi collegati)
     status = Signal(str)
 
     def __init__(self):
@@ -79,7 +91,7 @@ class OscServer(QObject):
             self.status.emit(tr("OSC: python-osc non installato"))
             return False
         disp = Dispatcher()
-        disp.set_default_handler(self._handle)
+        disp.set_default_handler(self._handle, needs_reply_address=True)
         try:
             self.server = ThreadingOSCUDPServer(("0.0.0.0", int(port)), disp)
         except OSError as e:
@@ -99,7 +111,10 @@ class OscServer(QObject):
             self.server = None
         self.port = None
 
-    def _handle(self, address, *args):
+    def _handle(self, client_address, address, *args):
+        if address.lower().startswith("/cuestage/client/"):
+            self.client.emit(client_address[0], address, list(args))
+            return
         self.message.emit(address, list(args))
 
 

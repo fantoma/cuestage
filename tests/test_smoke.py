@@ -1873,6 +1873,82 @@ def t_cluster_perms_chat():
             x.close()
 
 
+def t_cluster_osc_clients():
+    """Programmi collegati via OSC (es. Script Follower): si presentano al master, la secondaria li conosce e,
+    quando viene promossa, comunica loro il proprio indirizzo (/cuestage/master)."""
+    import threading
+    from pythonosc.dispatcher import Dispatcher
+    from pythonosc.osc_server import ThreadingOSCUDPServer
+    from pythonosc.udp_client import SimpleUDPClient
+    got = []
+    disp = Dispatcher()
+    disp.set_default_handler(lambda addr, *args: got.append((addr, list(args))))
+    srv = ThreadingOSCUDPServer(("127.0.0.1", 0), disp)          # il programma collegato
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    back = srv.server_address[1]
+    a = MainWindow()
+    b = MainWindow()
+    try:
+        sh = Show()
+        sh.settings["output_fullscreen"] = False
+        sh.cues = [Cue("wait", number="1", name="Attesa", duration=10)]
+        a._set_show(sh)
+        old = dict(sh.settings)
+        sh.settings.update(cluster_enabled=True, cluster_port=18992, osc_in_enabled=True, osc_in_port=18930)
+        a._apply_settings(old=old)
+        run(0.3)
+        done = []
+        b.cluster.syncDone.connect(lambda ok, t: done.append(ok))
+        b.cluster.connect_slave("127.0.0.1", 18992, "redundancy", "diff", True, os.path.join(TMP, "slave-osc"), 500)
+        t0 = time.monotonic()
+        while not done and time.monotonic() - t0 < 15:
+            run(0.05)
+        assert done == [True], done
+        # la secondaria ascolta l'OSC su un'altra porta (stessa macchina nella prova)
+        b.show_data.settings["osc_in_port"] = 18931
+        b.osc.start(18931)
+        cl = SimpleUDPClient("127.0.0.1", 18930)
+        cl.send_message("/cuestage/client/hello", ["scriptfollower", "0.3.7", "regia-luci", back, "sf1", "p1"])
+        t0 = time.monotonic()
+        while not got and time.monotonic() - t0 < 2:
+            run(0.05)
+        assert got and got[0][0] == "/cuestage/client/ack", got
+        name, port, members = got[0][1]
+        assert name == a.cluster.name and port == 18930 and "127.0.0.1" in members.split(","), got[0]
+        assert [c["app"] for c in a.cluster.osc_client_rows()] == ["scriptfollower"]
+        t0 = time.monotonic()                                # passa alla secondaria con lo stato
+        while not b.cluster.master_osc_clients and time.monotonic() - t0 < 3:
+            run(0.05)
+        assert b.cluster.master_osc_clients[0]["id"] == "sf1"
+        # il master cade, la secondaria viene promossa e lo dice al programma collegato
+        a.cluster.stop_master()
+        t0 = time.monotonic()
+        while not b.cluster.lost and time.monotonic() - t0 < 3:
+            run(0.02)
+        got.clear()
+        b.cluster_promote(ask=False)
+        t0 = time.monotonic()
+        while not got and time.monotonic() - t0 < 2:
+            run(0.05)
+        assert got and got[0][0] == "/cuestage/master", got
+        assert got[0][1] == ["127.0.0.1", 18931, b.cluster.name, "127.0.0.1"], got[0]
+        assert "sf1" in b.cluster.osc_clients
+        cl2 = SimpleUDPClient("127.0.0.1", 18931)
+        cl2.send_message("/cuestage/client/moved", ["sf1", "p1"])
+        cl2.send_message("/cuestage/client/bye", ["sf1"])
+        t0 = time.monotonic()
+        while "sf1" in b.cluster.osc_clients and time.monotonic() - t0 < 2:
+            run(0.05)
+        assert "sf1" not in b.cluster.osc_clients
+    finally:
+        srv.shutdown()
+        srv.server_close()
+        for x in (a, b):
+            x.ctrl.stop_all(0)
+            x.show_data.dirty = False
+            x.close()
+
+
 if __name__ == "__main__":
     w = MainWindow()
     w.show()
@@ -1906,5 +1982,6 @@ if __name__ == "__main__":
     check("master + ridondanza: comandi, modifiche, heartbeat", t_cluster_redundancy)
     check("istanze: file grande su rete lenta, Esci dalla modalità slave", t_cluster_slow_transfer)
     check("istanze: accesso per PANEL / GRID, messaggi (anche web), disconnessione, trigger slave", t_cluster_perms_chat)
+    check("istanze: programmi collegati via OSC avvisati del nuovo master", t_cluster_osc_clients)
     print(f"\n{'Tutto bene' if not FAILED else f'{len(FAILED)} prove fallite: ' + ', '.join(FAILED)}")
     sys.exit(len(FAILED))
