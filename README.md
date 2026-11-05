@@ -921,6 +921,10 @@ single instance. A new message appears in the status bar and opens the window. W
 stay on this instance (operator and web interface). Note: the connection is not encrypted and the only protection is
 the confirmation on the master: use it on the show network.
 
+**Programs connected via OSC** (e.g. Script Follower) follow a master change too: when a secondary is promoted it
+tells every program the old master knew to send its OSC commands to the new address (see “OSC and MIDI” and
+[OSC_CLIENTS.md](OSC_CLIENTS.md)).
+
 ## Web interface
 
 **Settings › Audio, OSC and MIDI… › “Web interface” tab**: starts a small web server on the chosen port (default
@@ -984,6 +988,11 @@ int/float/enum/text parameters, optional search `{"type": "artnet", "match": [..
 OSC input on UDP **53000** (configurable): `/go`, `/stop`, `/panic`, `/pause`, `/resume`, `/next`, `/previous`
 (on the GO list), `/playhead/<n>`, `/list/<name>`, `/list/<name>/go`, `/cue/<n>/start|stop|pause|resume`,
 `/cue/<n>/level <dB> [sec]`, plus a custom address for each cue. Full list in *Help → Commands*.
+
+**Programs that send OSC to CueStage** (e.g. Script Follower) can introduce themselves with
+`/cuestage/client/hello`: the master remembers them and passes them to its secondary instances, and when a
+secondary is **promoted** it sends each of them `/cuestage/master` with its own address, so they move their
+commands to the new master. The protocol is described in [OSC_CLIENTS.md](OSC_CLIENTS.md).
 
 MIDI input (Settings): map of GO / Stop / Pause / Resume / Next / Previous and a trigger for each cue, in the format
 `note 1 60`, `cc 1 20`, `pc 1 5` (channel 0 = any), with a **Learn** button (in the settings it listens to the port
