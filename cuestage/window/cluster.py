@@ -1,5 +1,6 @@
 """Istanze secondarie: master, slave, ridondanza (parte di MainWindow)."""
 from ..i18n import tr
+import copy
 import os
 
 from PySide6.QtCore import QSettings
@@ -8,6 +9,26 @@ from PySide6.QtWidgets import (
 
 
 FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
+
+
+# impostazioni scritte da CueStage stesso (non sono modifiche dell'operatore della secondaria)
+LOCAL_SKIP = ("mixer_names", "cluster_local_keys")
+
+
+def setting_label(key):
+    """Nome leggibile di un'impostazione (per l'elenco delle impostazioni locali della secondaria)."""
+    groups = (("osc_", "OSC"), ("midi_", "MIDI"), ("output_", tr("Uscita video")), ("audio_", tr("Schede audio")),
+              ("xfade", tr("Crossfade")))
+    names = {"mixers": tr("Mixer"), "switchers": tr("Regie video"), "projectors": tr("Proiettori"),
+             "ducking": tr("Ducking"), "preview": tr("Preascolto"), "device_channels": tr("Schede audio"),
+             "master_db": tr("Volume master"), "stop_fade": tr("Fade dello STOP"), "go_target": tr("GO su"),
+             "video_preload": tr("Precarica i video"), "edit_blind": "BLIND"}
+    if key in names:
+        return names[key]
+    for pre, lab in groups:
+        if key.startswith(pre):
+            return lab
+    return key
 
 
 class ClusterMixin:
@@ -79,8 +100,17 @@ class ClusterMixin:
                 c.file = info["remap"][c.file]
         sh = self.show_data
         if hub.copy_settings or info["first"] and not sh.path:
+            # impostazioni cambiate qui (OSC, MIDI, mixer…): restano locali e il master non le aggiorna più
+            local = self._cluster_local_keys()
+            self._cluster_master_settings = copy.deepcopy(new.settings)
             keep = {k: v for k, v in sh.settings.items() if k.startswith("cluster_") or k.startswith("web_")}
             new.settings.update(keep)
+            for k in local:
+                if k in sh.settings:
+                    new.settings[k] = copy.deepcopy(sh.settings[k])
+                else:
+                    new.settings.pop(k, None)
+            new.settings["cluster_local_keys"] = sorted(local)
             new.settings["cluster_enabled"] = sh.settings.get("cluster_enabled", False)
         else:
             new.settings = sh.settings
@@ -110,6 +140,7 @@ class ClusterMixin:
         except OSError as e:
             self.status(tr("Copia locale dello show non salvata: {0}", e))
         self._slave_hash = self._show_hash()          # base per riconoscere le modifiche fatte qui
+        self._cluster_settings_base = copy.deepcopy(self.show_data.settings)   # … anche alle impostazioni
         diffs = self._cluster_hw_check(info.get("hw") or {}, data.get("settings") or {})
         if info["first"]:
             msg = (tr("Collegato a «{0}» come {1}.\nFile: {2} scaricati su {3}.", hub.master_info.get('name'), 'RIDONDANZA' if hub.mode == 'redundancy' else 'SLAVE', info['downloaded'], info['files']))
@@ -125,6 +156,57 @@ class ClusterMixin:
             self.status(tr("Show aggiornato dal master ({0} file scaricati)", info['downloaded'])
                         + (tr(" · ⚠ {0} differenze hardware", len(diffs)) if diffs else ""))
         self._cluster_indicator()
+
+    # ------------------------------------------------------------------ impostazioni locali della secondaria
+    def _cluster_local_keys(self):
+        """Impostazioni cambiate su questa secondaria: quelle già note più quelle diverse da come le aveva
+        lasciate l'ultimo aggiornamento del master (qualunque finestra le abbia cambiate)."""
+        sh = self.show_data
+        keys = set(sh.settings.get("cluster_local_keys") or [])
+        base = getattr(self, "_cluster_settings_base", None)
+        if base is not None:
+            for k in set(base) | set(sh.settings):
+                if k.startswith("cluster_") or k.startswith("web_") or k in LOCAL_SKIP:
+                    continue
+                if sh.settings.get(k) != base.get(k):
+                    keys.add(k)
+        return keys
+
+    def cluster_local_settings(self):
+        """[(chiave, nome leggibile)] delle impostazioni locali (non aggiornate dal master)."""
+        return sorted(((k, setting_label(k)) for k in self._cluster_local_keys()), key=lambda x: (x[1], x[0]))
+
+    def cluster_reset_local(self, keys=None):
+        """Le impostazioni locali tornano quelle del master (tutte, o solo «keys») e lui le aggiorna di nuovo."""
+        sh = self.show_data
+        local = self._cluster_local_keys()
+        drop = set(keys) if keys else set(local)
+        master = getattr(self, "_cluster_master_settings", None) or {}
+        old = dict(sh.settings)
+        for k in drop:
+            if k in master:
+                sh.settings[k] = copy.deepcopy(master[k])
+        sh.settings["cluster_local_keys"] = sorted(local - drop)
+        self._apply_settings(old=old)
+        self._cluster_settings_base = copy.deepcopy(sh.settings)
+        sh.dirty = True
+        self.status(tr("Impostazioni di nuovo dal master: {0}", ", ".join(sorted({setting_label(k) for k in drop}))
+                       or "—"))
+
+    def _cluster_push_settings(self):
+        """Impostazioni da mandare al master con le modifiche fatte qui: quelle locali restano qui (al master
+        va il suo valore), così le preferenze di questa istanza non cambiano il master."""
+        sh = self.show_data
+        local = self._cluster_local_keys()
+        master = getattr(self, "_cluster_master_settings", None) or {}
+        out = copy.deepcopy(sh.settings)
+        for k in local:
+            if k in master:
+                out[k] = copy.deepcopy(master[k])
+            else:
+                out.pop(k, None)
+        out.pop("cluster_local_keys", None)
+        return out
 
     def _cluster_replace(self, new, take_settings):
         """Aggiorna liste e cue dello show aperto con quelle arrivate da un'altra istanza, senza fermare le
@@ -240,7 +322,7 @@ class ClusterMixin:
             self._slave_hash = h
             return
         self._slave_hash = h
-        hub.push_show(self.show_data)
+        hub.push_show(self.show_data, self._cluster_push_settings())
 
     def _slave_edit_state(self):
         """Secondaria: l'ispettore si usa solo sulle liste che il master le lascia modificare."""

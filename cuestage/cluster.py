@@ -1074,12 +1074,15 @@ class ClusterHub(QObject):
                                      + (tr(", {0} errori", len(errors)) if errors else ""))
 
     # ------------------------------------------------------------------ slave → master
-    def push_show(self, show):
+    def push_show(self, show, settings=None):
         """Modifiche fatte sulla secondaria (se il master lo consente): carica i file nuovi e manda lo show
-        con i percorsi del master. Gira in un thread: l'interfaccia non aspetta."""
+        con i percorsi del master. Gira in un thread: l'interfaccia non aspetta. «settings»: impostazioni da
+        mandare al posto di quelle dello show (senza quelle rimaste locali)."""
         if self.role != "slave" or not self.can_edit or self.sock is None or self.lost:
             return
         data = show.to_data(None)
+        if settings is not None:
+            data["settings"] = settings
         threading.Thread(target=self._push_job, args=(data,), daemon=True, name="cluster-push").start()
 
     def _push_job(self, data):

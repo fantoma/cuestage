@@ -6,7 +6,7 @@ import threading
 from PySide6.QtCore import QObject, QSettings, Qt, Signal
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QDialog, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
                                QLabel, QLineEdit, QListWidget, QListWidgetItem, QProgressBar, QPushButton,
-                               QRadioButton, QSpinBox, QVBoxLayout)
+                               QRadioButton, QSpinBox, QVBoxLayout, QWidget)
 
 from .cluster import DEFAULT_PORT, discover_masters
 
@@ -326,6 +326,19 @@ class ClusterWindow(QDialog):
             hh.setSectionResizeMode(i, QHeaderView.ResizeToContents)
         self.table.setMaximumHeight(170)
         v.addWidget(self.table)
+        # secondaria: impostazioni cambiate qui, che il master non aggiorna più
+        self.local_box = QWidget()
+        lb = QHBoxLayout(self.local_box)
+        lb.setContentsMargins(0, 0, 0, 0)
+        self.local_lab = QLabel()
+        self.local_lab.setWordWrap(True)
+        self.local_lab.setStyleSheet("color:#e0b040;")
+        lb.addWidget(self.local_lab, 1)
+        self.local_btn = QPushButton(tr("Riprendi dal master"))
+        self.local_btn.setToolTip(tr("Queste impostazioni tornano quelle del master e lui le aggiorna di nuovo"))
+        self.local_btn.clicked.connect(self._reset_local)
+        lb.addWidget(self.local_btn)
+        v.addWidget(self.local_box)
         v.addWidget(QLabel(tr("<b>Messaggi</b>")))
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
@@ -404,6 +417,10 @@ class ClusterWindow(QDialog):
             else:
                 self.table.setCellWidget(i, 4, None)
         self.table.setVisible(bool(rows))
+        local = self.main.cluster_local_settings() if hub.role == "slave" and hub.copy_settings else []
+        names = sorted({lab for _k, lab in local})
+        self.local_lab.setText(tr("Impostazioni cambiate qui (il master non le aggiorna più): {0}", ", ".join(names)))
+        self.local_box.setVisible(bool(names))
         cur = self.to.currentData()
         self.to.clear()
         self.to.addItem(tr("Tutti"), "*")
@@ -412,6 +429,13 @@ class ClusterWindow(QDialog):
                 self.to.addItem(name, iid)
         j = self.to.findData(cur)
         self.to.setCurrentIndex(max(0, j))
+
+    def _reset_local(self):
+        from PySide6.QtWidgets import QMessageBox
+        if QMessageBox.question(self, tr("Impostazioni"), tr("Riprendere dal master le impostazioni cambiate su "
+                                "questa istanza? Il master tornerà ad aggiornarle.")) == QMessageBox.Yes:
+            self.main.cluster_reset_local()
+            self.refresh()
 
     def _kick(self, cid, name):
         from PySide6.QtWidgets import QMessageBox

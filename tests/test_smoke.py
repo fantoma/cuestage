@@ -1613,6 +1613,31 @@ def t_cluster_redundancy():
         a.show_data.cues[1].name = "Modificata"
         run(0.8)
         assert b.show_data.cues[1].name == "Modificata"
+        # impostazioni: arrivano dal master, ma quelle cambiate sulla secondaria restano sue
+        bs = b.show_data.settings
+        old_b = dict(bs)
+        bs["osc_in_port"] = 19001
+        b._apply_settings(old=old_b)
+        old_a = dict(sh.settings)
+        sh.settings["osc_in_port"] = 19002
+        sh.settings["xfade_time"] = 5.0
+        a._apply_settings(old=old_a)
+        sh.dirty = True
+        t0 = time.monotonic()
+        while b.show_data.settings.get("xfade_time") != 5.0 and time.monotonic() - t0 < 3:
+            run(0.05)
+        assert b.show_data.settings["xfade_time"] == 5.0                  # non toccata qui: dal master
+        assert b.show_data.settings["osc_in_port"] == 19001               # cambiata qui: resta locale
+        assert ("osc_in_port", "OSC") in b.cluster_local_settings()
+        b.cluster_reset_local()                                             # «Riprendi dal master»
+        assert b.show_data.settings["osc_in_port"] == 19002 and not b.cluster_local_settings()
+        old_a = dict(sh.settings)
+        sh.settings["osc_in_port"] = 19003
+        a._apply_settings(old=old_a)
+        t0 = time.monotonic()
+        while b.show_data.settings.get("osc_in_port") != 19003 and time.monotonic() - t0 < 3:
+            run(0.05)
+        assert b.show_data.settings["osc_in_port"] == 19003                # di nuovo aggiornata dal master
         a.cluster.stop_master()
         t0 = time.monotonic()
         while not b.cluster.lost and time.monotonic() - t0 < 3:

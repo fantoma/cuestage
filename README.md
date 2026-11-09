@@ -889,7 +889,11 @@ Redundancy always receives the whole project.
 - **differential** contents (downloads the missing files and updates the different ones, compared by size and
   SHA-1 fingerprint of the start and end of the file) or **full** (downloads everything again);
 - **copy all project settings** (sound cards, mixers, projectors, MIDI, OSC…; only the instance and web interface
-  settings stay local);
+  settings stay local). A setting **changed on the secondary** (OSC, MIDI, mixers, sound cards… from any settings
+  window) becomes **local**: the master no longer updates it and the secondary does not send it back to the master.
+  The local settings are listed in *Instances and messages* (Ctrl+M) with **Take back from the master**, which
+  restores the master's values and lets the master update them again; the list is kept in the local copy of the
+  show, so it survives a restart;
 - local folder: the files go there (same folder structure as on the master; files outside the show folder in
   `_esterni/`) together with the copy of the show, which stays usable without the master too.
 
