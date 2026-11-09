@@ -503,10 +503,18 @@ class SettingsDialog(QDialog):
         self.f_nolearn = QCheckBox(tr("Escludi da «Impara» (i comandi continuano a funzionare)"))
         self.f_nolearn.toggled.connect(self._store_filter)
         g.addWidget(self.f_nolearn, 4, 0, 1, 2)
+        # ritorno dei valori verso il controller (anelli LED, fader motorizzati, LED dei pulsanti)
+        self.feedback = {k: v for k, v in (self.s.get("midi_feedback") or {}).items() if v}
+        g.addWidget(QLabel(tr("Ritorno valori")), 5, 0)
+        self.f_fb = QComboBox()
+        self.f_fb.setToolTip(tr("Porta MIDI in uscita verso questo controller: CueStage gli rimanda i valori "
+                                "attuali (anelli LED, fader motorizzati, LED dei pulsanti), es. BCR2000 / BCF2000"))
+        self.f_fb.currentIndexChanged.connect(self._store_feedback)
+        g.addWidget(self.f_fb, 5, 1)
         self.f_info = QLabel()
         self.f_info.setStyleSheet("color:#888;")
         self.f_info.setWordWrap(True)
-        g.addWidget(self.f_info, 5, 0, 1, 2)
+        g.addWidget(self.f_info, 6, 0, 1, 2)
         box.setEnabled(False)
         return box
 
@@ -536,8 +544,39 @@ class SettingsDialog(QDialog):
         self.f_nolearn.blockSignals(True)
         self.f_nolearn.setChecked(bool(f["no_learn"]))
         self.f_nolearn.blockSignals(False)
+        self._fill_feedback(port)
         self._filter_port = port
         self._filter_info()
+
+    def _fill_feedback(self, port):
+        from .remote import MidiOut, port_key, port_label, port_short
+        cur = next((v for k, v in self.feedback.items() if port_key(k) == port_key(port)), "")
+        outs = MidiOut.list_ports()
+        self.f_fb.blockSignals(True)
+        self.f_fb.clear()
+        self.f_fb.addItem(tr("— nessuno —"), "")
+        same = next((o for o in outs if port_key(o) == port_key(port)), None)
+        self.f_fb.addItem(tr("Automatico: stessa scheda") + (f" ({port_short(same)})" if same else tr(" (non trovata)")),
+                          "auto")
+        for o in outs:
+            self.f_fb.addItem(port_short(o), port_label(o))
+        j = self.f_fb.findData(cur)
+        if j < 0 and cur:
+            self.f_fb.addItem(tr("{0}  (non collegata)", port_short(cur)), cur)
+            j = self.f_fb.count() - 1
+        self.f_fb.setCurrentIndex(max(0, j))
+        self.f_fb.blockSignals(False)
+
+    def _store_feedback(self, *_):
+        from .remote import port_key
+        port = self._filter_port
+        if not port:
+            return
+        for k in [k for k in self.feedback if port_key(k) == port_key(port)]:
+            del self.feedback[k]
+        v = self.f_fb.currentData()
+        if v:
+            self.feedback[port] = v
 
     def _store_filter(self, *_):
         from .remote import default_filter, port_key
@@ -663,6 +702,7 @@ class SettingsDialog(QDialog):
         self._store_filter()
         s["midi_in_ports"] = self.checked_ports()
         s["midi_filters"] = self.filters
+        s["midi_feedback"] = dict(self.feedback)
         s["midi_out_port"] = (self.midi_out.currentText() or "").strip()
         s["midi_in_port"] = s["midi_in_ports"][0] if s["midi_in_ports"] else ""
         s["midi_map"] = {k: normalize_spec(le.text()) for k, le in self.map_edits.items()}

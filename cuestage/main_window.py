@@ -143,6 +143,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
             pass
         self.osc = OscServer()
         self.midi = MidiInput()
+        from .midi_feedback import MidiFeedback
+        self.midi_fb = MidiFeedback(self)          # ritorno dei valori verso i controller (anelli, fader, LED)
         self.learn_dialog = None
         self.output = None
         self._select_guard = False
@@ -716,6 +718,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
             else:
                 self.web.stop()
         self.midi.set_filters(s.get("midi_filters") or {})
+        self.midi_fb.configure(s)                  # anche all'apertura dello show: tutti i valori ripartono
         if first or old is None or (old.get("midi_in_ports"), old.get("midi_in_port")) != (
                 s.get("midi_in_ports"), s.get("midi_in_port")):
             ports = self._midi_ports()
@@ -893,6 +896,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.go_btn.setText("GO" if not self.ctrl.paused_all else tr("GO ❚❚"))
         self._update_duck_btn()
         self._event_tick()
+        self.midi_fb.tick()
         if time.monotonic() - self._preload_at > 0.25:
             self._preload_at = time.monotonic()
             self._preload_videos()

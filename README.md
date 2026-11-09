@@ -1059,6 +1059,23 @@ Each cue can also have its **own** controls: “Trigger” tab › **MIDI volume
 transparency fader** (video, images), with Learn and ✕ to remove them. They apply even if the cue is not selected.
 The fader is “absolute”: on the first movement the value jumps to the fader position.
 
+### Feedback to the controllers (LED rings, motorised faders, button LEDs)
+
+For each MIDI input device (Settings › Audio, OSC and MIDI › MIDI, filters of the selected device) a **Value
+feedback** port can be chosen — **Automatic: same device** (the output with the same name, as with USB
+controllers such as the Behringer BCR2000 / BCF2000) or any MIDI output. CueStage then sends that controller the
+**current value** of every control mapped on it, so LED rings and motorised faders show the real state even when
+values change from CueStage (mouse, fades, cues, another instance):
+- volume and transparency of the cues with a MIDI fader (live while the cue plays, otherwise the programmed value);
+- “volume / transparency of the selected cue”, updated when the selection changes;
+- the crossfader (resting side);
+- LEDs: cue running (the cue's MIDI trigger, note or CC: 127 / 0), DIM, Duck, Pause all.
+
+CC are sent back as CC (0–127), pitch bend as pitch bend (14 bit), notes as Note On 127 / 0. A control moved on the
+controller does not get its value back while it is moving (half a second) nor afterwards if CueStage reached the
+same value, so motorised faders do not fight the hand. When a show is opened or the settings change, all values
+are sent again. A redundant instance connected to a live master sends nothing (the master does).
+
 ### Crossfade between the current cue and the next
 
 - **Automatic**: Playback › **Crossfade to the next** (F6, ⇄ X-fade button of the web page, MIDI, OSC

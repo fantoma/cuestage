@@ -282,6 +282,7 @@ DEFAULT_SETTINGS = {
     "midi_out_port": "",   # uscita MIDI predefinita delle cue «MIDI out»
     "midi_filters": {},    # scheda -> {types, channels, ignore_cc, ignore_notes, no_learn}   # porte MIDI in ingresso aperte insieme
     "midi_controls": {"vol_selected": "", "op_selected": "", "xfade": ""},
+    "midi_feedback": {},   # scheda MIDI in ingresso -> porta di ritorno ("auto" = stessa scheda): anelli, fader, LED
     "xfade_time": 3.0,     # durata del crossfade automatico (s)
     "output_screen": -1,
     "output_fullscreen": True,

@@ -1763,6 +1763,99 @@ def t_web_toggle(w):
     w.show_data.dirty = False
 
 
+def t_midi_feedback(w):
+    """Ritorno MIDI verso un controller (es. BCR2000): anelli / fader con i valori attuali, LED delle cue in
+    esecuzione e di DIM, niente rimbalzi mentre si muove un controllo, niente invio dalla ridondanza."""
+    import mido
+    from cuestage import outputs
+    from cuestage.midi_feedback import db_to_fader
+    from cuestage.remote import midi_out
+    got = []
+
+    class FakeOut:
+        def send(self, msg):
+            got.append(tuple(msg.bytes()))
+
+        def close(self):
+            pass
+    old = mido.get_output_names, mido.open_output
+    mido.get_output_names = lambda: ["BCR2000 Port 1"]
+    mido.open_output = lambda name: FakeOut()
+    midi_out.ports.clear()
+    try:
+        sh = Show()
+        sh.settings["output_fullscreen"] = False
+        a = Cue("audio", number="1", name="Musica", file=tone("fb.wav", 5), level_db=-10.0, midi_vol="cc 1 7",
+                midi="cc 1 20 @ BCR2000 Port 1")
+        b = Cue("wait", number="2", name="Attesa", duration=10)
+        sh.cues = [a, b]
+        sh.settings["midi_controls"] = {"vol_selected": "cc 1 8", "op_selected": "", "xfade": ""}
+        sh.settings["midi_map"]["dim"] = "note 1 40"
+        sh.settings["midi_feedback"] = {"BCR2000 Port 1": "auto"}
+        w._set_show(sh)
+        w._select_rows([0])
+        run(0.3)
+        v10 = round(db_to_fader(-10.0) * 127)
+        assert (0xB0, 7, v10) in got and (0xB0, 20, 0) in got and (0xB0, 8, v10) in got, got
+        assert (0x90, 40, 0) in got, got
+        del got[:]
+        a.level_db = 0.0                                   # cambiato da CueStage: l'anello si aggiorna
+        run(0.2)
+        assert (0xB0, 7, round(db_to_fader(0.0) * 127)) in got, got
+        del got[:]
+        w.ctrl.start_cue(a)                                # LED della cue in esecuzione
+        run(0.2)
+        assert (0xB0, 20, 127) in got, got
+        del got[:]
+        w.set_dim(True)
+        run(0.2)
+        assert (0x90, 40, 127) in got, got
+        w.set_dim(False)
+        # controllo mosso sul controller: nessun rimbalzo mentre lo si muove, né dopo se il valore è quello
+        del got[:]
+        w._midi_control("cc 1 7", 0.5, "BCR2000 Port 1")
+        run(0.3)
+        assert not [m for m in got if m[:2] == (0xB0, 7)], got
+        run(0.5)
+        assert not [m for m in got if m[:2] == (0xB0, 7)], got
+        # ridondanza collegata al master: niente ritorno; poi tutti i valori ripartono
+        del got[:]
+        outputs.hold(True)
+        a.level_db = -20.0
+        run(0.2)
+        assert not got
+        outputs.hold(False)
+        run(0.2)
+        assert any(m[:2] == (0xB0, 7) for m in got), got
+        assert any(m[:2] == (0xB0, 20) for m in got), got           # dopo la ridondanza: tutto da capo
+        w.ctrl.stop_all(0)
+        # impostazioni: la porta di ritorno si sceglie nei filtri della scheda
+        from cuestage.remote import MidiInput
+        from cuestage.ui_dialogs import SettingsDialog
+        old_in = MidiInput.list_ports
+        MidiInput.list_ports = staticmethod(lambda: ["BCR2000 Port 1"])
+        try:
+            sh.settings["midi_in_ports"] = ["BCR2000 Port 1"]
+            d = SettingsDialog(sh.settings, w.learn_midi, w)
+            d.midi_ports.setCurrentRow(0)
+            assert d.f_fb.currentData() == "auto", d.f_fb.currentData()
+            d.f_fb.setCurrentIndex(0)
+            assert d.result_settings()["midi_feedback"] == {}
+            d.f_fb.setCurrentIndex(d.f_fb.findData("BCR2000 Port 1"))
+            assert d.result_settings()["midi_feedback"] == {"BCR2000 Port 1": "BCR2000 Port 1"}
+            d.reject()
+        finally:
+            MidiInput.list_ports = old_in
+    finally:
+        outputs.hold(False)
+        mido.get_output_names, mido.open_output = old
+        midi_out.ports.clear()
+        w.show_data.settings["midi_feedback"] = {}
+        w.show_data.settings["midi_in_ports"] = []
+        w.midi_fb.configure(w.show_data.settings)
+        w.show_data.dirty = False
+
+
 def t_event_triggers(w):
     """Trigger da eventi: ducking sopra / sotto soglia."""
     sh = Show()
@@ -2063,6 +2156,7 @@ if __name__ == "__main__":
     check("annulla / ripeti, cronologia e versioni dello show", lambda: t_history_versions(w))
     check("export / import bundle (ZIP con show e file)", lambda: t_bundle(w))
     check("trigger da eventi: ducking sopra / sotto soglia", lambda: t_event_triggers(w))
+    check("ritorno MIDI verso i controller (anelli, fader, LED)", lambda: t_midi_feedback(w))
     check("interfaccia web accesa / spenta dalla casella, QR grigio da spenta", lambda: t_web_toggle(w))
     w.show_data.dirty = False
     w.close()

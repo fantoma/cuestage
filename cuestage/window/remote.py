@@ -182,6 +182,7 @@ class RemoteMixin:
             if getattr(self.learn_dialog, "mode", "") == "control":
                 self.learn_dialog.got(spec, port)
             return
+        self.midi_fb.note_incoming(spec, v, port)     # niente ritorno di questo valore mentre lo si muove
         mc = self.show_data.settings.get("midi_controls", {})
         msgs = []
         if mc.get("xfade") and control_matches(mc["xfade"], spec, port):
