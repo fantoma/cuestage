@@ -1428,7 +1428,7 @@ def t_roland_video(w):
         assert "roland_v8hd" not in drv and "behringer_x32" in drv
         d2 = MixersDialog([], w.switchers, w, switchers=True)
         drv2 = [d2.driver.itemData(i) for i in range(d2.driver.count())]
-        assert set(drv2) == {"roland_v8hd", "roland_v1hd", "obs_studio"}, drv2
+        assert set(drv2) == {"roland_v8hd", "roland_v1hd", "obs_studio", "blackmagic_atem"}, drv2
         d.deleteLater()
         d2.deleteLater()
         # ispettore: elenco dei comandi, aggiunta di un comando
@@ -1528,6 +1528,87 @@ def _obs_run(w, proto):
     finally:
         obs.close()
         w.show_data.dirty = False
+
+
+def t_atem(w):
+    """Blackmagic ATEM Mini Pro simulato (UDP 9910): stato iniziale, cue «Regia video», conferma persa e
+    ritrasmessa, ATEM occupato, ricerca in rete; Mini ed Extreme con i loro comandi."""
+    from sims import ATEMSim
+    from cuestage.mixers import MixerRegistry
+    from cuestage.i18n import tr
+    cls = MixerRegistry().load().get("blackmagic_atem")
+    assert cls is not None and cls.SWITCHER
+    atem = ATEMSim(product="ATEM Mini Pro")
+    busy = ATEMSim(busy=True)
+    try:
+        try:
+            cls({"host": "127.0.0.1", "port": busy.port}).status()
+            raise AssertionError("ATEM occupato accettato")
+        except Exception as e:
+            assert str(e) == tr("l'ATEM rifiuta il collegamento: troppi programmi già collegati"), e
+        g = cls.discover.__func__.__globals__
+        old_port = g["PORT"]
+        g["PORT"] = atem.port
+        try:
+            found = cls.discover(["192.0.2.250"])
+        finally:
+            g["PORT"] = old_port
+        assert [(f["host"], f["model"], f["name"]) for f in found] == [("127.0.0.1", "pro", "ATEM Mini Pro")], found
+        sh = Show()
+        sh.settings["output_fullscreen"] = False
+        sh.settings["switchers"] = [dict(id="atem", name="ATEM", driver="blackmagic_atem", host="127.0.0.1",
+                                         port=atem.port, model="auto")]
+        sh.cues = [Cue("switcher", number="1", name="Camera 3", sw_target="atem",
+                       sw_cmds=[{"key": "go:3", "value": 1}, {"key": "dsk:1", "value": 1},
+                                {"key": "record", "value": 1}, {"key": "vol:1301", "value": -100},
+                                {"key": "macro:2", "value": 1}]),
+                   Cue("switcher", number="2", name="Taglio", sw_target="atem",
+                       sw_cmds=[{"key": "pgm:4", "value": 1}, {"key": "style", "value": 2},
+                                {"key": "mix_rate", "value": 50}, {"key": "ftb", "value": 1}])]
+        w._set_show(sh)
+        run(0.2)
+        sm = w.switchers
+        done = []
+        sm.read_controls("atem", lambda ok, res: done.append((ok, res)))
+        wait_until(lambda: done)
+        assert done[0][0], done
+        keys = {c["key"] for c in sm.controls["atem"]}
+        assert {"go:1", "pgm:3010", "pvw:2001", "cut", "auto", "usk:0", "dsk:1", "dsk_auto:0", "vol:1301",
+                "mix:2", "master_vol", "macro:0", "macro:2", "record", "stream", "ftb"} <= keys, keys
+        assert "usk:1" not in keys and "go:6000" not in keys and "macro:1" not in keys
+        info = sm.control_info("atem", "on_air")
+        assert info["items"][info["value"]] == "Camera 1" and "Color Bars" in info["items"], info
+        atem.lose_acks = 1                                  # la prima conferma si perde: il comando è ritrasmesso
+        w.go()
+        wait_until(lambda: atem.recording and any(n == "MAct" for n, _d in atem.log))
+        assert atem.program == 3 and atem.dsk[1] and len(atem.pids) > len(set(atem.pids))
+        names = [n for n, _d in atem.log]
+        assert names[:2] == ["CPvI", "DAut"] and names.count("CPvI") == 1, names     # ritrasmesso, non rieseguito
+        cfsp = [d for n, d in atem.log if n == "CFSP"][0]
+        assert cfsp[2:4] == (1301).to_bytes(2, "big") and int.from_bytes(cfsp[40:44], "big", signed=True) == -1000
+        w.go()
+        wait_until(lambda: atem.ftb)
+        assert atem.program == 4 and atem.style == 2 and atem.mix_rate == 50
+        done.clear()
+        sm.read_controls("atem", lambda ok, res: done.append(ok))
+        wait_until(lambda: done)
+        assert sm.control_info("atem", "record")["value"] == 1 and sm.control_info("atem", "ftb_on")["value"] == 1
+        assert sm.control_info("atem", "style")["value"] == 2
+    finally:
+        atem.close()
+        busy.close()
+        w.show_data.dirty = False
+    # modelli: Mini (niente registrazione), Extreme (8 ingressi, 4 chiavi, SuperSource)
+    for product, inputs, has, hasnt in (("ATEM Mini", 4, {"go:4"}, {"record", "go:6000", "usk:1"}),
+                                        ("ATEM Mini Extreme ISO", 8, {"go:8", "usk:3", "record"}, set())):
+        sim = ATEMSim(product=product, inputs=inputs)
+        d = cls({"host": "127.0.0.1", "port": sim.port, "model": "auto"})
+        try:
+            keys = {c["key"] for c in d.list_controls()}
+            assert has <= keys and not (hasnt & keys), (product, keys)
+        finally:
+            d.close()
+            sim.close()
 
 
 def t_osc_profile():
@@ -2243,6 +2324,7 @@ if __name__ == "__main__":
     check("lettura dei controlli ALSA", t_alsa_parser)
     check("regie video Roland V-8HD / V-1HD: impostazioni, cue Regia video, MIDI", lambda: t_roland_video(w))
     check("OBS Studio come regia video (WebSocket simulato)", lambda: t_obs_studio(w))
+    check("Blackmagic ATEM Mini / Pro / Extreme come regia video (UDP simulato)", lambda: t_atem(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))

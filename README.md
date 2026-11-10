@@ -819,7 +819,7 @@ show, so they stay visible with the mixer off too; they are read again with “�
 go through a dedicated queue (in order, without blocking the show); the result appears in the status bar. New
 mixers are added with a plugin (see `cuestage/mixer_plugins/LEGGIMI.md`).
 
-## Video switchers (Roland V-8HD, V-1HD, OBS Studio)
+## Video switchers (Roland V-8HD, V-1HD, OBS Studio, Blackmagic ATEM Mini)
 
 Video switchers have their own settings, panel and cue type, separate from the mixers.
 
@@ -865,7 +865,22 @@ Commands:
   **replay buffer** and saving the replay. The panel also shows the scene **on air**. Unlike the Roland switchers,
   OBS reports its state: the values shown are the real ones (⟲ Read refreshes them).
 
-The switchers do not report their state: the values shown are the last ones sent by CueStage (for the V-1HD,
+- **Blackmagic ATEM Mini, Mini Pro / Pro ISO, Mini Extreme / Extreme ISO** (network): connect the ATEM's
+  **Ethernet** port to the network (the IP address is set with ATEM Setup over USB). CueStage speaks the ATEM
+  protocol on **UDP port 9910**, the same as ATEM Software Control (which can stay open); nothing to install.
+  **🔍 Search for switchers on the network** finds the ATEMs on the local /24 networks and reads their model; the
+  model (“Automatic detection” by default) decides the commands available. Sources are referred to by their ATEM
+  number (inputs 1–4 or 1–8, Black, Color Bars, Color 1/2, Media players, SuperSource on the Extreme), with the
+  names set in the ATEM. Commands: **Go to «source»** (to preview, then AUTO), **Cut to «source»** (straight to
+  program), **To preview «source»**, **CUT** and **AUTO**, transition type (Mix, Dip, Wipe, DVE, Stinger) and Mix
+  duration (frames), **Fade to Black** and its duration, **upstream keyers** on air (1, or 4 on the Extreme),
+  **DSK 1/2** on air and AUTO, Fairlight **audio** volume (dB) and On / Off / Audio-follow-video of every input,
+  microphones and master volume, **macros** stored in the ATEM (and stop), **recording** and **streaming** (Mini Pro
+  and Extreme). The panel shows Program, Preview and the real state of keys, FTB, recording and streaming. The
+  protocol is not documented by Blackmagic: it is implemented as in the open libraries that have used it for years
+  (SKAARHOJ ATEMmax, PyATEMMax, atem-connection); audio volumes are not read back from the ATEM.
+
+The Roland switchers do not report their state: the values shown are the last ones sent by CueStage (for the V-1HD,
 “CUT to” / “AUTO to” assume the fader starts on bus A). Check the commands on the unit before the show. Shows
 saved with a switcher among the mixers are converted when opened (the switcher moves to Video switchers and its
 Mixer cues become Video switcher cues). Other switchers can be added as plugins in the mixer plugin folder

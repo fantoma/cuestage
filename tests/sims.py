@@ -338,3 +338,154 @@ class OBSSim:
         if t == "StopRecording": self.record = False; return True, {}
         if t == "GetStreamingStatus": return True, {"streaming": False, "recording": self.record}
         return False, {"error": "invalid request type"}
+
+
+class ATEMSim:
+    """ATEM Mini finto: protocollo UDP (Hello, sessione, conferme, stato iniziale, keepalive) e comandi principali."""
+    def __init__(self, port=0, product="ATEM Mini Pro", inputs=4, busy=False, lose_acks=0):
+        import struct, time
+        self.struct, self.time = struct, time
+        self.product, self.busy, self.lose_acks = product, busy, lose_acks
+        self.inputs = inputs
+        self.program, self.preview = 1, 2
+        self.dsk, self.usk, self.ftb = {0: False, 1: False}, {0: False}, False
+        self.style, self.mix_rate = 0, 25
+        self.recording = self.streaming = False
+        self.macros = {0: "Apertura", 2: "Chiusura"}
+        self.log = []                                # (nome, dati) dei comandi ricevuti
+        self.pids = []                               # numeri dei pacchetti ricevuti (anche ritrasmessi)
+        self.clients = {}                            # indirizzo -> [sessione, ultimo numero inviato]
+        self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.s.bind(("127.0.0.1", port))
+        self.s.settimeout(0.1)
+        self.port = self.s.getsockname()[1]
+        self.alive = True
+        threading.Thread(target=self.loop, daemon=True).start()
+
+    def close(self):
+        self.alive = False
+        self.s.close()
+
+    def cmd(self, name, data):
+        return self.struct.pack(">HH4s", 8 + len(data), 0, name.encode()) + bytes(data)
+
+    def send(self, addr, payload, flags=0x01):
+        c = self.clients[addr]
+        c[1] = (c[1] + 1) & 0x7FFF
+        hdr = self.struct.pack(">HHHHHH", (flags << 11) | (12 + len(payload)), c[0], 0, 0, 0, c[1])
+        try:
+            self.s.sendto(hdr + payload, addr)
+        except OSError:
+            pass
+
+    def broadcast(self, payload):
+        for a in list(self.clients):
+            self.send(a, payload)
+
+    def dump(self, addr):
+        st, P = self.struct, self.cmd
+        name = self.product.encode().ljust(44, b"\0")
+        first = P("_ver", st.pack(">HH", 2, 30)) + P("_pin", name)
+        ins = b""
+        for s, ln, sn in ([(0, "Black", "BLK")] + [(i, f"Camera {i}", f"CAM{i}") for i in range(1, self.inputs + 1)]
+                          + [(1000, "Color Bars", "BARS"), (2001, "Color 1", "COL1"), (2002, "Color 2", "COL2"),
+                             (3010, "Media Player 1", "MP1"), (3011, "Media Player 1 Key", "MP1K")]):
+            ins += P("InPr", st.pack(">H", s) + ln.encode().ljust(20, b"\0") + sn.encode().ljust(4, b"\0")
+                     + bytes(10))
+        state = (P("PrgI", st.pack(">BxH", 0, self.program)) + P("PrvI", st.pack(">BxHBxxx", 0, self.preview, 0))
+                 + P("TrSS", bytes([0, self.style, 1, self.style, 1, 0, 0, 0]))
+                 + P("TMxP", bytes([0, self.mix_rate, 0, 0])) + P("FtbS", bytes([0, int(self.ftb), 0, 0]))
+                 + P("KeOn", bytes([0, 0, 0, 0])) + P("DskS", bytes([0, 0, 0, 0, 0, 0, 0, 0]))
+                 + P("DskS", bytes([1, 0, 0, 0, 0, 0, 0, 0])) + P("RTMS", st.pack(">HH", 0, 0))
+                 + P("StRS", st.pack(">HH", 1, 0)))
+        for i in range(1, self.inputs + 1):
+            state += P("FAIP", st.pack(">H", i) + bytes(6))
+            state += P("FASP", st.pack(">Hxxxxxxq", i, -65280) + bytes(48))
+        for i in (1301, 1302):
+            state += P("FAIP", st.pack(">H", i) + bytes(6))
+        for i in range(4):
+            nm = self.macros.get(i, "").encode()
+            state += P("MPrp", st.pack(">HBBHH", i, int(i in self.macros), 0, len(nm), 0) + nm)
+        for chunk in (first, ins, state, P("InCm", bytes([1, 0, 0, 0]))):
+            self.send(addr, chunk)
+
+    def apply(self, addr, name, d):
+        st, P = self.struct, self.cmd
+        self.log.append((name, bytes(d)))
+        out = b""
+        if name == "CPgI":
+            self.program = st.unpack_from(">H", d, 2)[0]
+        elif name == "CPvI":
+            self.preview = st.unpack_from(">H", d, 2)[0]
+        elif name in ("DCut", "DAut"):
+            self.program, self.preview = self.preview, self.program
+        elif name == "CTTp":
+            self.style = d[2]
+            out += P("TrSS", bytes([0, self.style, 1, self.style, 1, 0, 0, 0]))
+        elif name == "CTMx":
+            self.mix_rate = d[1]
+            out += P("TMxP", bytes([0, self.mix_rate, 0, 0]))
+        elif name == "FtbA":
+            self.ftb = not self.ftb
+            out += P("FtbS", bytes([0, int(self.ftb), 0, 0]))
+        elif name == "CDsL":
+            self.dsk[d[0]] = bool(d[1])
+            out += P("DskS", bytes([d[0], d[1], 0, 0, 0, 0, 0, 0]))
+        elif name == "CKOn":
+            self.usk[d[1]] = bool(d[2])
+            out += P("KeOn", bytes([0, d[1], d[2], 0]))
+        elif name == "RcTM":
+            self.recording = bool(st.unpack_from(">H", d)[0])
+            out += P("RTMS", st.pack(">HH", int(self.recording), 0))
+        elif name == "StrR":
+            self.streaming = bool(st.unpack_from(">H", d)[0])
+            out += P("StRS", st.pack(">HH", 4 if self.streaming else 1, 0))
+        if name in ("CPgI", "CPvI", "DCut", "DAut"):
+            out += P("PrgI", st.pack(">BxH", 0, self.program)) + P("PrvI", st.pack(">BxHBxxx", 0, self.preview, 0))
+        if out:
+            self.broadcast(out)
+
+    def loop(self):
+        st = self.struct
+        last_ping = self.time.monotonic()
+        while self.alive:
+            if self.time.monotonic() - last_ping > 0.3:            # keepalive come l'ATEM vero
+                last_ping = self.time.monotonic()
+                for a, c in list(self.clients.items()):
+                    if c[2]:
+                        self.send(a, b"")
+            try:
+                data, addr = self.s.recvfrom(4096)
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            word, sess, ack, _x, _y, pid = st.unpack_from(">HHHHHH", data)
+            flags = word >> 11
+            if flags & 0x02:                                       # Hello
+                reply = bytes([0x03 if self.busy else 0x02]) + bytes(7)
+                hdr = st.pack(">HHHHHH", (0x02 << 11) | 20, sess, 0, 0, 0, 0)
+                self.s.sendto(hdr + reply, addr)
+                if not self.busy:
+                    self.clients[addr] = [0x8000 | (sess & 0x7FFF), 0, False]
+                continue
+            c = self.clients.get(addr)
+            if c is None:
+                continue
+            if flags & 0x10 and not c[2]:                          # conferma dell'Hello: parte lo stato
+                c[2] = True
+                self.dump(addr)
+                continue
+            if flags & 0x01:
+                self.pids.append(pid)
+                if self.pids.count(pid) == 1:                       # i ritrasmessi non si rieseguono
+                    i, p = 0, data[12:]
+                    while i + 8 <= len(p):
+                        ln = st.unpack_from(">H", p, i)[0]
+                        self.apply(addr, p[i + 4:i + 8].decode(), p[i + 8:i + ln])
+                        i += ln
+                if self.lose_acks > 0:
+                    self.lose_acks -= 1
+                    continue                                       # conferma «persa»: il client ritrasmette
+                hdr = st.pack(">HHHHHH", (0x10 << 11) | 12, c[0], pid, 0, 0, 0)
+                self.s.sendto(hdr, addr)

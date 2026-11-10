@@ -51,6 +51,7 @@ Tipi: `int` (cursore; `"fmt": (scostamento, moltiplicatore, unità, decimali)` p
 `(0, 0.1, " s", 1)`), `bool`, `enum`, `action` (comando senza valore: pulsante «Esegui», la cue lo esegue al GO).
 Regie video: `SWITCHER = True` (con `CONTROLS = True`) — il driver compare in Impostazioni › Regie video… invece
 che tra i mixer, i comandi nel pannello delle regie (F11) e nelle cue «Regia video» (elenco di comandi eseguiti in
-ordine). `roland_video.py` (Roland V-8HD e V-1HD via MIDI su USB) è l'esempio.
+ordine). `roland_video.py` (Roland V-8HD e V-1HD via MIDI su USB) è l'esempio; `obs_studio.py` (WebSocket) e
+`blackmagic_atem.py` (protocollo ATEM su UDP, con un thread di ricezione che conferma i pacchetti) quelli in rete.
 `schede_audio_alsa.py` (Focusrite Scarlett/Clarett e qualsiasi scheda ALSA) usa `cuestage.alsactl`
 (lettura e scrittura con «amixer») e il campo di configurazione `card` (id della scheda ALSA).
