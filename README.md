@@ -904,8 +904,11 @@ in **red** the cues that use it (the reason is in the row's tooltip).
 The master also tells the secondaries **what it is doing** (on every change and at least once a second): the
 **playhead** of every list follows the master's; on a **slave** the cues running on the master are shown in the
 *Status* column (“▶ on master 0:12”); a **redundant** instance does exactly the same as the master — same list on
-screen, same playheads, and if a command was lost it realigns on its own (a cue still running here but stopped on
-the master for over a second is stopped; a cue the master has just started and missing here is started). Commands
+screen, same playheads, same pauses (Pause all and single cues), and the cues playing on the master **at the point
+the master has reached**: when an instance connects as redundancy while the master is already playing, the running
+cues start on it straight away from the master's position (audio, video, images, waits, texts); a cue that drifts
+by more than 0.3 s is moved back to the master's position; a cue still running here but stopped on the master for
+over a second is stopped, and one started on the master but missing here is started at the master's point. Commands
 that act on “the list on screen” (a click on a row, next/previous) use the master's list, whatever list the
 secondary is showing.
 

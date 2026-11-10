@@ -1661,6 +1661,65 @@ def t_cluster_redundancy():
             x.close()
 
 
+def t_cluster_join_align():
+    """Una ridondanza che si collega mentre il master suona: le cue partono al punto del master, la pausa e
+    gli scostamenti si allineano; spostamento di una voce audio anche con il loop."""
+    import numpy as _np
+    from cuestage.audio_engine import SR, Voice
+    v = Voice(_np.zeros((SR * 10, 1), _np.float32), 1.0, 9.0, True, 2.0, 4.0, 0, 1.0, None, 0.5, 0.0)
+    v.seek(2.5)                                          # 1 + 2.5 = 3.5 s nel file, prima del giro
+    assert v.pos == int(3.5 * SR) and v.played == int(2.5 * SR) and v.ramp is None
+    v.seek(4.0)                                          # 3 s fino a fine loop, poi 1 s dentro il loop (2–4)
+    assert v.pos == int(3.0 * SR) and v.wraps >= 1, v.pos / SR
+    a = MainWindow()
+    b = MainWindow()
+    try:
+        sh = Show()
+        sh.settings["output_fullscreen"] = False
+        sh.cues = [Cue("audio", number="1", name="Lunga", file=tone("lunga.wav", 30)),
+                   Cue("wait", number="2", name="Attesa", duration=60)]
+        sh.save(os.path.join(TMP, "align.cueshow"))
+        sh = Show.load(os.path.join(TMP, "align.cueshow"))
+        sh.settings["output_fullscreen"] = False
+        a._set_show(sh)
+        old = dict(sh.settings)
+        sh.settings.update(cluster_enabled=True, cluster_port=18997)
+        a._apply_settings(old=old)
+        run(0.3)
+        a.ctrl.start_cue(sh.cues[0])
+        a.ctrl.start_cue(sh.cues[1])
+        run(2.5)                                         # il master suona da 2,5 s
+        done = []
+        b.cluster.syncDone.connect(lambda ok, t: done.append(ok))
+        b.cluster.connect_slave("127.0.0.1", 18997, "redundancy", "diff", True, os.path.join(TMP, "align_b"), 500)
+        t0 = time.monotonic()
+        while not (done and len(b.ctrl.instances) == 2) and time.monotonic() - t0 < 10:
+            run(0.05)
+        assert done == [True] and names(b) == ["Attesa", "Lunga"], (done, names(b))
+        run(0.3)
+        for c in sh.cues:
+            ea, eb = a.ctrl.instances[c.id].elapsed, b.ctrl.instances[c.id].elapsed
+            assert ea > 2.5 and abs(ea - eb) < 0.5, (c.name, ea, eb)
+        # la ridondanza si scosta (es. un intoppo): torna al punto del master
+        b.ctrl.instances[sh.cues[0].id].seek_to(0.0)
+        t0 = time.monotonic()
+        while abs(a.ctrl.instances[sh.cues[0].id].elapsed - b.ctrl.instances[sh.cues[0].id].elapsed) > 0.5 \
+                and time.monotonic() - t0 < 3:
+            run(0.05)
+        assert abs(a.ctrl.instances[sh.cues[0].id].elapsed - b.ctrl.instances[sh.cues[0].id].elapsed) < 0.5
+        # pausa di una cue sul master: anche sulla ridondanza
+        a.ctrl.pause_cue(sh.cues[1].id, True)
+        t0 = time.monotonic()
+        while not b.ctrl.instances[sh.cues[1].id].paused and time.monotonic() - t0 < 3:
+            run(0.05)
+        assert b.ctrl.instances[sh.cues[1].id].paused
+    finally:
+        for x in (a, b):
+            x.ctrl.stop_all(0)
+            x.show_data.dirty = False
+            x.close()
+
+
 def t_cluster_slow_transfer():
     """File grande su rete lenta: la secondaria non viene scollegata a metà, «Esci dalla modalità slave» è
     attiva già durante il download, e un trasferimento interrotto chiude la sincronizzazione con un errore."""
@@ -2187,6 +2246,8 @@ if __name__ == "__main__":
     w.close()
     check("master + ridondanza: comandi, modifiche, heartbeat", t_cluster_redundancy)
     check("istanze: file grande su rete lenta, Esci dalla modalità slave", t_cluster_slow_transfer)
+    check("ridondanza collegata mentre il master suona: cue al punto del master, pause, scostamenti",
+          t_cluster_join_align)
     check("istanze: accesso per PANEL / GRID, messaggi (anche web), disconnessione, trigger slave", t_cluster_perms_chat)
     check("istanze: programmi collegati via OSC avvisati del nuovo master", t_cluster_osc_clients)
     print(f"\n{'Tutto bene' if not FAILED else f'{len(FAILED)} prove fallite: ' + ', '.join(FAILED)}")

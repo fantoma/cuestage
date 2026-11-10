@@ -717,8 +717,8 @@ class ClusterHub(QObject):
             st = self.state_fn()
         except Exception:
             return
-        key = json.dumps({"ph": st.get("ph"), "run": sorted(st.get("run") or {}), "view": st.get("view")},
-                         sort_keys=True)
+        key = json.dumps({"ph": st.get("ph"), "run": sorted(st.get("run") or {}), "view": st.get("view"),
+                          "paused": st.get("paused"), "paused_all": st.get("paused_all")}, sort_keys=True)
         if key == self._last_state and now - self._state_at < 1.0:
             return
         self._last_state, self._state_at = key, now

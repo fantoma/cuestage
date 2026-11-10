@@ -130,6 +130,10 @@ class Instance:
     def position(self):
         return self.elapsed
 
+    def seek_to(self, t):
+        """Porta l'esecuzione a «t» secondi dall'avvio (per allinearsi al master in ridondanza)."""
+        self.elapsed = max(0.0, float(t))
+
     def finish(self):
         if not self.done:
             self.done = True
@@ -519,6 +523,10 @@ class AudioInstance(RoutedVoice, KeyframeMixin, Instance):
     def cue_time(self):
         return self.voice.played / SR
 
+    def seek_to(self, t):
+        self.ctrl.audio.seek(self.key, max(0.0, float(t)))
+        self.elapsed = self.voice.played / SR
+
     def tick(self, now, dt):
         v = self.voice
         self.elapsed = v.played / SR
@@ -722,6 +730,20 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             self.player.play()
         self.sync_cool = self.ctrl.clock + 0.8
 
+    def seek_to(self, t):
+        """Video a «t» secondi dall'avvio: con l'audio nel motore si sposta l'audio (fa da orologio) e il video
+        lo segue; prima che il video sia pronto lo spostamento aspetta."""
+        t = max(0.0, float(t))
+        self.elapsed = t
+        if self.voice is not None:
+            if not self.synced:
+                self._seek_pending = (t, self.ctrl.clock)
+                return
+            self.ctrl.audio.seek(self.key, t)
+            self._seek_video(self.voice.pos / SR)
+        elif getattr(self, "player", None) is not None:
+            self._seek_video(float(self.cue.start or 0.0) + t)
+
     def _sync(self, now):
         v = self.voice
         vpos = self.player.position() / 1000.0
@@ -734,6 +756,13 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
                 v.paused = self.paused
                 self.synced = True
                 self.sync_cool = now + 0.5
+                pend = getattr(self, "_seek_pending", None)
+                if pend is not None:              # spostamento chiesto prima che il video fosse pronto
+                    self._seek_pending = None
+                    t = pend[0] + max(0.0, now - pend[1])
+                    self.ctrl.audio.seek(self.key, t)
+                    self.elapsed = t
+                    self._seek_video(v.pos / SR)
             return
         if v.wraps != self.wraps:             # l'audio è ripartito dall'inizio del loop
             self.wraps = v.wraps

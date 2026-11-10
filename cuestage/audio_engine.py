@@ -531,6 +531,12 @@ class AudioEngine:
             else:
                 v.ramp = [self._env_now(v), target, 0, int(dur * SR), shape, stop_after]
 
+    def seek(self, vid, t):
+        with self.lock:
+            v = self.voices.get(vid)
+            if v is not None:
+                v.seek(t)
+
     def pause(self, vid, paused=True):
         with self.lock:
             v = self.voices.get(vid)
@@ -751,6 +757,33 @@ class Voice:
 
     def looping_forever(self):
         return self.loop and self.loops_left < 0
+
+    def seek(self, t):
+        """Porta la voce a «t» secondi dall'avvio (loop compresi), come se suonasse da allora: fade d'ingresso
+        già finito. Serve per allinearsi a un'altra istanza (ridondanza)."""
+        n = max(0, int(t * SR))
+        first = self.le - self.start if self.loop else self.end - self.start
+        if n < first:
+            self.pos = self.start + n
+        elif self.loop and self.le - self.ls > 0:
+            k = n - first
+            span = self.le - self.ls
+            laps = k // span + 1
+            if self.loops_left >= 0 and laps > self.loops_left:       # loop finiti: poi fino alla fine
+                rest = k - self.loops_left * span
+                self.loops_left = 0
+                self.pos = min(self.end, self.le + rest) if rest >= 0 else self.ls + k % span
+            else:
+                if self.loops_left > 0:
+                    self.loops_left -= laps
+                self.pos = self.ls + k % span
+                self.wraps += laps
+        else:
+            self.pos = self.end
+        self.played = n
+        if self.ramp is not None and not self.ramp[5]:       # fade d'ingresso in corso: già finito
+            self.env = self.ramp[1]
+            self.ramp = None
 
     def position(self):
         return self.pos / SR

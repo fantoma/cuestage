@@ -123,6 +123,7 @@ class ClusterMixin:
             if info.get("seed"):
                 self.ctrl.seed_base, self.ctrl.seed_count = str(info["seed"][0]), int(info["seed"][1])
             self.act_leave.setEnabled(True)
+            self._rd_align = True                   # ridondanza: al primo stato del master ci si allinea subito
             changed = True
         elif self._lists_hash(new) == self._lists_hash(sh) and (new.settings is sh.settings or
                                                                  new.settings == sh.settings):
@@ -437,15 +438,17 @@ class ClusterMixin:
     def _cluster_state_info(self):
         """(master) Cosa sta facendo questa istanza: playhead, cue attive (secondi), lista visualizzata."""
         sh, ctrl = self.show_data, self.ctrl
+        insts = list(ctrl.instances.items())
         return {"ph": {l.id: ctrl.playhead_of(l) for l in sh.lists},
-                "run": {cid: round(float(inst.elapsed), 2) for cid, inst in list(ctrl.instances.items())},
+                "run": {cid: round(float(inst.elapsed), 2) for cid, inst in insts},
+                "paused": sorted(cid for cid, inst in insts if inst.paused),
+                "paused_all": bool(ctrl.paused_all),
                 "view": sh.current.id}
 
     def _cluster_state(self, st):
         """(secondaria) Stato del master: il playhead segue quello del master; in SLAVE le cue attive sul
         master si vedono nella colonna Stato; in RIDONDANZA si fa esattamente quello che fa il master
         (stessa lista visualizzata, cue avviate o fermate se un comando si fosse perso)."""
-        import time as _t
         hub, ctrl, sh = self.cluster, self.ctrl, self.show_data
         if hub.role != "slave" or hub.lost:
             return
@@ -468,23 +471,58 @@ class ClusterMixin:
             self.model.refresh_state()
             return
         ctrl.remote_running = {}
+        self._redundancy_align(st, run)
+
+    SEEK_TOL = 0.3          # scarto (s) oltre il quale la ridondanza si riallinea al punto del master
+    SEEK_TYPES = ("audio", "video", "image", "wait", "text")
+
+    def _redundancy_align(self, st, run):
+        """Ridondanza: fa esattamente quello che fa il master. Le cue che suonano sul master partono qui al
+        punto in cui sono sul master (anche appena collegata), quelle ferme sul master si fermano, chi si è
+        scostato si riallinea; pausa generale e pause delle singole cue come sul master."""
+        import time as _t
+        hub, ctrl, sh = self.cluster, self.ctrl, self.show_data
         now = _t.monotonic()
+        first = getattr(self, "_rd_align", False)       # appena collegata: subito, senza aspettare
+        self._rd_align = False
         local = set(ctrl.instances)
         extra = getattr(self, "_rd_extra", {})
         miss = getattr(self, "_rd_miss", {})
         self._rd_extra = {k: extra.get(k, now) for k in local - set(run)}
         self._rd_miss = {k: miss.get(k, now) for k in set(run) - local}
+        paused = set(st.get("paused") or [])
         hub._applying = True
         try:
+            if bool(st.get("paused_all")) != bool(ctrl.paused_all):
+                (ctrl.pause_all if st.get("paused_all") else ctrl.resume_all)()
             for cid, t0 in list(self._rd_extra.items()):
-                if now - t0 > 1.0:                       # ferma sul master da più di un secondo
+                if first or now - t0 > 1.0:              # ferma sul master da più di un secondo
                     ctrl.stop_cue(cid, 0.3)
                     self._rd_extra.pop(cid, None)
             for cid, t0 in list(self._rd_miss.items()):
                 cue = sh.by_id(cid)
-                if cue is not None and now - t0 > 0.6 and run[cid] < 3.0:    # partita sul master, qui no
-                    ctrl.start_cue(cue, cascade=False)
+                if cue is None:
                     self._rd_miss.pop(cid, None)
+                    continue
+                if not (first or now - t0 > 0.6):        # partita sul master, qui no
+                    continue
+                self._rd_miss.pop(cid, None)
+                ctrl.start_cue(cue, cascade=False)
+                inst = ctrl.instances.get(cid)
+                if inst is not None and run[cid] > 0.05 and cue.type in self.SEEK_TYPES:
+                    tot = inst.total()
+                    if tot and run[cid] >= tot - 0.1:   # sul master sta per finire: non serve
+                        inst.stop(0.0)
+                        continue
+                    inst.seek_to(run[cid])             # al punto in cui è sul master
+            for cid, inst in list(ctrl.instances.items()):
+                if cid not in run or inst.done:
+                    continue
+                if inst.cue.type in self.SEEK_TYPES and abs(float(inst.elapsed) - run[cid]) > self.SEEK_TOL \
+                        and not inst.paused and not ctrl.paused_all:
+                    inst.seek_to(run[cid])
+                if bool(inst.paused) != (cid in paused):
+                    ctrl.pause_cue(cid, cid in paused)
         finally:
             hub._applying = False
 
