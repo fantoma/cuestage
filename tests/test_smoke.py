@@ -1773,7 +1773,15 @@ def t_cluster_slow_transfer():
         assert b.cluster.role is None and not b.act_leave.isEnabled()
         # trasferimento interrotto dal master: la finestra riceve l'esito (non resta in attesa)
         done.clear()
-        os.remove(local)
+        t0 = time.monotonic()
+        while True:                                     # Windows: ffmpeg può tenere ancora aperto il file
+            try:
+                os.remove(local)
+                break
+            except PermissionError:
+                if time.monotonic() - t0 > 10:
+                    raise
+                run(0.1)
         b.cluster.connect_slave("127.0.0.1", 18994, "slave", "full", True, os.path.join(TMP, "slave2"), 300)
         t0 = time.monotonic()
         while not (prog and b.cluster.role == "slave") and time.monotonic() - t0 < 5:

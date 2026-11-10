@@ -30,6 +30,19 @@ from PySide6.QtCore import QObject, QTimer, Signal
 
 from .system import file_basename, local_path, portable_rel
 
+
+def replace_file(src, dst, tries=40):
+    """os.replace che regge Windows: se il file di destinazione è ancora aperto da un altro processo
+    (es. ffmpeg che calcola la forma d'onda) riprova per qualche secondo invece di fallire subito."""
+    for i in range(tries):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if i == tries - 1:
+                raise
+            time.sleep(0.1)
+
 PROTO = 1
 DEFAULT_PORT = 53900
 HEARTBEAT_MS = 100
@@ -626,7 +639,7 @@ class ClusterHub(QObject):
             if out is not None:
                 out.close()
         if ok:
-            os.replace(dest + ".part", dest)
+            replace_file(dest + ".part", dest)
             self._send_client(cid, {"t": "put_ok", "local": local, "path": dest})
         else:
             self._send_client(cid, {"t": "put_err", "local": local, "why": tr("aggiornamento del progetto non consentito")})
@@ -1047,7 +1060,7 @@ class ClusterHub(QObject):
                 elif t == "file_end":
                     if out is not None:
                         out.close()
-                        os.replace(tmp, local)
+                        replace_file(tmp, local)
                     break
                 elif t == "file_err":
                     if out is not None:
