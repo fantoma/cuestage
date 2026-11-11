@@ -414,6 +414,9 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
 - **Snap** (button on the marker row, on by default): a dragged point, marker or keyframe snaps to nearby points of the
   other curves, markers, IN/OUT and keyframes (a dotted white line shows it); hold **Alt** not to snap;
 - double-click or Ctrl+click adds a volume curve point; wheel = zoom, Shift+wheel or middle-button drag = scroll.
+- changes made **while the cue is playing** take effect at once: volume and opacity curve points, the cue volume
+  (orange line or **Volume** field) — also on the secondary instances. A Fade cue running on that cue is not
+  overridden by a change to the curve only.
 
 The keyframe timeline with lanes is no longer shown (neither here nor in the “Video / Image” tab): keyframes, markers
 and points are managed on the graph, and its cursor also sets the frame shown in the “Video / Image” tab. Keyframes

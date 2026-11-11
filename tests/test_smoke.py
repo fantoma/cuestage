@@ -1654,6 +1654,73 @@ def t_midi_profiles(w):
     w.show_data.dirty = False
 
 
+def t_live_curve(w):
+    """Curva di volume e volume cambiati nell'ispettore mentre la cue suona: valgono subito (audio e video);
+    un Fade in corso non viene sovrascritto da una modifica alla sola curva."""
+    import copy
+    import numpy as np
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("audio", number="1", name="A", file=tone("live.wav", sec=20))
+    v = Cue("video", number="2", name="V", file=make_video("live.mp4", sec=4))
+    sh.cues = [a, v]
+    w._set_show(sh)
+    wait_until(lambda: w.loader.get_info(a.file) is not None and w.loader.get_info(v.file) is not None, 10)
+
+    def peak():
+        vv = copy.copy(w.ctrl.instances[a.id].voice)
+        vv.ramp = None
+        out = np.zeros((1024, 8), np.float32)
+        w.audio._mix_voice(vv, out, 1024, out.shape[1])
+        return float(np.abs(out).max())
+    w.ctrl.start_cue(a)
+    run(0.3)
+    p0 = peak()
+    assert p0 > 0.01, p0
+    ins = w.inspector
+    ins.set_cue(a)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Tempi e loop"))
+    run(0.2)
+    tl = ins.timeline
+    a.curve = [[0.0, 0.0]]
+    tl.update()
+    x, y = int(tl.t2x(0.0)) + 2, int(tl.db2y(0.0))
+    QTest.mousePress(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x, y))      # punto trascinato in giù: più piano
+    QTest.mouseMove(tl, QPoint(x, int(tl.db2y(-20.0))))
+    QTest.mouseRelease(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x, int(tl.db2y(-20.0))))
+    run(0.1)
+    assert -21.5 < a.curve[0][1] < -18.5, a.curve
+    assert abs(peak() / p0 - 10 ** (a.curve[0][1] / 20)) < 0.02, (peak(), p0, a.curve)
+    # volume della cue cambiato mentre suona
+    a.level_db = -6.0
+    ins._emit()
+    run(0.05)
+    assert abs(w.ctrl.instances[a.id].voice.env - 10 ** (-6 / 20)) < 1e-3
+    # un Fade in corso (rampa con stop) non viene toccato da una modifica alla sola curva
+    w.ctrl.instances[a.id].voice.ramp = [0.5, 0.0, 0, 48000, "scurve", True]
+    a.curve = [[0.0, -3.0]]
+    ins._emit()
+    assert w.ctrl.instances[a.id].voice.ramp[1] == 0.0
+    w.ctrl.stop_all(0)
+    a.curve, a.level_db = [], 0.0
+    # video: curve di volume e opacità
+    w.ctrl.start_cue(v)
+    wait_until(lambda: v.id in w.ctrl.instances, 5)
+    ins.set_cue(v)
+    v.curve = [[0.0, -12.0]]
+    v.op_curve = [[0.0, 0.5]]
+    ins._emit()
+    vi = w.ctrl.instances[v.id]
+    assert vi.curve is not None and float(vi.curve[1][0]) == -12.0 and float(vi.op_curve[1][0]) == 0.5
+    if vi.voice is not None:
+        assert float(vi.voice.curve[1][0]) == -12.0
+    w.ctrl.stop_all(0)
+    run(0.2)
+    w.show_data.dirty = False
+
+
 def t_osc_profile():
     from cuestage.osc_profiles import render
     assert render("chamsys_magicq", "go", {"pb": 3}) == ("/pb/3/go", "1")
@@ -2369,6 +2436,7 @@ if __name__ == "__main__":
     check("OBS Studio come regia video (WebSocket simulato)", lambda: t_obs_studio(w))
     check("Blackmagic ATEM Mini / Pro / Extreme come regia video (UDP simulato)", lambda: t_atem(w))
     check("MIDI out: MMC, clock e profilo Akai MPC", lambda: t_midi_profiles(w))
+    check("curva di volume e volume cambiati mentre la cue suona", lambda: t_live_curve(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))

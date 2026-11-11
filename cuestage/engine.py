@@ -41,6 +41,9 @@ class Instance:
     xf_gain = 1.0
     xf_op = 1.0
 
+    def live_edit(self):
+        """La cue è stata modificata nell'ispettore mentre suona (curva di volume, volume…)."""
+
     def __init__(self, ctrl, cue, cascade):
         self.ctrl = ctrl
         self.cue = cue
@@ -330,6 +333,17 @@ def state_at(cue, T):
     return view
 
 
+def _live_level(inst):
+    """Volume della cue cambiato nell'ispettore da quando suona? → nuovo guadagno lineare, altrimenti None
+    (così un Fade o un keyframe in corso non viene sovrascritto da una modifica alla sola curva)."""
+    lvl = float(inst.cue.level_db)
+    last = getattr(inst, "_live_db", None)
+    inst._live_db = lvl
+    if last is None or abs(last - lvl) < 1e-6:
+        return None
+    return db_to_lin(lvl)
+
+
 class KeyframeMixin:
     """Applica i keyframe (corsie immagine e audio) al tempo della cue in riproduzione."""
     morph = None
@@ -446,6 +460,21 @@ class RoutedVoice:
     voice = None
     _aud_override = None     # funzione(n_out) -> (livello dB, matrice dB, volumi uscite dB) oppure None
 
+    def live_edit(self):
+        """Curva di volume e volume della cue cambiati mentre suona: valgono subito."""
+        v = self.voice
+        if v is None:
+            return
+        curve = curve_arrays(self.cue.curve)
+        lvl = _live_level(self)
+        with self.ctrl.audio.lock:
+            v.curve = curve
+            if lvl is not None:
+                if v.ramp is None:
+                    v.env = lvl
+                elif not v.ramp[5]:                 # fade in in corso: arriva al nuovo volume
+                    v.ramp[1] = lvl
+
     def _out_dev(self):
         """Scheda su cui suona: quella del preascolto se la cue è in preascolto."""
         if self.pfl:
@@ -474,6 +503,7 @@ class RoutedVoice:
                   int(c.loop_count or 0), db_to_lin(c.level_db),
                   curve_arrays(c.curve), 0.0 if silent else c.fade_in, c.fade_out, gains_fn=None)
         self.voice = v
+        self._live_db = float(c.level_db)
         v.blind = self.blind               # il mixer calcola il vumeter ma non manda il suono all'uscita
         v.duck_db = self.duck_db
         v.pfl = self.pfl
@@ -624,6 +654,7 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
         now = ctrl.clock
         lvl = db_to_lin(c.level_db)
         self.env_vol = Envelope(lvl)          # usato solo con il lettore di sistema
+        self._live_db = float(c.level_db)
         self.env_op = Envelope(float(c.opacity))
         if silent:
             self.env_vol.set(0.0)
@@ -835,6 +866,18 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             v = max(0.0, min(1.0, curve_value(self.op_curve, pos)))
             oc = v / base if base > 1e-3 else v
         self.layer.opacity = min(1.0, self.env_op.get(now) * fo * self.kf_op_ratio * self.trim_op * oc)
+
+    def live_edit(self):
+        """Curve di volume e di opacità e volume della cue cambiati mentre il video suona: valgono subito."""
+        c = self.cue
+        self.curve = curve_arrays(c.curve)
+        self.op_curve = curve_arrays(getattr(c, "op_curve", None) or [])
+        if self.voice is not None:
+            RoutedVoice.live_edit(self)
+            return
+        lvl = _live_level(self)                    # lettore di sistema
+        if lvl is not None and self.env_vol.ramp is None:
+            self.env_vol.set(lvl)
 
     def stop(self, fade=0.0):
         self.user_stopped = True

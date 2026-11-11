@@ -273,6 +273,10 @@ class EditingMixin:
                 self._structure_changed(select=[r] if r >= 0 else None)
         if file_changed and cue is not None:
             self._preload(cue)
+        if cue is not None and not file_changed:
+            for inst in list(self.ctrl.instances.values()):     # la cue suona: curva e volume valgono subito
+                if inst.cue is cue:
+                    inst.live_edit()
         self.model.refresh()
         self._update_standby()
 

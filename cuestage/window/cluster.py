@@ -272,6 +272,9 @@ class ClusterMixin:
             for c in sh.all_cues():
                 if c.id in changed:
                     self._preload(c)
+            for inst in list(self.ctrl.instances.values()):   # cue che suonano: curva e volume subito
+                if inst.cue.id in changed:
+                    inst.live_edit()
             if not still:
                 self.inspector.set_cue(None)
             elif cur.id in changed:
