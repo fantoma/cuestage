@@ -249,8 +249,22 @@ Sends arbitrary MIDI messages, one per line, on the MIDI output chosen in the cu
     pb 1 0               Pitch Bend (−8192…8191) · at 1 64        Channel aftertouch
     nrpn 1 300 8000      NRPN (14-bit parameter and value)
     msc all go 12.5      MIDI Show Control (go, stop, resume, load, fire, reset, all_off…; cue and list)
+    mmc all play         MIDI Machine Control (stop, play, deferred_play, ffwd, rewind, record, record_exit,
+                         pause, locate hh mm ss ff: mmc all locate 0 1 30 0)
+    start · continue · stop   MIDI clock transport · spp 16   Song Position Pointer (16ths)
     sysex 43 10 3E …     System Exclusive        · hex 90 3C 64   raw bytes
     wait 0.5             wait before the next message                 · # comment
+
+**Ready-made commands**: below the messages, choose a **MIDI profile** and a command, set its values and press
+**＋ Add to messages**: the lines are appended as text (with a `#` comment naming the command), so they can still be
+edited by hand. Built-in profile: **Akai MPC** (MPC X, Live, One, Key standalone) — **Play**, **Play Start** (from the
+beginning), **Stop**, **Rec**, **go to time** and **go to time and Play** via MMC (on the MPC: Preferences › MIDI/Sync ›
+“Receive MMC”), **Start / Continue / Stop** of the MIDI clock (MPC set to receive MIDI sync) and **play a pad** (Note
+On, length, Note Off with the note assigned to the pad). Force and MPC Sample are not verified. The MPC does not
+accept control of its mixer or parameters over MIDI CC, and its network MIDI driver exists only for Windows and
+macOS, so the connection is MIDI DIN or USB. Other devices: a JSON file in `~/.local/share/cuestage/midi_profiles/`
+(`id`, `name`, `notes`, `commands` with `label`, `lines` in the syntax above with `{param}` placeholders and
+`params`), as in `cuestage/midi_profiles/akai_mpc.json`.
 
 ## Cue groups
 

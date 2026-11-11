@@ -48,6 +48,7 @@ class ControlTabsMixin:
         ed.setFont(mono)
         ed.setMinimumHeight(140)
         f.addRow(tr("Messaggi"), ed)
+        self._midi_profile_rows(f, ed)
         res = QLabel()
         res.setWordWrap(True)
         f.addRow(res)
@@ -83,6 +84,83 @@ class ControlTabsMixin:
         h.setTextInteractionFlags(Qt.TextSelectableByMouse)
         f.addRow(h)
         return w
+
+    def _midi_profile_rows(self, f, ed):
+        """Comandi pronti dei profili MIDI (es. Akai MPC): scelti e aggiunti come testo in fondo ai messaggi."""
+        from ..midi_profiles import profiles, render
+        profs = profiles()
+        if not profs:
+            return
+        box = QWidget()
+        v = QVBoxLayout(box)
+        v.setContentsMargins(0, 0, 0, 0)
+        top = QHBoxLayout()
+        pc, cc = QComboBox(), QComboBox()
+        for pid, p in profs.items():
+            pc.addItem(p.get("name", pid), pid)
+        top.addWidget(pc, 1)
+        top.addWidget(cc, 1)
+        v.addLayout(top)
+        params = QWidget()
+        pf = QFormLayout(params)
+        pf.setContentsMargins(0, 0, 0, 0)
+        v.addWidget(params)
+        info = QLabel()
+        info.setWordWrap(True)
+        info.setStyleSheet("color:#999;")
+        v.addWidget(info)
+        add = QPushButton(tr("＋ Aggiungi ai messaggi"))
+        v.addWidget(add)
+        vals = {}
+
+        def cur_cmd():
+            p = profs.get(pc.currentData()) or {}
+            return p, next((c for c in p.get("commands") or [] if c["id"] == cc.currentData()), None)
+
+        def fill_cmds():
+            cc.blockSignals(True)
+            cc.clear()
+            for c in (profs.get(pc.currentData()) or {}).get("commands") or []:
+                cc.addItem(c.get("label", c["id"]), c["id"])
+            cc.blockSignals(False)
+            fill_params()
+
+        def fill_params():
+            while pf.rowCount():
+                pf.removeRow(0)
+            vals.clear()
+            p, c = cur_cmd()
+            info.setText((c or {}).get("help", "") + ("\n" + p["notes"] if p.get("notes") else ""))
+            for prm in (c or {}).get("params") or []:
+                pid, typ, dflt = prm["id"], prm.get("type"), prm.get("default", "")
+                vals[pid] = dflt
+                if typ == "int":
+                    w = QSpinBox()
+                    w.setRange(int(prm.get("min", 0)), int(prm.get("max", 9999)))
+                    w.setValue(int(float(dflt or 0)))
+                    w.valueChanged.connect(lambda x, pid=pid: vals.__setitem__(pid, x))
+                elif typ == "float":
+                    w = QDoubleSpinBox()
+                    w.setDecimals(int(prm.get("decimals", 2)))
+                    w.setRange(float(prm.get("min", 0)), float(prm.get("max", 9999)))
+                    w.setValue(float(dflt or 0))
+                    w.valueChanged.connect(lambda x, pid=pid: vals.__setitem__(pid, x))
+                else:
+                    w = QLineEdit(str(dflt))
+                    w.textChanged.connect(lambda x, pid=pid: vals.__setitem__(pid, x))
+                w.setObjectName("midiprm_" + pid)
+                pf.addRow(prm.get("label", pid), w)
+
+        def append():
+            text = render(pc.currentData(), cc.currentData(), vals)
+            old = ed.toPlainText().rstrip("\n")
+            ed.setPlainText((old + "\n" if old else "") + text)
+        pc.currentIndexChanged.connect(lambda _i: fill_cmds())
+        cc.currentIndexChanged.connect(lambda _i: fill_params())
+        add.clicked.connect(append)
+        fill_cmds()
+        self._midi_prof = (pc, cc, add)
+        f.addRow(tr("Comandi pronti"), box)
 
     def _tab_group(self):
         from ..groups import GROUP_MODES, block_end

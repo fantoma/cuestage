@@ -402,6 +402,10 @@ MIDI_OUT_HELP = tr("""Un messaggio per riga (canali 1–16, valori 0–127; # = 
   nrpn 1 300 8000      NRPN (canale, parametro 0–16383, valore 0–16383)
   msc 1 go 12.5        MIDI Show Control (device 0–127 / all; comandi go, stop, resume, load, fire, reset,
                        all_off; cue e lista facoltativi: msc all go 5 2)
+  mmc all play         MIDI Machine Control (device 0–127 / all; stop, play, deferred_play, ffwd, rewind,
+                       record, record_exit, pause, locate hh mm ss ff: mmc all locate 0 1 30 0)
+  start / continue / stop   trasporto del MIDI clock (System Real Time)
+  spp 16               Song Position Pointer (in sedicesimi dall'inizio)
   sysex F0 43 10 3E … F7   System Exclusive (byte esadecimali)
   hex 90 3C 64         byte grezzi esadecimali
   wait 0.5             attende 0,5 s prima del messaggio successivo""")
@@ -409,6 +413,9 @@ MIDI_OUT_HELP = tr("""Un messaggio per riga (canali 1–16, valori 0–127; # = 
 _NOTE_NAMES = {"c": 0, "d": 2, "e": 4, "f": 5, "g": 7, "a": 9, "b": 11}
 _MSC_CMDS = {"go": 0x01, "stop": 0x02, "resume": 0x03, "timed_go": 0x04, "load": 0x05, "set": 0x06,
              "fire": 0x07, "all_off": 0x08, "restore": 0x09, "reset": 0x0A, "go_off": 0x0B}
+_MMC_CMDS = {"stop": 0x01, "play": 0x02, "deferred_play": 0x03, "ffwd": 0x04, "rewind": 0x05, "record": 0x06,
+             "record_exit": 0x07, "pause": 0x09, "locate": 0x44}
+_REALTIME = {"start": 0xFA, "continue": 0xFB, "stop": 0xFC}
 
 
 def _note(tok):
@@ -474,6 +481,23 @@ def parse_midi_script(text):
                         data.append(0x00)
                     data += [ord(ch) for ch in field if ch in "0123456789."]
                 msg = [0xF0, 0x7F, dev, 0x02, 0x7F, _MSC_CMDS[cmd]] + data + [0xF7]
+            elif k == "mmc":
+                dev = 0x7F if t[1].lower() == "all" else _rng(t[1], 0, 127, "device")
+                cmd = t[2].lower()
+                if cmd not in _MMC_CMDS:
+                    raise ValueError(tr("comando MMC «{0}» (usa: {1})", t[2], ', '.join(_MMC_CMDS)))
+                if cmd == "locate":                     # tempo hh mm ss ff (24 fotogrammi al secondo)
+                    hh, mm, ss, ff = (list(t[3:7]) + ["0"] * 4)[:4]
+                    tc = [_rng(hh, 0, 23, tr("ore")), _rng(mm, 0, 59, tr("minuti")), _rng(ss, 0, 59, tr("secondi")),
+                          _rng(ff, 0, 23, tr("fotogrammi"))]
+                    msg = [0xF0, 0x7F, dev, 0x06, 0x44, 0x06, 0x01] + tc + [0x00, 0xF7]
+                else:
+                    msg = [0xF0, 0x7F, dev, 0x06, _MMC_CMDS[cmd], 0xF7]
+            elif k in _REALTIME and len(t) == 1:
+                msg = [_REALTIME[k]]
+            elif k == "spp":
+                v = _rng(t[1], 0, 16383, tr("posizione"))
+                msg = [0xF2, v & 0x7F, v >> 7]
             elif k in ("sysex", "hex"):
                 msg = [int(x, 16) for x in " ".join(t[1:]).replace(",", " ").split()]
                 if k == "sysex":
@@ -541,7 +565,7 @@ class MidiOut:
             else:
                 i = 0
                 while i < len(data):                     # più messaggi di canale in fila (es. NRPN)
-                    n = {0xC0: 2, 0xD0: 2}.get(data[i] & 0xF0, 3)
+                    n = 1 if data[i] >= 0xF8 else {0xC0: 2, 0xD0: 2}.get(data[i] & 0xF0, 3)   # F8–FF: 1 byte
                     p.send(mido.Message.from_bytes(data[i:i + n]))
                     i += n
 

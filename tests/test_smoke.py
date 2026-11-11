@@ -1611,6 +1611,49 @@ def t_atem(w):
             sim.close()
 
 
+def t_midi_profiles(w):
+    """MIDI out: MMC, clock (start/continue/stop), Song Position; profilo Akai MPC nell'ispettore: il comando
+    scelto si aggiunge come testo in fondo ai messaggi."""
+    from PySide6.QtWidgets import QSpinBox
+    from cuestage.midi_profiles import profiles, render
+    from cuestage.remote import parse_midi_script
+    msgs = [m for _w, m in parse_midi_script("mmc all deferred_play\nmmc 3 locate 0 2 5 1\nstart\ncontinue\nstop\n"
+                                              "spp 300\nmmc all record")]
+    assert msgs == [[0xF0, 0x7F, 0x7F, 0x06, 0x03, 0xF7], [0xF0, 0x7F, 3, 0x06, 0x44, 0x06, 0x01, 0, 2, 5, 1, 0, 0xF7],
+                    [0xFA], [0xFB], [0xFC], [0xF2, 44, 2], [0xF0, 0x7F, 0x7F, 0x06, 0x06, 0xF7]], msgs
+    for bad in ("mmc all salta", "mmc all locate 0 61 0 0", "spp 20000"):
+        try:
+            parse_midi_script(bad)
+            raise AssertionError(bad)
+        except ValueError:
+            pass
+    p = profiles(reload=True)["akai_mpc"]
+    for c in p["commands"]:                                  # ogni comando del profilo è valido
+        assert parse_midi_script(render("akai_mpc", c["id"])), c["id"]
+    assert render("akai_mpc", "locate_play", {"min": 1, "sec": 30}).splitlines()[1:] == \
+        ["mmc all locate 0 1 30 0", "mmc all deferred_play"]
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    c = Cue("midiout", number="1", name="MPC", mo_msgs="cc 1 7 100")
+    sh.cues = [c]
+    w._set_show(sh)
+    ins = w.inspector
+    ins.set_cue(c)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("MIDI out"))
+    run(0.1)
+    pc, cc, add = ins._midi_prof
+    assert pc.currentData() == "akai_mpc"
+    cc.setCurrentIndex(cc.findData("locate_play"))
+    run(0.05)
+    ins.findChild(QSpinBox, "midiprm_sec").setValue(42)
+    add.click()
+    run(0.05)
+    lines = c.mo_msgs.splitlines()
+    assert lines[0] == "cc 1 7 100" and lines[-2:] == ["mmc all locate 0 0 42 0", "mmc all deferred_play"], lines
+    assert len(parse_midi_script(c.mo_msgs)) == 3
+    w.show_data.dirty = False
+
+
 def t_osc_profile():
     from cuestage.osc_profiles import render
     assert render("chamsys_magicq", "go", {"pb": 3}) == ("/pb/3/go", "1")
@@ -2325,6 +2368,7 @@ if __name__ == "__main__":
     check("regie video Roland V-8HD / V-1HD: impostazioni, cue Regia video, MIDI", lambda: t_roland_video(w))
     check("OBS Studio come regia video (WebSocket simulato)", lambda: t_obs_studio(w))
     check("Blackmagic ATEM Mini / Pro / Extreme come regia video (UDP simulato)", lambda: t_atem(w))
+    check("MIDI out: MMC, clock e profilo Akai MPC", lambda: t_midi_profiles(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))
