@@ -739,8 +739,9 @@ def t_inspector_layout(w):
     finally:
         md.subprocess.run = real_run
         md.FFMPEG = orig_ff
-    # cue solo audio: stessa interfaccia (niente timeline dei keyframe), volume sulla linea arancione, marker,
-    # keyframe e cursore sulla forma d'onda
+    # cue solo audio: stessa interfaccia (niente timeline dei keyframe), niente linea arancione: la linea rosa è
+    # il volume con i fade, il volume della cue si regola con il fader della scheda Audio; marker, keyframe e
+    # cursore sulla forma d'onda
     ins.set_cue(a)
     ins.tabs.setCurrentIndex(2)
     run(0.3)
@@ -748,15 +749,21 @@ def t_inspector_layout(w):
     assert not [k for k in page.findChildren(KeyframeBar) if k.isVisible()]
     tl = ins.timeline
     tl.zoom_all()
-    a.level_db, a.fade_in, a.fade_out, a.start, a.end = 0.0, 0.0, 0.0, 0.0, 0.0
+    a.level_db, a.fade_in, a.fade_out, a.start, a.end = 0.0, 1.0, 0.5, 0.0, 0.0
     xs, xfi, xfo, xe, y = tl._env_points()
-    mid = QPointF((xfi + xfo) / 2, y)
-    assert tl._hit(mid) == ("level",), tl._hit(mid)
-    tl.drag = ("level",)
-    tl.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(mid.x(), tl.db2y(-12)), QPointF(0, 0), Qt.NoButton,
-                                  Qt.LeftButton, Qt.NoModifier))
-    tl.drag = None
-    assert abs(a.level_db + 12) <= 0.5, a.level_db
+    mid = QPointF((xfi + xfo) / 2, tl._vol_y(tl.x2t((xfi + xfo) / 2)))
+    assert tl._hit(mid) is None, tl._hit(mid)                       # la linea del volume non si trascina
+    assert tl._hit(QPointF(xfi, tl._vol_y(tl.x2t(xfi)))) == ("fade_in",)   # i fade stanno sulla linea rosa
+    a.fade_in = a.fade_out = 0.0
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Audio"))
+    run(0.2)
+    from PySide6.QtWidgets import QSlider
+    fader = [f_ for f_ in ins.findChildren(QSlider, "cue_volume_fader") if f_.isVisible()][-1]
+    fader.setValue(-120)
+    assert abs(a.level_db + 12) <= 0.05, a.level_db
+    assert abs(tl._vol_y(1.0) - tl.db2y(-12)) < 0.5                  # la linea rosa scende con il fader
+    ins.tabs.setCurrentIndex(2)
+    run(0.1)
     m = tl.add_marker(1.0)
     assert a.markers == [m] and m["name"] == "M1"
     run(0.1)
@@ -1659,7 +1666,7 @@ def t_live_curve(w):
     un Fade in corso non viene sovrascritto da una modifica alla sola curva."""
     import copy
     import numpy as np
-    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtCore import QPoint, QPointF, Qt
     from PySide6.QtTest import QTest
     sh = Show()
     sh.settings["output_fullscreen"] = False
@@ -1693,7 +1700,34 @@ def t_live_curve(w):
     run(0.1)
     assert -21.5 < a.curve[0][1] < -18.5, a.curve
     assert abs(peak() / p0 - 10 ** (a.curve[0][1] / 20)) < 0.02, (peak(), p0, a.curve)
+    # i punti rosa stanno sul volume effettivo (volume della cue + curva): il fader sposta tutto in proporzione
+    a.level_db = -10.0
+    a.curve = [[2.0, 0.0], [6.0, -10.0]]
+    tl.update()
+    assert abs(tl.pt2y(0.0) - tl.db2y(-10.0)) < 0.5 and tl._hit(QPointF(tl.t2x(2.0), tl.db2y(-10.0))) == ("point", 0)
+    assert abs(tl._vol_y(4.0) - tl.db2y(-15.0)) < 0.5
+    xp = int(round(tl.t2x(6.0)))
+    QTest.mousePress(tl, Qt.LeftButton, Qt.NoModifier, QPoint(xp, int(round(tl.pt2y(-10.0)))))
+    QTest.mouseMove(tl, QPoint(xp, int(round(tl.db2y(-30.0)))))                  # punto trascinato in giù
+    QTest.mouseRelease(tl, Qt.LeftButton, Qt.NoModifier, QPoint(xp, int(round(tl.db2y(-30.0)))))
+    assert -21.5 < a.curve[1][1] < -18.5, a.curve                                # −30 effettivi = −10 −20
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Audio"))
+    run(0.1)
+    from PySide6.QtWidgets import QSlider
+    [f_ for f_ in ins.findChildren(QSlider, "cue_volume_fader") if f_.isVisible()][-1].setValue(-200)                     # fader a −20 dB mentre suona
+    run(0.05)
+    assert a.level_db == -20.0 and abs(w.ctrl.instances[a.id].voice.env - 0.1) < 1e-3
+    assert abs(tl._vol_y(2.0) - tl.db2y(-20.0)) < 0.5                             # la curva scende con il fader
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Tempi e loop"))
+    # la curva di volume si salva nei preset audio: cancellarla dalla cue non la toglie dal preset
+    a.presets = {"audio": {}, "visual": {}}
+    a.preset_dict("audio")["Piano"] = a.preset_values("audio")
+    a.curve = []
+    saved = a.preset_dict("audio")["Piano"]["curve"]
+    assert len(saved) == 2 and saved[0] == [2.0, 0.0], saved
+    assert a.apply_preset("audio", "Piano") and len(a.curve) == 2
     # volume della cue cambiato mentre suona
+    a.curve = [[0.0, -20.0]]
     a.level_db = -6.0
     ins._emit()
     run(0.05)

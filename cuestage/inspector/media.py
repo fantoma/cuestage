@@ -170,7 +170,10 @@ class MediaTabsMixin:
             sa.setWidget(mx)
             sa.setFrameShape(QFrame.NoFrame)
             sa.setMinimumHeight(min(mx.height() + 20, 330))
-            v.addWidget(sa)
+            hh = QHBoxLayout()
+            hh.addWidget(sa, 1)
+            hh.addWidget(self._volume_fader(show_state))
+            v.addLayout(hh)
             row = QHBoxLayout()
             b1 = QPushButton(tr("Routing predefinito"))
             b1.setToolTip(tr("Mono → Out 1-2 · stereo → Out 1/2 · multicanale → canale per canale "
@@ -199,6 +202,67 @@ class MediaTabsMixin:
             hint.setWordWrap(True)
             hint.setStyleSheet("color:#888; font-size:10px;")
             v.addWidget(hint)
+        return w
+
+    def _volume_fader(self, on_change=None):
+        """Fader del volume della cue: scala in proporzione tutte le uscite della matrice (e la curva dei punti,
+        che è relativa al volume della cue). Vale anche mentre la cue suona."""
+        from PySide6.QtWidgets import QSlider
+        cue = self.cue
+        w = QWidget()
+        col = QVBoxLayout(w)
+        col.setContentsMargins(4, 0, 0, 0)
+        col.setSpacing(2)
+        t = QLabel(tr("Volume"))
+        t.setAlignment(Qt.AlignHCenter)
+        t.setStyleSheet("color:#ff8cdc; font-weight:bold;")
+        sl = QSlider(Qt.Vertical)
+        sl.setObjectName("cue_volume_fader")
+        sl.setRange(int(MIN_DB * 10), int(MAX_DB * 10))
+        sl.setSingleStep(5)
+        sl.setPageStep(30)
+        sl.setTickPosition(QSlider.TicksBothSides)
+        sl.setTickInterval(60)
+        sl.setMinimumHeight(140)
+        sl.setToolTip(tr("Volume della cue: alza o abbassa in proporzione tutte le uscite della matrice (e la curva "
+                         "di volume). Vale anche mentre la cue suona."))
+        sp = QDoubleSpinBox()
+        sp.setObjectName("cue_volume_spin")
+        sp.setRange(MIN_DB, MAX_DB)
+        sp.setDecimals(1)
+        sp.setSingleStep(0.5)
+        sp.setSuffix(" dB")
+        sp.setSpecialValueText(tr("-∞ dB"))
+        sp.setKeyboardTracking(False)
+        b0 = QPushButton(tr("0 dB"))
+        b0.setToolTip(tr("Volume della cue a 0 dB"))
+
+        def sync():
+            for x in (sl, sp):
+                x.blockSignals(True)
+            lv = max(MIN_DB, min(MAX_DB, float(cue.level_db)))
+            sl.setValue(int(round(lv * 10)))
+            sp.setValue(lv)
+            for x in (sl, sp):
+                x.blockSignals(False)
+
+        def set_db(db):
+            cue.level_db = MIN_DB if db <= MIN_DB + 0.01 else round(float(db), 1)
+            sync()
+            self._emit()
+            if self.timeline is not None:
+                self.timeline.update()
+            if on_change is not None:
+                on_change()
+        sl.valueChanged.connect(lambda val: set_db(val / 10.0))
+        sp.valueChanged.connect(set_db)
+        b0.clicked.connect(lambda: set_db(0.0))
+        sync()
+        self.bound.append((sl, sync))
+        col.addWidget(t)
+        col.addWidget(sl, 1, Qt.AlignHCenter)
+        col.addWidget(sp)
+        col.addWidget(b0)
         return w
 
     def _show_in_use(self, states):
@@ -405,12 +469,16 @@ class MediaTabsMixin:
         self.timeline.setFixedHeight(114)
         self.timeline.changed.connect(self._timeline_changed)
         v.addWidget(self.timeline)
-        hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · quadratini arancioni = fade in e fade out · linea "
-                         "arancione = {0} · clic o trascina = cursore · tasto destro: marker e keyframe · M = marker al "
-                         "cursore · doppio clic o Ctrl+clic: {1} · rotella: zoom · Maiusc+rotella o tasto "
-                         "centrale: scorri",
-                         tr("opacità (trasparenza)") if cue.type == "video" else tr("volume"),
-                         tr("punto di opacità (Maiusc: di volume)") if cue.type == "video" else tr("punto di volume")))
+        if cue.type == "video":
+            hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · quadratini arancioni = fade in e fade out · linea "
+                             "arancione = {0} · clic o trascina = cursore · tasto destro: marker e keyframe · M = marker al "
+                             "cursore · doppio clic o Ctrl+clic: {1} · rotella: zoom · Maiusc+rotella o tasto "
+                             "centrale: scorri", tr("opacità (trasparenza)"), tr("punto di opacità (Maiusc: di volume)")))
+        else:
+            hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · linea rosa = volume (con i fade; il volume della "
+                             "cue si regola con il fader della scheda Audio) · quadratini = fade in e fade out · clic o "
+                             "trascina = cursore · tasto destro: marker e keyframe · M = marker al cursore · doppio clic "
+                             "o Ctrl+clic: punto di volume · rotella: zoom · Maiusc+rotella o tasto centrale: scorri"))
         hint.setStyleSheet("color:#888; font-size:10px;")
         hint.setWordWrap(True)
         v.addWidget(hint)

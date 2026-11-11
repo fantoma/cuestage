@@ -24,7 +24,7 @@ TYPE_ICONS = {
 
 # campi salvati nei preset (per tipo di preset)
 PRESET_KINDS = {
-    "audio": ["level_db", "fade_in", "fade_out", "matrix", "out_levels"],
+    "audio": ["level_db", "fade_in", "fade_out", "matrix", "out_levels", "curve"],
     "visual": ["crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y", "scale", "scale_x", "scale_y", "warp",
                "opacity", "fit"],
 }

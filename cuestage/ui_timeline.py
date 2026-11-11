@@ -157,6 +157,33 @@ class TimelineEditor(QWidget):
         db = MAX_DB - (y - r.top()) / max(1, r.height()) * (MAX_DB - MIN_DB)
         return max(MIN_DB, min(MAX_DB, db))
 
+    # i punti della curva di volume sono relativi al volume della cue: si disegnano al volume effettivo
+    def _base_db(self):
+        lv = float(self.cue.level_db) if self.cue is not None else 0.0
+        return lv if lv > MIN_DB else 0.0
+
+    def pt2y(self, rel):
+        rel = float(rel)
+        return self.db2y(MIN_DB if rel <= MIN_DB + 0.01 else max(MIN_DB, min(MAX_DB, self._base_db() + rel)))
+
+    def y2pt(self, y):
+        db = self.y2db(y)
+        return MIN_DB if db <= MIN_DB + 0.01 else round(db - self._base_db(), 1)
+
+    def _curve_rel(self, t):
+        """Valore (dB, relativo al volume della cue) della curva di volume al tempo t; None senza punti."""
+        pts = sorted(self.cue.curve or []) if self.cue is not None else []
+        if not pts:
+            return None
+        return float(np.interp(t, [a for a, _b in pts], [b for _a, b in pts]))
+
+    def _vol_y(self, t):
+        """y del volume effettivo (volume della cue + curva) al tempo t, senza i fade."""
+        rel = self._curve_rel(t)
+        if rel is None or float(self.cue.level_db) <= MIN_DB:
+            return self.db2y(max(MIN_DB, min(MAX_DB, float(self.cue.level_db))))
+        return self.pt2y(rel)
+
     def op2y(self, v):
         r = self._plot()
         return r.top() + (1.0 - max(0.0, min(1.0, float(v)))) * r.height()
@@ -253,23 +280,8 @@ class TimelineEditor(QWidget):
         p.setRenderHint(QPainter.Antialiasing, True)
         c = self.cue
         self._draw_envelope(p, r)
-        # curva di volume
-        pts = sorted(c.curve)
-        if pts:
-            path = QPainterPath()
-            path.moveTo(0, self.db2y(pts[0][1]))
-            for t, db in pts:
-                path.lineTo(self.t2x(t), self.db2y(db))
-            path.lineTo(W, self.db2y(pts[-1][1]))
-            p.setPen(QPen(C_CURVE, 2))
-            p.setBrush(Qt.NoBrush)
-            p.drawPath(path)
-            p.setBrush(QBrush(C_CURVE))
-            for t, db in pts:
-                p.drawEllipse(QPointF(self.t2x(t), self.db2y(db)), 4.5, 4.5)
-        else:
-            p.setPen(QPen(QColor(255, 140, 220, 90), 1, Qt.DotLine))
-            p.drawLine(QPointF(0, self.db2y(0)), QPointF(W, self.db2y(0)))
+        # volume: linea rosa (volume della cue + curva dei punti, con i fade) e punti della curva
+        self._draw_volume(p, r)
         # curva di opacità (video)
         ops = sorted(self._op_points()) if self._video_mode() else []
         if ops:
@@ -410,6 +422,8 @@ class TimelineEditor(QWidget):
     def _handle_ys(self):
         """y dei quadratini di fade in e fade out (con la curva di opacità stanno sulla curva)."""
         xs, xfi, xfo, xe, y = self._env_points()
+        if not self._video_mode():                  # audio: i fade stanno sulla linea rosa del volume
+            return self._vol_y(self.x2t(xfi)), self._vol_y(self.x2t(xfo))
         if self._curve_op(0.0) is None:
             return y, y
         return self.op2y(self._curve_op(self.x2t(xfi))), self.op2y(self._curve_op(self.x2t(xfo)))
@@ -420,6 +434,8 @@ class TimelineEditor(QWidget):
             return
         xs, xfi, xfo, xe, y = self._env_points()
         video = self._video_mode()
+        if not video:
+            return                                  # audio: niente linea arancione, i fade sono sulla rosa
         col = C_ENV
         path = QPainterPath()
         path.moveTo(xs, r.bottom())
@@ -459,12 +475,77 @@ class TimelineEditor(QWidget):
             txt = tr("opacità: curva dei punti")
             ty = r.top() + 11
         else:
-            txt = tr("opacità {0:.0f}%", float(c.opacity) * 100) if video else \
-                tr("volume {0:+.1f} dB", float(c.level_db)) if float(c.level_db) > MIN_DB else tr("volume −∞")
+            txt = tr("opacità {0:.0f}%", float(c.opacity) * 100)
             ty = y + 12 if y + 14 < r.bottom() else y - 4
         p.setPen(QColor(0, 0, 0, 200))
         p.drawText(QPointF(xfi + 7, ty + 1), txt)
         p.setPen(C_ENV)
+        p.drawText(QPointF(xfi + 6, ty), txt)
+
+    def _draw_volume(self, p, r):
+        """Linea rosa del volume: volume della cue + curva dei punti, con i fade in/out (è quello che si sente);
+        fuori da IN/OUT tratteggiata. Sopra i punti della curva e, per l'audio, i quadratini dei fade."""
+        c = self.cue
+        W = self.width()
+        video = self._video_mode()
+        pts = sorted(c.curve or [])
+        if self.duration > 0:
+            xs, xfi, xfo, xe, _y = self._env_points()
+        else:
+            xs, xfi, xfo, xe = 0.0, 0.0, float(W), float(W)
+        faint = QPen(QColor(255, 140, 220, 90), 1, Qt.DotLine)
+        p.setBrush(Qt.NoBrush)
+        p.setPen(faint)
+        for a, b in ((0.0, xs), (xe, float(W))):     # fuori da IN/OUT
+            if b > a:
+                path = QPainterPath()
+                path.moveTo(a, self._vol_y(self.x2t(a)))
+                x = a
+                while x < b:
+                    x = min(b, x + 4.0)
+                    path.lineTo(x, self._vol_y(self.x2t(x)))
+                p.drawPath(path)
+        x0, x1 = max(xs, -2.0), min(xe, W + 2.0)
+        if x1 > x0:
+            bottom = r.bottom()
+            path = QPainterPath()
+            path.moveTo(x0, bottom if xfi > xs else self._vol_y(self.x2t(x0)))
+            x = x0
+            while True:
+                f = 1.0
+                if xfi > xs and x < xfi:
+                    f = (x - xs) / (xfi - xs)
+                if xe > xfo and x > xfo:
+                    f = min(f, (xe - x) / (xe - xfo))
+                yv = self._vol_y(self.x2t(x))
+                path.lineTo(x, bottom - (bottom - yv) * max(0.0, f))
+                if x >= x1:
+                    break
+                x = min(x1, x + 2.0)
+            p.setPen(QPen(C_CURVE, 2 if pts else 1.6))
+            p.drawPath(path)
+        p.setBrush(QBrush(C_CURVE))
+        p.setPen(Qt.NoPen)
+        for t, db in pts:
+            p.drawEllipse(QPointF(self.t2x(t), self.pt2y(db)), 4.5, 4.5)
+        if video or self.duration <= 0:
+            return
+        p.setPen(QPen(QColor(0, 0, 0, 160), 1))
+        yi, yo = self._handle_ys()
+        for x, hy in ((xfi, yi), (xfo, yo)):        # quadratini dei fade
+            p.drawRect(QRectF(x - 4, hy - 4, 8, 8))
+        f = QFont()
+        f.setPixelSize(10)
+        f.setBold(True)
+        p.setFont(f)
+        lv = float(c.level_db)
+        txt = tr("volume −∞") if lv <= MIN_DB else tr("volume {0:+.1f} dB", lv)
+        if pts and lv > MIN_DB:
+            txt = tr("volume {0:+.1f} dB + curva dei punti", lv)
+        ty = r.top() + 11
+        p.setPen(QColor(0, 0, 0, 200))
+        p.drawText(QPointF(xfi + 7, ty + 1), txt)
+        p.setPen(C_CURVE)
         p.drawText(QPointF(xfi + 6, ty), txt)
 
     def _env_hit(self, pos):
@@ -478,8 +559,10 @@ class TimelineEditor(QWidget):
             return ("fade_out",)
         if self._video_mode() and self._curve_op(0.0) is not None:
             return None                     # con la curva dei punti l'opacità si regola con i punti
+        if not self._video_mode():
+            return None                     # audio: il volume si regola con il fader della scheda Audio
         if abs(pos.y() - y) < 5 and xfi + 7 <= pos.x() <= xfo - 7:
-            return ("opacity",) if self._video_mode() else ("level",)
+            return ("opacity",)
         return None
 
     # ------------------------------------------------------------ marker dell'utente e keyframe
@@ -592,7 +675,7 @@ class TimelineEditor(QWidget):
                 if abs(self.t2x(t) - pos.x()) < 7 and abs(self.op2y(v) - pos.y()) < 7:
                     return ("opoint", i)
         for i, (t, db) in enumerate(self.cue.curve):
-            if abs(self.t2x(t) - pos.x()) < 7 and abs(self.db2y(db) - pos.y()) < 7:
+            if abs(self.t2x(t) - pos.x()) < 7 and abs(self.pt2y(db) - pos.y()) < 7:
                 return ("point", i)
         env = self._env_hit(pos)
         if env is not None:
@@ -673,7 +756,7 @@ class TimelineEditor(QWidget):
             self.changed.emit()
             self.update()
             return
-        self.cue.curve.append([round(self.x2t(pos.x()), 3), round(self.y2db(pos.y()), 1)])
+        self.cue.curve.append([round(self.x2t(pos.x()), 3), self.y2pt(pos.y())])
         self.cue.curve.sort()
         for i, (t, db) in enumerate(self.cue.curve):
             if abs(self.t2x(t) - pos.x()) < 1:
@@ -762,9 +845,11 @@ class TimelineEditor(QWidget):
         if kind == "point":
             i = self.drag[1]
             if i < len(c.curve):
-                c.curve[i] = [t, round(self.y2db(pos.y()), 1)]
+                c.curve[i] = [t, self.y2pt(pos.y())]
+                eff = self.y2db(pos.y())
                 QToolTip.showText(e.globalPosition().toPoint(),
-                                  f"{fmt_time(t)}  {c.curve[i][1]:+.1f} dB", self)
+                                  tr("{0}  volume {1}", fmt_time(t), tr("−∞") if eff <= MIN_DB + 0.01
+                                     else f"{eff:+.1f} dB"), self)
         else:
             name = self.drag[1]
             end = c.end if c.end > 0 else self.duration

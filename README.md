@@ -379,8 +379,10 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   (first a quick version from the key frames, then the exact one, decoding the whole video: up to 600
   thumbnails, so they match the time even when zoomed in) and kept in a disk cache (`cache/thumbs` in
   the user data folder, at most 400 videos): they are made again only if the file changes;
-- the **orange envelope** of the cue: its squares set **fade in** and **fade out**, its horizontal line sets the
-  **opacity** (video) or the **volume** (audio);
+- **audio**: the **pink line** is the volume you hear — the cue volume plus the volume curve points, with the fade in
+  and fade out drawn on it; its squares set **fade in** and **fade out**. There is no orange line: the cue volume is
+  set with the **Volume fader** in the Audio tab, which moves the whole pink line (points included);
+- **video**: the **orange envelope** sets fade in, fade out and the **opacity**; the pink volume line is drawn too;
 - **IN/OUT** and **loop** markers are dragged as before;
 - **markers**: right-click › “Add marker here” or the **M** key (at the cursor) adds a named marker (cyan). Drag it to
   move it, double-click its label to rename it, right-click it to set IN, OUT or the loop there, or to delete it.
@@ -415,7 +417,7 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   other curves, markers, IN/OUT and keyframes (a dotted white line shows it); hold **Alt** not to snap;
 - double-click or Ctrl+click adds a volume curve point; wheel = zoom, Shift+wheel or middle-button drag = scroll.
 - changes made **while the cue is playing** take effect at once: volume and opacity curve points, the cue volume
-  (orange line or **Volume** field) — also on the secondary instances. A Fade cue running on that cue is not
+  (Volume fader or **Volume** field) — also on the secondary instances. A Fade cue running on that cue is not
   overridden by a change to the curve only.
 
 The keyframe timeline with lanes is no longer shown (neither here nor in the “Video / Image” tab): keyframes, markers
@@ -467,7 +469,7 @@ the cue that used it.
 
 The **keyframes** (added, moved and changed on the graph of the “Times and loop” tab, see above) are of two kinds:
 - **Image** (orange): the video part of the presets — crop, offset, size, distortion, perspective, opacity;
-- **Audio** (light blue): audio presets — volume, **matrix** and **output volumes**.
+- **Audio** (light blue): audio presets — volume, fades, **matrix**, **output volumes** and the **volume curve** (its points: clearing the curve from the cue does not remove it from the presets; recalling the preset brings it back; keyframes interpolate volume, matrix and output volumes, not the curve).
 
 Each keyframe uses a preset of the cue or the cue's **base values**. Between two consecutive keyframes of the
 same lane the values fade from one to the other: the keyframe positions are the start and end of the fades (two
@@ -562,6 +564,9 @@ All the audio handling of an audio or video cue is in the inspector's **Audio** 
 - **Sound card**: “Project default” (by default the one chosen in the Ubuntu audio settings) or any connected
   card. Several cues can play at the same time through different cards; the cards used by the cues are opened
   when the show is opened.
+- **Volume fader** (beside the matrix): the cue volume, from −∞ to +12 dB, with **0 dB** to reset. It raises or
+  lowers **all the outputs of the matrix in proportion** (the matrix values do not change) and moves the volume
+  curve with it, since the curve points are relative to the cue volume. It works during playback too.
 - **Matrix**: rows = channels of the file (L/R, or L R C LFE Ls Rs for a 5.1…), columns = card outputs. Click a
   crosspoint = on (0 dB) / off; drag vertically or use the wheel for the volume (Ctrl+wheel: tenths);
   double-click = exact value; right-click = quick values or “only this output”. The last row (“Vol. out”) sets
