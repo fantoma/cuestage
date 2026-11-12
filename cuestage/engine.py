@@ -159,7 +159,7 @@ class Instance:
 
 # ------------------------------------------------------------------ preset / keyframe
 
-VIS_MORPH = ("crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y", "scale", "scale_x", "scale_y")
+VIS_MORPH = ("crop_l", "crop_t", "crop_r", "crop_b", "rotation", "off_x", "off_y", "scale", "scale_x", "scale_y")
 
 
 def _warp_list(w):

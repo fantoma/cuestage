@@ -106,10 +106,26 @@ def has_warp(cue):
     return cue is not None and any(a or b for a, b in (getattr(cue, "warp", None) or []))
 
 
+def layer_rotation(cue):
+    try:
+        return float(getattr(cue, "rotation", 0) or 0) % 360.0 if cue is not None else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def layer_quad(lay, dst, W, H, out_size=None):
-    """I 4 angoli (alto-sx, alto-dx, basso-dx, basso-sx) del layer dopo la deformazione prospettica."""
+    """I 4 angoli (alto-sx, alto-dx, basso-dx, basso-sx) del layer dopo la rotazione (attorno al centro) e la
+    deformazione prospettica."""
     pts = [dst.topLeft(), dst.topRight(), dst.bottomRight(), dst.bottomLeft()]
     c = lay.cue
+    rot = layer_rotation(c)
+    if rot:
+        t = QTransform()
+        ctr = dst.center()
+        t.translate(ctr.x(), ctr.y())
+        t.rotate(rot)
+        t.translate(-ctr.x(), -ctr.y())
+        pts = [t.map(p) for p in pts]
     if has_warp(c):
         ow, oh = out_size if out_size else (W, H)
         kx, ky = W / max(1, ow), H / max(1, oh)
@@ -120,7 +136,7 @@ def layer_quad(lay, dst, W, H, out_size=None):
 def draw_layer(p, lay, img, W, H, out_size):
     """Disegna un layer (crop, posizione, scala, prospettiva) nel sistema di coordinate corrente."""
     src, dst = layer_geometry(lay, img, W, H, out_size)
-    if has_warp(lay.cue):
+    if has_warp(lay.cue) or layer_rotation(lay.cue):
         rect_poly = QPolygonF([dst.topLeft(), dst.topRight(), dst.bottomRight(), dst.bottomLeft()])
         lt = QTransform()
         if QTransform.quadToQuad(rect_poly, layer_quad(lay, dst, W, H, out_size), lt):

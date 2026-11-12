@@ -1078,6 +1078,30 @@ class MediaTabsMixin:
         crop.addWidget(self.src_label, 2, 0, 1, 4)
         f.addRow(tr("Crop (px sorgente)"), crop)
 
+        # --- rotazione attorno al centro (gradi, senso orario)
+        rot = QHBoxLayout()
+        rsp = self._dspin("rotation", -360, 360, 1, 1, "°")
+        rsp.setObjectName("rotation_spin")
+        rsp.setToolTip(tr("Rotazione dell'immagine in uscita attorno al suo centro, in gradi (positivo = senso "
+                          "orario). Vale anche durante la riproduzione, nei preset e nei keyframe."))
+        rot.addWidget(rsp)
+        for text, tip, fn in (("↺ 90°", tr("Ruota di 90° in senso antiorario"), lambda v: v - 90),
+                              ("↻ 90°", tr("Ruota di 90° in senso orario"), lambda v: v + 90),
+                              ("0°", tr("Nessuna rotazione"), lambda v: 0.0)):
+            b = QPushButton(text)
+            b.setToolTip(tip)
+            b.setFixedWidth(52)
+
+            def turn(_c=False, fn=fn):
+                nv = fn(float(cue.rotation or 0))
+                if nv > 360 or nv < -360:
+                    nv = nv % 360
+                rsp.setValue(nv)
+            b.clicked.connect(turn)
+            rot.addWidget(b)
+        rot.addStretch(1)
+        f.addRow(tr("Rotazione"), rot)
+
         # --- spostamento in pixel dell'uscita e scala
         pos = QGridLayout()
         pos.addWidget(QLabel("X"), 0, 0)
@@ -1099,11 +1123,12 @@ class MediaTabsMixin:
                 warp.addWidget(self._warp_spin(i, j), i, 2 + j * 2)
         f.addRow(tr("Prospettiva (px uscita)"), warp)
 
-        reset = QPushButton(tr("Reimposta crop, posizione, dimensione, deformazione e prospettiva"))
+        reset = QPushButton(tr("Reimposta crop, rotazione, posizione, dimensione, deformazione e prospettiva"))
 
         def do_reset():
             for a in ("crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y"):
                 setattr(cue, a, 0)
+            cue.rotation = 0.0
             cue.scale = cue.scale_x = cue.scale_y = 100.0     # dimensione e deformazione
             cue.warp = [[0, 0], [0, 0], [0, 0], [0, 0]]
             self.refresh_fields()

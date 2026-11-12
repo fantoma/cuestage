@@ -2152,6 +2152,55 @@ def t_fsclose(w):
     w.show_data.dirty = False
 
 
+def t_rotation(w):
+    """Rotazione di video e immagini: campo dopo il crop, pulsanti ±90°, angoli ruotati attorno al centro,
+    disegno in uscita, preset e keyframe."""
+    from PySide6.QtCore import QRectF
+    from PySide6.QtGui import QColor, QImage, QPainter
+    from PySide6.QtWidgets import QDoubleSpinBox, QPushButton
+    from cuestage import keyframes as kfm
+    from cuestage.video_output import Layer, layer_quad, draw_layer
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    c = Cue("image", number="1", name="R")
+    sh.cues = [c]
+    w._set_show(sh)
+    ins = w.inspector
+    ins.set_cue(c)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Video / Immagine"))
+    run(0.2)
+    sp = [x for x in ins.findChildren(QDoubleSpinBox, "rotation_spin") if x.isVisible()][-1]
+    b = [x for x in ins.findChildren(QPushButton) if x.text() == "↻ 90°"][-1]
+    b.click()
+    assert c.rotation == 90.0, c.rotation
+    sp.setValue(45.0)
+    assert c.rotation == 45.0
+    # angoli: ruotati attorno al centro
+    c.rotation = 90.0
+    lay = Layer(c.id, 1, 0, "fit", c)
+    q = layer_quad(lay, QRectF(0, 0, 200, 100), 400, 300)
+    tl = q[0]
+    assert abs(tl.x() - 150) < 1e-6 and abs(tl.y() - (-50)) < 1e-6, (tl.x(), tl.y())   # alto-sx → in alto a destra
+    # disegno: immagine larga ruotata di 90° diventa alta
+    img = QImage(200, 100, QImage.Format_ARGB32)
+    img.fill(QColor(255, 0, 0))
+    out = QImage(400, 400, QImage.Format_ARGB32)
+    out.fill(QColor(0, 0, 0))
+    c.fit, c.rotation = "native", 90.0
+    lay = Layer(c.id, 1, 0, "native", c)
+    p = QPainter(out)
+    draw_layer(p, lay, img, 400, 400, (400, 400))
+    p.end()
+    assert QColor(out.pixel(200, 120)).red() > 200 and QColor(out.pixel(120, 200)).red() < 50
+    # preset e keyframe
+    assert "rotation" in c.preset_values("visual") and "rotation" in kfm.VIS_NUM
+    a = kfm.visual_values(c, kfm.BASE)
+    b2 = dict(a, rotation=180.0)
+    assert abs(kfm.interp_visual(a, b2, 0.5)["rotation"] - 135.0) < 1e-6
+    c.rotation = 0.0
+    w.show_data.dirty = False
+
+
 def t_osc_profile():
     from cuestage.osc_profiles import render
     assert render("chamsys_magicq", "go", {"pb": 3}) == ("/pb/3/go", "1")
@@ -2931,6 +2980,7 @@ if __name__ == "__main__":
     check("grafico: barra di scorrimento; video: fade e crossfade dell'immagine separati", lambda: t_video_xfade_fades(w))
     check("«Volumi uscite a 0 dB»: volume della cue e uscite a 0 dB", lambda: t_levels_zero(w))
     check("cue «Chiudi schermo intero»", lambda: t_fsclose(w))
+    check("rotazione di video e immagini", lambda: t_rotation(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))

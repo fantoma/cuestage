@@ -26,7 +26,7 @@ TYPE_ICONS = {
 # campi salvati nei preset (per tipo di preset)
 PRESET_KINDS = {
     "audio": ["level_db", "fade_in", "fade_out", "matrix", "out_levels", "curve"],
-    "visual": ["crop_l", "crop_t", "crop_r", "crop_b", "off_x", "off_y", "scale", "scale_x", "scale_y", "warp",
+    "visual": ["crop_l", "crop_t", "crop_r", "crop_b", "rotation", "off_x", "off_y", "scale", "scale_x", "scale_y", "warp",
                "opacity", "fit"],
 }
 PRESET_LABELS = {"audio": tr("Preset audio"), "visual": tr("Preset crop / posizione")}
@@ -121,6 +121,7 @@ class Cue:
         "layer": 1, "opacity": 1.0, "fit": "fit", "duration": 0.0,
         # crop: pixel del sorgente da tagliare per lato
         "crop_l": 0, "crop_t": 0, "crop_r": 0, "crop_b": 0,
+        "rotation": 0.0,              # rotazione dell'immagine in uscita (gradi, senso orario) attorno al centro
         # spostamento in pixel dell'uscita (risoluzione reale dello schermo/proiettore)
         "off_x": 0, "off_y": 0,
         "scale": 100.0,               # dimensione: % rispetto all'adattamento scelto
