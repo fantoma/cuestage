@@ -757,11 +757,21 @@ def t_inspector_layout(w):
     a.fade_in = a.fade_out = 0.0
     ins.tabs.setCurrentIndex(ins._tab_keys.index("Audio"))
     run(0.2)
-    from PySide6.QtWidgets import QSlider
-    fader = [f_ for f_ in ins.findChildren(QSlider, "cue_volume_fader") if f_.isVisible()][-1]
-    fader.setValue(-120)
-    assert abs(a.level_db + 12) <= 0.05, a.level_db
-    assert abs(tl._vol_y(1.0) - tl.db2y(-12)) < 0.5                  # la linea rosa scende con il fader
+    # fader a sinistra della matrice: sposta in proporzione gli incroci accesi (−∞ e ritorno senza perdere
+    # le proporzioni), alto quanto la matrice
+    from PySide6.QtWidgets import QScrollArea, QSlider
+    fader = [f_ for f_ in ins.findChildren(QSlider, "matrix_fader") if f_.isVisible()][-1]
+    box = fader.parentWidget()
+    sa = [x for x in ins.findChildren(QScrollArea) if x.isVisible() and x.height() == box.height()]
+    assert sa and box.mapTo(ins, box.rect().topLeft()).x() < sa[0].mapTo(ins, sa[0].rect().topLeft()).x()
+    a.matrix = [[0.0, -50.0]]                                       # file mono: una riga
+    ins.refresh_fields()
+    assert fader.value() == 0
+    fader.setValue(-200)
+    assert a.matrix == [[-20.0, -60.0]] and a.level_db == 0.0, a.matrix
+    fader.setValue(0)
+    assert a.matrix == [[0.0, -50.0]], a.matrix
+    a.matrix = []
     ins.tabs.setCurrentIndex(2)
     run(0.1)
     m = tl.add_marker(1.0)
@@ -1714,10 +1724,18 @@ def t_live_curve(w):
     ins.tabs.setCurrentIndex(ins._tab_keys.index("Audio"))
     run(0.1)
     from PySide6.QtWidgets import QSlider
-    [f_ for f_ in ins.findChildren(QSlider, "cue_volume_fader") if f_.isVisible()][-1].setValue(-200)                     # fader a −20 dB mentre suona
-    run(0.05)
-    assert a.level_db == -20.0 and abs(w.ctrl.instances[a.id].voice.env - 0.1) < 1e-3
-    assert abs(tl._vol_y(2.0) - tl.db2y(-20.0)) < 0.5                             # la curva scende con il fader
+    vo = w.ctrl.instances[a.id].voice
+    m0 = vo.mtx.copy()
+    from cuestage.inspector.media import CueMeter
+    meter = [m_ for m_ in ins.findChildren(CueMeter) if m_.isVisible()][-1]
+    vo.meter[:] = 0.5                                       # il vumeter accanto al fader legge la voce della cue
+    meter.poll()
+    assert meter.levels and max(meter.levels) > 0.1, meter.levels
+    [f_ for f_ in ins.findChildren(QSlider, "matrix_fader") if f_.isVisible()][-1].setValue(-200)   # mentre suona
+    run(0.2)
+    assert m0.max() > 0 and abs(vo.mtx.max() / m0.max() - 0.1) < 1e-3, (m0, vo.mtx)          # matrice −20 dB
+    a.matrix = []
+    run(0.2)
     ins.tabs.setCurrentIndex(ins._tab_keys.index("Tempi e loop"))
     # la curva di volume si salva nei preset audio: cancellarla dalla cue non la toglie dal preset
     a.presets = {"audio": {}, "visual": {}}
@@ -1731,7 +1749,8 @@ def t_live_curve(w):
     a.level_db = -6.0
     ins._emit()
     run(0.05)
-    assert abs(w.ctrl.instances[a.id].voice.env - 10 ** (-6 / 20)) < 1e-3
+    vo = w.ctrl.instances[a.id].voice
+    assert abs((vo.ramp[1] if vo.ramp else vo.env) - 10 ** (-6 / 20)) < 1e-3       # con una rampa breve
     # un Fade in corso (rampa con stop) non viene toccato da una modifica alla sola curva
     w.ctrl.instances[a.id].voice.ramp = [0.5, 0.0, 0, 48000, "scurve", True]
     a.curve = [[0.0, -3.0]]

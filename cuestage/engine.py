@@ -470,8 +470,8 @@ class RoutedVoice:
         with self.ctrl.audio.lock:
             v.curve = curve
             if lvl is not None:
-                if v.ramp is None:
-                    v.env = lvl
+                if v.ramp is None:                  # rampa breve: nessun click cambiando il volume dal vivo
+                    v.ramp = [v.env, lvl, 0, int(0.05 * SR), "scurve", False]
                 elif not v.ramp[5]:                 # fade in in corso: arriva al nuovo volume
                     v.ramp[1] = lvl
 

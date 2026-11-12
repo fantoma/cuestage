@@ -169,11 +169,15 @@ class MediaTabsMixin:
             sa = QScrollArea()
             sa.setWidget(mx)
             sa.setFrameShape(QFrame.NoFrame)
-            sa.setMinimumHeight(min(mx.height() + 20, 330))
+            hgt = max(200, min(mx.height() + 20, 330))
+            sa.setFixedHeight(hgt)
+            fader = self._matrix_fader(mx, n_src, n_out, mlocked)
+            fader.setFixedHeight(hgt)                    # alto quanto la matrice, alla sua sinistra
             hh = QHBoxLayout()
+            hh.addWidget(fader)
             hh.addWidget(sa, 1)
-            hh.addWidget(self._volume_fader(show_state))
             v.addLayout(hh)
+            kbar.timeChanged.connect(lambda *_a: fader.sync())
             row = QHBoxLayout()
             b1 = QPushButton(tr("Routing predefinito"))
             b1.setToolTip(tr("Mono → Out 1-2 · stereo → Out 1/2 · multicanale → canale per canale "
@@ -204,65 +208,100 @@ class MediaTabsMixin:
             v.addWidget(hint)
         return w
 
-    def _volume_fader(self, on_change=None):
-        """Fader del volume della cue: scala in proporzione tutte le uscite della matrice (e la curva dei punti,
-        che è relativa al volume della cue). Vale anche mentre la cue suona."""
+    def _matrix_fader(self, mx, n_src, n_out, locked_fn=None):
+        """Fader a sinistra della matrice: alza o abbassa in proporzione tutti gli incroci accesi della matrice
+        (stessa differenza in dB per tutti). Mostra l'incrocio più alto. Durante un trascinamento parte da una
+        copia della matrice, così tornando indietro le proporzioni restano anche se qualche incrocio tocca −∞."""
         from PySide6.QtWidgets import QSlider
+        from ..audio_engine import effective_matrix
         cue = self.cue
         w = QWidget()
         col = QVBoxLayout(w)
-        col.setContentsMargins(4, 0, 0, 0)
+        col.setContentsMargins(0, 0, 4, 0)
         col.setSpacing(2)
-        t = QLabel(tr("Volume"))
+        t = QLabel(tr("Matrice"))
         t.setAlignment(Qt.AlignHCenter)
-        t.setStyleSheet("color:#ff8cdc; font-weight:bold;")
+        t.setStyleSheet("color:#50c8ff; font-weight:bold;")
         sl = QSlider(Qt.Vertical)
-        sl.setObjectName("cue_volume_fader")
+        sl.setObjectName("matrix_fader")
         sl.setRange(int(MIN_DB * 10), int(MAX_DB * 10))
         sl.setSingleStep(5)
         sl.setPageStep(30)
         sl.setTickPosition(QSlider.TicksBothSides)
         sl.setTickInterval(60)
-        sl.setMinimumHeight(140)
-        sl.setToolTip(tr("Volume della cue: alza o abbassa in proporzione tutte le uscite della matrice (e la curva "
-                         "di volume). Vale anche mentre la cue suona."))
+        tip = tr("Alza o abbassa in proporzione tutti gli incroci accesi della matrice (il valore è quello "
+                 "dell'incrocio più alto). Vale anche mentre la cue suona.")
+        sl.setToolTip(tip)
         sp = QDoubleSpinBox()
-        sp.setObjectName("cue_volume_spin")
+        sp.setObjectName("matrix_fader_spin")
         sp.setRange(MIN_DB, MAX_DB)
         sp.setDecimals(1)
         sp.setSingleStep(0.5)
         sp.setSuffix(" dB")
         sp.setSpecialValueText(tr("-∞ dB"))
         sp.setKeyboardTracking(False)
-        b0 = QPushButton(tr("0 dB"))
-        b0.setToolTip(tr("Volume della cue a 0 dB"))
+        sp.setFixedWidth(78)
+        snap = {"m": None, "top": None, "written": None}
+
+        def cur():
+            return effective_matrix(cue.matrix, n_src, n_out)
+
+        def top_of(m):
+            vals = [x for row in m for x in row if x is not None]
+            return max(vals) if vals else None
 
         def sync():
+            m = cur()
+            top = top_of(m)
+            lk = locked_fn() if locked_fn else None
+            on = top is not None and not lk
             for x in (sl, sp):
                 x.blockSignals(True)
-            lv = max(MIN_DB, min(MAX_DB, float(cue.level_db)))
-            sl.setValue(int(round(lv * 10)))
-            sp.setValue(lv)
+                x.setEnabled(on)
+            if top is not None:
+                sl.setValue(int(round(max(MIN_DB, min(MAX_DB, top)) * 10)))
+                sp.setValue(max(MIN_DB, min(MAX_DB, top)))
             for x in (sl, sp):
                 x.blockSignals(False)
+            sl.setToolTip(lk or tip)
+        w.sync = sync
 
-        def set_db(db):
-            cue.level_db = MIN_DB if db <= MIN_DB + 0.01 else round(float(db), 1)
-            sync()
+        def apply(db):
+            m = cur()
+            if snap["m"] is None or snap["written"] != m:          # matrice cambiata altrove: nuova copia
+                snap["m"], snap["top"] = m, top_of(m)
+            if snap["top"] is None:
+                return
+            d = float(db) - snap["top"]
+            new = [[None if x is None else round(max(MIN_DB, min(MAX_DB, x + d)), 1) for x in row]
+                   for row in snap["m"]]
+            cue.matrix = new
+            snap["written"] = effective_matrix(new, n_src, n_out)
+            for x in (sl, sp):
+                x.blockSignals(True)
+            sl.setValue(int(round(float(db) * 10)))
+            sp.setValue(float(db))
+            for x in (sl, sp):
+                x.blockSignals(False)
+            mx.update()
             self._emit()
-            if self.timeline is not None:
-                self.timeline.update()
-            if on_change is not None:
-                on_change()
-        sl.valueChanged.connect(lambda val: set_db(val / 10.0))
-        sp.valueChanged.connect(set_db)
-        b0.clicked.connect(lambda: set_db(0.0))
+        sl.valueChanged.connect(lambda val: apply(val / 10.0))
+        sp.valueChanged.connect(apply)
+        mx.changed.connect(sync)
         sync()
         self.bound.append((sl, sync))
+        meter = CueMeter(self.ctrl, cue)
+        meter.setObjectName("matrix_fader_meter")
+        mid = QHBoxLayout()
+        mid.setSpacing(3)
+        mid.addStretch(1)
+        mid.addWidget(sl)
+        mid.addWidget(meter)
+        mid.addStretch(1)
         col.addWidget(t)
-        col.addWidget(sl, 1, Qt.AlignHCenter)
+        col.addLayout(mid, 1)
         col.addWidget(sp)
-        col.addWidget(b0)
+        w.meter = meter
         return w
 
     def _show_in_use(self, states):
@@ -476,7 +515,7 @@ class MediaTabsMixin:
                              "centrale: scorri", tr("opacità (trasparenza)"), tr("punto di opacità (Maiusc: di volume)")))
         else:
             hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · linea rosa = volume (con i fade; il volume della "
-                             "cue si regola con il fader della scheda Audio) · quadratini = fade in e fade out · clic o "
+                             "cue si regola con il campo Volume qui sotto) · quadratini = fade in e fade out · clic o "
                              "trascina = cursore · tasto destro: marker e keyframe · M = marker al cursore · doppio clic "
                              "o Ctrl+clic: punto di volume · rotella: zoom · Maiusc+rotella o tasto centrale: scorri"))
         hint.setStyleSheet("color:#888; font-size:10px;")
@@ -997,3 +1036,53 @@ class MediaTabsMixin:
             return
         inst = self.ctrl.instances.get(self.cue.id)
         self.timeline.set_playhead(inst.position() if inst is not None else None)
+
+
+class CueMeter(QWidget):
+    """Vumeter della cue accanto al fader della matrice: una barra per canale del file, con il livello che esce
+    (picco × incrocio più alto della matrice × master). Stessa scala del fader (−∞…+12 dB); senza cue in
+    riproduzione resta spento."""
+    BAR, GAP = 5, 1
+
+    def __init__(self, ctrl, cue, parent=None):
+        from PySide6.QtCore import QTimer
+        super().__init__(parent)
+        self.ctrl, self.cue = ctrl, cue
+        self.levels = []
+        self.setFixedWidth(2 * self.BAR + self.GAP + 4)
+        self.setToolTip(tr("Livello della cue in uscita (per canale del file)"))
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.poll)
+        self.timer.start(50)
+
+    def poll(self):
+        if not self.isVisible():
+            return
+        inst = getattr(self.ctrl, "instances", {}).get(self.cue.id) if self.ctrl is not None else None
+        v = getattr(inst, "voice", None)
+        lv = [float(x) for x in v.meter] if v is not None and len(v.meter) else []
+        if lv or self.levels:
+            self.levels = lv
+            n = max(2, len(lv))
+            wd = n * (self.BAR + self.GAP) + 3
+            if self.width() != wd:
+                self.setFixedWidth(min(wd, 140))
+            self.update()
+
+    def paintEvent(self, e):
+        import math
+        from PySide6.QtGui import QColor, QPainter
+        p = QPainter(self)
+        p.fillRect(self.rect(), QColor(20, 20, 24))
+        h = self.height() - 2
+        x = 2
+        for v in self.levels:
+            db = 20 * math.log10(max(v, 1e-6))
+            frac = max(0.0, min(1.0, (db - MIN_DB) / (MAX_DB - MIN_DB)))
+            col = QColor(220, 60, 50) if db > -1 else QColor(230, 200, 50) if db > -12 else QColor(70, 200, 100)
+            p.fillRect(int(x), int(1 + h * (1 - frac)), self.BAR, int(h * frac), col)
+            x += self.BAR + self.GAP
+        y0 = int(1 + h * (MAX_DB / (MAX_DB - MIN_DB)))             # riga dello 0 dB, come sul fader
+        p.fillRect(0, y0, self.width(), 1, QColor(120, 120, 135))
+        p.end()
+

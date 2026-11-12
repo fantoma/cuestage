@@ -381,7 +381,7 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   the user data folder, at most 400 videos): they are made again only if the file changes;
 - **audio**: the **pink line** is the volume you hear — the cue volume plus the volume curve points, with the fade in
   and fade out drawn on it; its squares set **fade in** and **fade out**. There is no orange line: the cue volume is
-  set with the **Volume fader** in the Audio tab, which moves the whole pink line (points included);
+  set with the **Volume** field below the graph, which moves the whole pink line (points included);
 - **video**: the **orange envelope** sets fade in, fade out and the **opacity**; the pink volume line is drawn too;
 - **IN/OUT** and **loop** markers are dragged as before;
 - **markers**: right-click › “Add marker here” or the **M** key (at the cursor) adds a named marker (cyan). Drag it to
@@ -417,7 +417,8 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   other curves, markers, IN/OUT and keyframes (a dotted white line shows it); hold **Alt** not to snap;
 - double-click or Ctrl+click adds a volume curve point; wheel = zoom, Shift+wheel or middle-button drag = scroll.
 - changes made **while the cue is playing** take effect at once: volume and opacity curve points, the cue volume
-  (Volume fader or **Volume** field) — also on the secondary instances. A Fade cue running on that cue is not
+  (**Volume** field, with a short ramp so there are no clicks) and the matrix (also with its fader) — also on the
+  secondary instances. A Fade cue running on that cue is not
   overridden by a change to the curve only.
 
 The keyframe timeline with lanes is no longer shown (neither here nor in the “Video / Image” tab): keyframes, markers
@@ -564,9 +565,12 @@ All the audio handling of an audio or video cue is in the inspector's **Audio** 
 - **Sound card**: “Project default” (by default the one chosen in the Ubuntu audio settings) or any connected
   card. Several cues can play at the same time through different cards; the cards used by the cues are opened
   when the show is opened.
-- **Volume fader** (beside the matrix): the cue volume, from −∞ to +12 dB, with **0 dB** to reset. It raises or
-  lowers **all the outputs of the matrix in proportion** (the matrix values do not change) and moves the volume
-  curve with it, since the curve points are relative to the cue volume. It works during playback too.
+- **Matrix fader** (left of the matrix, as tall as it): raises or lowers **all the active crosspoints of the matrix
+  in proportion** — the same dB change for each, so the balance between them stays; the fader shows the highest
+  crosspoint. Going down to −∞ and back up keeps the proportions (as long as the matrix is not edited in between).
+  It works during playback too; it is disabled while a keyframe with an audio preset is in charge of the matrix.
+  Beside it a **level meter** of the cue (one bar per channel of the file, on the fader's scale, with the 0 dB mark):
+  the level going out, after the matrix and the master volume.
 - **Matrix**: rows = channels of the file (L/R, or L R C LFE Ls Rs for a 5.1…), columns = card outputs. Click a
   crosspoint = on (0 dB) / off; drag vertically or use the wheel for the volume (Ctrl+wheel: tenths);
   double-click = exact value; right-click = quick values or “only this output”. The last row (“Vol. out”) sets
