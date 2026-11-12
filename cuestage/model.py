@@ -47,10 +47,11 @@ TRIGGER_SHORT = {"manual": "GO", "with_prev": tr("⇉ con prec."), "after_prev":
 # preset di una cue: tipi di valori salvati insieme in ogni preset (audio e/o video)
 PRESET_KINDS_FOR = {"audio": ("audio",), "video": ("audio", "visual"), "image": ("visual",)}
 
-CONTROL_ACTIONS = ["start", "stop", "pause", "resume", "stop_all", "playhead"]
+CONTROL_ACTIONS = ["start", "stop", "pause", "resume", "exit_loop", "stop_all", "playhead"]
 CONTROL_LABELS = {
     "start": tr("Play (avvia target)"), "stop": tr("Stop target"), "pause": tr("Pausa target"),
-    "resume": tr("Riprendi target"), "stop_all": tr("Stop tutto"), "playhead": tr("Sposta playhead su target"),
+    "resume": tr("Riprendi target"), "exit_loop": tr("Esci dal loop (il target prosegue fino a OUT)"),
+    "stop_all": tr("Stop tutto"), "playhead": tr("Sposta playhead su target"),
 }
 FADE_SHAPES = ["scurve", "linear", "db"]
 FADE_SHAPE_LABELS = {"scurve": tr("Curva S"), "linear": tr("Lineare (guadagno)"), "db": tr("Lineare in dB")}
@@ -96,7 +97,7 @@ class Cue:
         "event_trig": [],
         # audio / video
         "file": "", "start": 0.0, "end": 0.0, "loop": False, "loop_start": 0.0,
-        "loop_end": 0.0, "loop_count": 0, "loop_xfade": 0.0, "level_db": 0.0, "fade_in": 0.0,
+        "loop_end": 0.0, "loop_count": 0, "loop_xfade": 0.0, "loop_stop": False, "level_db": 0.0, "fade_in": 0.0,
         "fade_out": 0.0, "curve": [],
         # video: curva di opacità [[secondi del file, opacità 0…1]] (come la curva di volume)
         "op_curve": [],

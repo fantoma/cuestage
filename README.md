@@ -122,7 +122,7 @@ The web interface for phones and tablets and the start-up self-test messages are
 | **Image** | PNG, JPG, … duration (0 = until stopped), fade in/out, layer, opacity, crop, position and size |
 | **Change preset** | Takes a running cue to one of its presets (audio: volume, matrix, output volumes; video: crop, offset, size, perspective, opacity) over the chosen transition time. It only applies to that run: the saved cue does not change |
 | **Fade** | Takes the volume and/or opacity of another cue to a value, with duration and shape (S, linear, dB). Presets “Fade OUT + stop” and “Fade IN” (starts the target from silence) |
-| **Command** | Play, Stop (with fade), Pause, Resume, Stop all, Move playhead |
+| **Command** | Play, Stop (with fade), Pause, Resume, **Exit loop** (the target finishes the lap in progress and goes on to OUT), Stop all, Move playhead |
 | **OSC** | Sends an OSC message (host, port, address, automatically typed arguments) |
 | **Video switcher** | Commands to a video switcher (Roland V-8HD, V-1HD via USB-MIDI), run in order: input on program/preset, CUT/AUTO, PinP, DSK, memories, effects, audio |
 | **Projector** | Command to a network video projector: power, shutter, input, freeze, lens, lens memory, specific commands (PJLink driver or plugin) |
@@ -395,7 +395,8 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   and “to OUT −” seconds before OUT (OUT = it ends at OUT). Audio cues also have a **loop crossfade**: the last
   moments of each lap fade out while the beginning of the loop fades in (equal power): the loop start begins when
   the cursor reaches loop end − crossfade time, and after the crossfade it goes on from loop start + crossfade time
-  (each lap is that much shorter);
+  (each lap is that much shorter). **Stop at end**: when the repetitions are over the cue stops at the loop end
+  instead of going on to OUT (a Command cue “Exit loop” still sends it on to OUT);
   when the cue has volume points (or, for video, opacity points), the **Volume** (or **Opacity**) field shows the value
   of the curve **at the cursor** (with “@ time” next to it), and changing it moves the point at the cursor or creates
   one there; without points it is the cue's value;

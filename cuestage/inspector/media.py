@@ -581,6 +581,10 @@ class MediaTabsMixin:
         row.addWidget(le_sp)
         row.addWidget(QLabel(tr("ripetizioni")))
         row.addWidget(self._ispin("loop_count", 0, 100000, special="∞"))
+        lsc = self._check("loop_stop", tr("Ferma alla fine"))
+        lsc.setToolTip(tr("Ferma la cue alla fine delle ripetizioni: dopo l'ultimo giro si ferma a fine loop invece "
+                          "di proseguire fino a OUT. Una cue «Esci dal loop» la fa comunque proseguire fino a OUT."))
+        row.addWidget(lsc)
         if cue.type == "audio":
             row.addWidget(QLabel(tr("crossfade")))
             xs = self._dspin("loop_xfade", 0, 60, 0.05, 2)

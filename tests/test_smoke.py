@@ -1831,6 +1831,22 @@ def t_loop_edit(w):
     v2.wraps = 0
     v2.seek(5.0)                                       # 3 s fino a fine loop, poi giri da 1,5 s (1,5–3)
     assert v2.pos == 2 * SR and v2.wraps == 2, (v2.pos / SR, v2.wraps)
+    # «Ferma alla fine»: finite le ripetizioni la voce si ferma a fine loop, senza andare fino a OUT
+    def run_voice(vv, frames=4 * SR):
+        blk = 4096
+        for _i in range(frames // blk + 2):
+            if vv.done:
+                break
+            w.audio._mix_voice(vv, np.zeros((blk, 1), np.float32), blk, 1)
+    v3 = Voice(data, 0.0, 0.0, True, 1.0, 2.0, 2, 1.0, curve_arrays([]), 0.0, 0.0)
+    v3.fit_matrix(1)
+    v3.stop_after_loop = True
+    run_voice(v3)
+    assert v3.done and v3.wraps == 1 and v3.pos == 2 * SR, (v3.done, v3.wraps, v3.pos / SR)
+    v4 = Voice(data, 0.0, 0.0, True, 1.0, 2.0, 2, 1.0, curve_arrays([]), 0.0, 0.0)
+    v4.fit_matrix(1)
+    run_voice(v4, 6 * SR)
+    assert v4.done and v4.pos == 4 * SR                                  # senza: prosegue fino a OUT
     # marcatori: loop alla fine (= OUT): in basso si prende il loop, in alto OUT, sulla linea il loop
     sh = Show()
     sh.settings["output_fullscreen"] = False
@@ -1872,6 +1888,27 @@ def t_loop_edit(w):
     a.loop_xfade = 0.5
     ins._emit()
     assert vo.loop_xf == SR // 2
+    # «Ferma alla fine» in riproduzione e durata totale
+    a.loop_count, a.loop_stop = 3, True
+    inst = w.ctrl.instances[a.id]
+    ins._emit()
+    assert vo.stop_after_loop and vo.out_end() == vo.le
+    # cue di comando «Esci dal loop»: finito il giro prosegue fino a OUT (anche con «Ferma alla fine»)
+    ex = Cue("control", number="2", name="Esci", action="exit_loop", target=a.id)
+    sh.cues.append(ex)
+    w.ctrl.start_cue(ex)
+    run(0.1)
+    assert vo.loops_left == 0 and not vo.stop_after_loop and vo.out_end() == vo.end
+    assert inst.total() is not None
+    msgs = []
+    w.ctrl.message.connect(msgs.append)
+    w.ctrl.stop_all(0)
+    run(0.2)
+    w.ctrl.start_cue(ex)                                                   # target fermo: avviso
+    run(0.1)
+    from cuestage.i18n import tr
+    assert tr("Esci dal loop: la cue «{0}» non sta suonando in loop", a.label()) in msgs, msgs
+    w.ctrl.message.disconnect(msgs.append)
     w.ctrl.stop_all(0)
     run(0.2)
     w.show_data.dirty = False

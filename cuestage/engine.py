@@ -44,6 +44,10 @@ class Instance:
     def live_edit(self):
         """La cue è stata modificata nell'ispettore mentre suona (curva di volume, volume…)."""
 
+    def exit_loop(self):
+        """Cue «Esci dal loop»: finito il giro in corso prosegue fino a OUT. False se non c'è un loop."""
+        return False
+
     def __init__(self, ctrl, cue, cascade):
         self.ctrl = ctrl
         self.cue = cue
@@ -472,7 +476,18 @@ class RoutedVoice:
             self._total = None
         else:
             n_loops = max(0, v.loops_left) if v.loop else 0
-            self._total = ((v.end - v.start) + n_loops * v.lap_len()) / SR
+            self._total = ((v.out_end() - v.start) + n_loops * v.lap_len()) / SR
+
+    def exit_loop(self):
+        v = self.voice
+        if v is None or not v.loop or v.loops_left == 0:
+            return False
+        with self.ctrl.audio.lock:
+            v.loops_left = 0
+            v.stop_after_loop = False
+            self._exited_loop = True
+            self._calc_total()
+        return True
 
     def live_edit(self):
         """Curva di volume, volume, OUT, marcatori e crossfade del loop cambiati mentre suona: valgono subito."""
@@ -485,6 +500,8 @@ class RoutedVoice:
         with self.ctrl.audio.lock:
             v.set_bounds(c.end, self.loop_on, c.loop_start, c.loop_end)
             v.loop_xf = self._loop_xf()
+            if not getattr(self, "_exited_loop", False):
+                v.stop_after_loop = bool(getattr(c, "loop_stop", False))
             self._calc_total()
             v.curve = curve
             if lvl is not None:
@@ -531,6 +548,7 @@ class RoutedVoice:
             v.ramp = None
         v.paused = paused
         v.loop_xf = self._loop_xf()
+        v.stop_after_loop = bool(getattr(c, "loop_stop", False))
         self._calc_total()
         self._route_sig = self._route_key()
         self.ctrl.audio.play(self.key, v, self._out_dev())
@@ -862,7 +880,9 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
                     if self.player.playbackState() != QMediaPlayer.PlayingState and not self.paused:
                         self.player.play()
                 pos = ls
-            elif not self.looping() and self.seeked and (self.ended or pos >= end - 0.01):
+            elif not self.looping() and self.seeked and (self.ended or pos >= end - 0.01 or (
+                    self.loop_on and getattr(c, "loop_stop", False) and not getattr(self, "_exited_loop", False)
+                    and pos >= le - 0.01)):
                 self.finish()
                 return
             looping = self.looping()
@@ -881,6 +901,15 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             v = max(0.0, min(1.0, curve_value(self.op_curve, pos)))
             oc = v / base if base > 1e-3 else v
         self.layer.opacity = min(1.0, self.env_op.get(now) * fo * self.kf_op_ratio * self.trim_op * oc)
+
+    def exit_loop(self):
+        if not self.looping():
+            return False
+        self.loops_left = 0
+        self._exited_loop = True
+        if self.voice is not None:
+            RoutedVoice.exit_loop(self)
+        return True
 
     def live_edit(self):
         """Curve di volume e di opacità e volume della cue cambiati mentre il video suona: valgono subito."""
@@ -943,6 +972,8 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
         if end >= 1e8:
             return None
         n = max(0, int(self.cue.loop_count) - 1) if self.loop_on else 0
+        if self.loop_on and getattr(self.cue, "loop_stop", False):
+            end = le                                  # finite le ripetizioni si ferma a fine loop
         return (end - self.cue.start) + n * (le - ls)
 
     def cue_time(self):
@@ -1129,6 +1160,10 @@ class ControlInstance(Instance):
                 ctrl.pause_cue(target.id, True)
             elif act == "resume":
                 ctrl.pause_cue(target.id, False)
+            elif act == "exit_loop":
+                inst = ctrl.instances.get(target.id)
+                if inst is None or not inst.exit_loop():
+                    ctrl.message.emit(tr("Esci dal loop: la cue «{0}» non sta suonando in loop", target.label()))
             elif act == "playhead":
                 ctrl.playhead_to(target)
         self.finish()

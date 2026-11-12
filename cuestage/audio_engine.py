@@ -619,7 +619,7 @@ class AudioEngine:
         p = v.pos
         while filled < frames:
             looping = v.loop and v.loops_left != 0
-            seg_end = v.le if looping else v.end
+            seg_end = v.le if looping else v.out_end()
             xf, pre = v.loop_xfade() if looping else (0, False)
             xs = seg_end - xf
             if xf > 0 and p >= xs:
@@ -667,7 +667,7 @@ class AudioEngine:
             cg[db <= -59.99] = 0.0
             g *= cg.astype(np.float32)
         if v.fade_out > 0 and not (v.loop and v.loops_left != 0):
-            rem = (v.end - idx).astype(np.float32)
+            rem = (v.out_end() - idx).astype(np.float32)
             g *= np.clip(rem / v.fade_out, 0.0, 1.0)
         if v.ramp:
             g0, g1, done, length, shape, stop_after = v.ramp
@@ -744,6 +744,7 @@ class Voice:
             self.loop = False
         self.ls, self.le = ls, le
         self.loop_xf = 0          # crossfade del loop (campioni): la ripetizione riparte morbida
+        self.stop_after_loop = False   # finite le ripetizioni la voce si ferma a fine loop (non va fino a OUT)
         self.loops_left = (loop_count - 1) if loop_count and loop_count > 0 else -1
         self.pos = s
         self.played = 0
@@ -780,6 +781,10 @@ class Voice:
         loop entra mentre la coda sfuma; finito il crossfade si continua da inizio loop + crossfade."""
         xf = min(int(self.loop_xf), (self.le - self.ls) // 2)
         return (xf, False) if xf > 0 else (0, False)
+
+    def out_end(self):
+        """Dove finisce la voce quando non ripete più: fine loop se «Ferma alla fine delle ripetizioni», o OUT."""
+        return self.le if self.loop and self.stop_after_loop else self.end
 
     def lap_len(self):
         """Campioni di un giro di loop (con il crossfade un giro è più corto di quel tempo)."""
