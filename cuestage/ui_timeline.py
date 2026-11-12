@@ -644,6 +644,33 @@ class TimelineEditor(QWidget):
             return ("seg", (0,))                            # prima del primo punto
         return ("seg", (after - 1, after))
 
+    def _op_draw_y(self, x):
+        """y della linea arancione (opacità della curva dei punti con i fade dell'immagine) alla x."""
+        xs, xfi, xfo, xe, _y = self._env_points()
+        v = self._curve_op(self.x2t(x))
+        if v is None:
+            return _y
+        if xfi > xs and xs <= x < xfi:
+            v *= (x - xs) / (xfi - xs)
+        if xe > xfo and xfo < x <= xe:
+            v *= (xe - x) / (xe - xfo)
+        return self.op2y(max(0.0, v))
+
+    def _oseg_hit(self, pos):
+        """Clic sul tratto rettilineo della linea arancione: ("oseg", indici dei punti di opacità che lo definiscono)."""
+        xs, _xfi, _xfo, xe, _y = self._env_points()
+        if not (xs <= pos.x() <= xe) or abs(self._op_draw_y(pos.x()) - pos.y()) >= 5:
+            return None
+        ops = self._op_points()
+        ops.sort()
+        t = self.x2t(pos.x())
+        after = next((i for i, (a, _b) in enumerate(ops) if a >= t), None)
+        if after is None:
+            return ("oseg", (len(ops) - 1,))
+        if after == 0:
+            return ("oseg", (0,))
+        return ("oseg", (after - 1, after))
+
     def _env_hit(self, pos):
         if self.cue is None or self.duration <= 0:
             return None
@@ -660,7 +687,7 @@ class TimelineEditor(QWidget):
             if abs(pos.y() - ay_o) < 7 and abs(pos.x() - ax_o) < 7:
                 return ("afade_out",)
         if self._video_mode() and self._curve_op(0.0) is not None:
-            return None                     # con la curva dei punti l'opacità si regola con i punti
+            return self._oseg_hit(pos)      # con la curva dei punti: i tratti si trascinano con i loro punti
         if not self._video_mode():
             return None                     # audio: il volume si regola con il fader della scheda Audio
         if abs(pos.y() - y) < 5 and xfi + 7 <= pos.x() <= xfo - 7:
@@ -829,6 +856,10 @@ class TimelineEditor(QWidget):
         if e.button() == Qt.LeftButton:
             if hit and hit[0] == "kf":
                 self.drag = ("kf", hit[1], float(hit[1].get("t", 0)), hit[2])
+            elif hit and hit[0] == "oseg":
+                ops = self._op_points()
+                self.drag = ("oseg", hit[1], self.y2op(pos.y()), [float(ops[i][1]) for i in hit[1]])
+                self._move_cursor(pos.x())
             elif hit and hit[0] == "seg":
                 c = self.cue
                 orig = [float(c.curve[i][1]) for i in hit[1]] if hit[1] else [float(c.level_db)]
@@ -850,7 +881,8 @@ class TimelineEditor(QWidget):
         hit = self._hit(e.position())
         if hit and hit[0] == "umark":
             self.rename_marker(hit[1])
-        elif hit and hit[0] == "opacity":
+        elif hit and hit[0] in ("opacity", "oseg"):
+            self.drag = None
             self._add_point(e.position(), "opacity")       # doppio clic sulla linea dell'opacità
         elif hit and hit[0] in ("level", "seg"):
             self.drag = None
@@ -892,7 +924,7 @@ class TimelineEditor(QWidget):
             self.setCursor(Qt.SizeHorCursor if hit and hit[0] in ("marker", "fade_in", "fade_out", "afade_in",
                                                                  "afade_out", "umark", "kf")
                            else Qt.PointingHandCursor if hit and hit[0] == "opoint"
-                           else Qt.SizeVerCursor if hit and hit[0] in ("opacity", "level", "seg")
+                           else Qt.SizeVerCursor if hit and hit[0] in ("opacity", "level", "seg", "oseg")
                            else Qt.PointingHandCursor if hit else Qt.ArrowCursor)
             return
         kind = self.drag[0]
@@ -908,6 +940,19 @@ class TimelineEditor(QWidget):
             span = v1 - v0
             nv0 = max(0.0, min(v0 - dt, max(self.duration, 1) - span))
             self.v0, self.v1 = nv0, nv0 + span
+            self.update()
+            return
+        if kind == "oseg":
+            # tratto della linea arancione: i punti di opacità che lo definiscono si spostano insieme
+            _k, idx, v0, orig = self.drag
+            d = self.y2op(pos.y()) - v0
+            ops = self._op_points()
+            for i, o in zip(idx, orig):
+                if i < len(ops):
+                    ops[i] = [ops[i][0], round(max(0.0, min(1.0, o + d)), 3)]
+            if idx and idx[0] < len(ops):
+                QToolTip.showText(e.globalPosition().toPoint(), tr("Opacità {0:.0f}%", ops[idx[0]][1] * 100), self)
+            self.changed.emit()
             self.update()
             return
         if kind == "seg":

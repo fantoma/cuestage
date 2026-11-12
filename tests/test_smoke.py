@@ -2087,6 +2087,19 @@ def t_video_xfade_fades(w):
     tl.drag = None
     assert abs(v.fade_in - 0.8) < 0.05 and abs(v.v_fade_in - 1.0) < 0.05, (v.fade_in, v.v_fade_in)
     v.fade_in = 0.4
+    # linea arancione con i punti di opacità: trascinando un tratto si spostano insieme i due punti
+    from PySide6.QtCore import QPoint
+    from PySide6.QtTest import QTest
+    v.op_curve = [[2.0, 0.8], [4.0, 0.6]]
+    tl.update()
+    x3 = int(round(tl.t2x(3.0)))
+    y3 = int(round(tl._op_draw_y(x3)))
+    assert tl._hit(QPointF(x3, y3)) == ("oseg", (0, 1)), tl._hit(QPointF(x3, y3))
+    QTest.mousePress(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x3, y3))
+    QTest.mouseMove(tl, QPoint(x3, int(round(tl.op2y(0.7 - 0.2)))))
+    QTest.mouseRelease(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x3, int(round(tl.op2y(0.5)))))
+    assert abs(v.op_curve[0][1] - 0.6) < 0.03 and abs(v.op_curve[1][1] - 0.4) < 0.03, v.op_curve
+    v.op_curve = []
     # in riproduzione: audio e immagine con i loro fade
     v.loop_xfade_link, v.loop_xfade_video = False, 0.5
     w.ctrl.start_cue(v)
