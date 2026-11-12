@@ -1085,4 +1085,3 @@ class CueMeter(QWidget):
         y0 = int(1 + h * (MAX_DB / (MAX_DB - MIN_DB)))             # riga dello 0 dB, come sul fader
         p.fillRect(0, y0, self.width(), 1, QColor(120, 120, 135))
         p.end()
-
