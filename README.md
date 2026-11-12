@@ -397,8 +397,8 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   the cursor reaches loop end − crossfade time, and after the crossfade it goes on from loop start + crossfade time
   (each lap is that much shorter). **Stop at end**: when the repetitions are over the cue stops at the loop end
   instead of going on to OUT (a Command cue “Exit loop” still sends it on to OUT);
-  the **Volume** field always shows the pink line **at the cursor** — the volume you hear there, curve points and
-  fades included (with “@ time” next to it when there are points or the cursor is in a fade); clicking a stretch of
+  the **Volume** field always shows the pink line **at the cursor** (during **play**, at the playing position, so it
+  follows the curve as the cue plays) — the volume you hear there, curve points and fades included (with “@ time” next to it when there are points or the cursor is in a fade); clicking a stretch of
   the pink line or dragging a point moves the cursor there. Changing the field moves the point at the cursor or
   creates one there (in a fade the fade is taken into account); without points it sets the cue volume. With opacity
   points the **Opacity** field works the same way;

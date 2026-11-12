@@ -841,7 +841,10 @@ class MediaTabsMixin:
             return (cue.curve if kind == "volume" else cue.op_curve) or []
 
         def cursor():
+            """Durante il play la posizione in riproduzione, altrimenti il cursore del grafico."""
             tl = self.timeline
+            if tl is not None and tl.playhead is not None:
+                return float(tl.playhead)
             t = tl.cursor_t if tl is not None and tl.cursor_t is not None else None
             return float(cue.start or 0) if t is None else float(t)
 
@@ -873,6 +876,8 @@ class MediaTabsMixin:
             return max(0.0, min(1.0, float(np.interp(cursor(), [a for a, _b in p_], [b for _a, b in p_])))) * 100
 
         def sync():
+            if sp.hasFocus() and self.timeline is not None and self.timeline.playhead is not None:
+                return                                   # si sta scrivendo nel campo: non lo si cambia sotto
             sp.blockSignals(True)
             sp.setValue(value())
             sp.blockSignals(False)
@@ -918,6 +923,9 @@ class MediaTabsMixin:
         sp.valueChanged.connect(changed)
         sync()
         self.bound.append((sp, sync))
+        if getattr(self, "_ph_syncs_cue", None) is not cue:
+            self._ph_syncs, self._ph_syncs_cue = {}, cue
+        self._ph_syncs[kind] = sync                    # l'ultimo campo costruito (i vecchi sono distrutti)
         if self.timeline is not None:
             self.timeline.cursorMoved.connect(lambda _t: sync())
             self.timeline.changed.connect(sync)
@@ -1127,7 +1135,15 @@ class MediaTabsMixin:
         if self.timeline is None or self.cue is None:
             return
         inst = self.ctrl.instances.get(self.cue.id)
-        self.timeline.set_playhead(inst.position() if inst is not None else None)
+        ph = inst.position() if inst is not None else None
+        changed = ph != self.timeline.playhead
+        self.timeline.set_playhead(ph)
+        if changed and getattr(self, "_ph_syncs_cue", None) is self.cue:
+            for f in list(getattr(self, "_ph_syncs", {}).values()):   # campi Volume / Opacità: seguono il play
+                try:
+                    f()
+                except RuntimeError:                          # campo già distrutto
+                    pass
 
 
 class CueMeter(QWidget):

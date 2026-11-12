@@ -1957,6 +1957,18 @@ def t_volume_field(w):
     run(0.02)
     assert abs(tl.cursor_t - 2.0) < 0.05 and abs(sp.value() + 16.0) < 0.6, (tl.cursor_t, sp.value())
     QTest.mouseRelease(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x2, int(round(tl.db2y(-16.0)))))
+    # durante il play il campo segue la posizione in riproduzione, poi torna al cursore
+    a.curve = [[0.0, 0.0], [8.0, -24.0]]
+    a.fade_out = 0.0
+    w.ctrl.start_cue(a)
+    run(0.1)
+    w.ctrl.instances[a.id].seek_to(4.0)
+    ins._update_playhead()
+    assert abs(sp.value() - tl.vol_db_at(tl.playhead)) < 0.2 and abs(tl.playhead - 4.0) < 0.3, (sp.value(), tl.playhead)
+    w.ctrl.stop_all(0)
+    run(0.2)
+    ins._update_playhead()
+    assert tl.playhead is None and abs(sp.value() - tl.vol_db_at(tl.cursor_t)) < 0.2
     w.show_data.dirty = False
 
 
