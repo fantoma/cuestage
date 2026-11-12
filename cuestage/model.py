@@ -8,18 +8,19 @@ import uuid
 from .system import local_path, portable_rel
 
 CUE_TYPES = ["audio", "video", "image", "text", "group", "groupexit", "fade", "preset", "control", "stoppanel",
-             "osc", "midiout", "projector", "mixer", "switcher", "wait", "memo"]
+             "osc", "midiout", "projector", "mixer", "switcher", "fsclose", "wait", "memo"]
 TYPE_LABELS = {
     "audio": tr("Audio"), "video": tr("Video"), "image": tr("Immagine"), "fade": tr("Fade"),
     "preset": tr("Cambia preset"), "control": tr("Comando"), "osc": "OSC", "projector": tr("Proiettore"), "mixer": tr("Mixer"),
     "switcher": tr("Regia video"),
     "group": tr("Gruppo"), "groupexit": tr("Esci dal gruppo"), "text": tr("Testo"), "midiout": tr("MIDI out"),
     "wait": tr("Attesa"), "memo": tr("Memo"), "stoppanel": tr("Stop panel"),
+    "fsclose": tr("Chiudi schermo intero"),
 }
 TYPE_ICONS = {
     "audio": "♪", "video": "▶", "image": "▣", "fade": "◢", "preset": "⇢", "control": "⌘", "projector": "⌖",
     "osc": "⇄", "wait": "⧗", "memo": "✎", "mixer": "≣", "group": "◫", "groupexit": "⇥", "text": "T", "midiout": "♫",
-    "stoppanel": "⊠", "switcher": "◧",
+    "stoppanel": "⊠", "switcher": "◧", "fsclose": "⇲",
 }
 
 # campi salvati nei preset (per tipo di preset)
@@ -99,7 +100,7 @@ class Cue:
         "file": "", "start": 0.0, "end": 0.0, "loop": False, "loop_start": 0.0,
         "loop_end": 0.0, "loop_count": 0, "loop_xfade": 0.0, "loop_stop": False,
         # video: crossfade del loop e fade dell'immagine separati dall'audio (di serie uguali all'audio)
-        "loop_xfade_video": 0.0, "loop_xfade_link": True, "v_fade_in": 0.0, "v_fade_out": 0.0, "fade_link": True, "level_db": 0.0, "fade_in": 0.0,
+        "loop_xfade_video": 0.0, "loop_xfade_link": True, "fs_hide": False, "v_fade_in": 0.0, "v_fade_out": 0.0, "fade_link": True, "level_db": 0.0, "fade_in": 0.0,
         "fade_out": 0.0, "curve": [],
         # video: curva di opacità [[secondi del file, opacità 0…1]] (come la curva di volume)
         "op_curve": [],

@@ -581,6 +581,18 @@ class ControlTabsMixin:
         f.addRow(b)
         return w
 
+    def _tab_fsclose(self):
+        w = QWidget()
+        f = QFormLayout(w)
+        f.addRow(self._check("fs_hide", tr("Nascondi anche la finestra di uscita")))
+        lab = QLabel(tr("Al GO la finestra di uscita video esce dallo schermo intero e resta aperta in finestra sullo "
+                        "stesso schermo (con la spunta: si nasconde). L'impostazione «Schermo intero» del menu Uscita "
+                        "video non cambia: «Mostra finestra di uscita» la riporta a schermo intero."))
+        lab.setWordWrap(True)
+        lab.setStyleSheet("color:#999;")
+        f.addRow(lab)
+        return w
+
     def _tab_wait(self):
         w = QWidget()
         f = QFormLayout(w)

@@ -1239,6 +1239,14 @@ class ControlInstance(Instance):
         self.finish()
 
 
+class FsCloseInstance(Instance):
+    """Chiude lo schermo intero della finestra di uscita (la riporta in finestra, o la nasconde)."""
+
+    def start(self, silent=False):
+        self.ctrl.outputRequest.emit("hide" if getattr(self.cue, "fs_hide", False) else "windowed")
+        self.finish()
+
+
 class ProjectorInstance(Instance):
     """Invia un comando a un videoproiettore (in un thread: la cue termina subito)."""
 
@@ -1863,7 +1871,7 @@ INSTANCE_CLASSES = {
     "audio": AudioInstance, "video": VideoInstance, "image": ImageInstance,
     "wait": WaitInstance, "fade": FadeInstance, "preset": PresetInstance, "control": ControlInstance,
     "osc": OscInstance, "projector": ProjectorInstance, "mixer": MixerInstance, "switcher": SwitcherInstance,
-    "memo": MemoInstance,
+    "memo": MemoInstance, "fsclose": FsCloseInstance,
     "group": GroupInstance, "groupexit": GroupExitInstance, "stoppanel": StopPanelInstance, "text": TextInstance, "midiout": MidiOutInstance,
 }
 
@@ -1873,6 +1881,7 @@ INSTANCE_CLASSES = {
 class Controller(QObject):
     changed = Signal()
     message = Signal(str)
+    outputRequest = Signal(str)      # cue «Chiudi schermo intero»: "windowed" o "hide" (lo esegue la finestra)
     playheadChanged = Signal(int)
     cueStarted = Signal(str)
 

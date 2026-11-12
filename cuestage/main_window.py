@@ -159,6 +159,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
 
         self.ctrl.changed.connect(self._ctrl_changed)
         self.ctrl.message.connect(self.status)
+        self.ctrl.outputRequest.connect(self._output_request)
         self.ctrl.playheadChanged.connect(self._playhead_changed)
         self.loader.infoReady.connect(lambda p: self.model.refresh())
         self.loader.error.connect(lambda p, e: self.status(tr("Errore media «{0}»: {1}", os.path.basename(p), e)))

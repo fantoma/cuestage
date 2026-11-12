@@ -2130,6 +2130,28 @@ def t_levels_zero(w):
     w.show_data.dirty = False
 
 
+def t_fsclose(w):
+    """Cue «Chiudi schermo intero»: la finestra di uscita esce dallo schermo intero (o si nasconde)."""
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    c1 = Cue("fsclose", number="1", name="Chiudi")
+    c2 = Cue("fsclose", number="2", name="Nascondi", fs_hide=True)
+    sh.cues = [c1, c2]
+    w._set_show(sh)
+    w._create_output()
+    w.output.place_on_screen(None, True)
+    run(0.2)
+    assert w.output.isVisible()
+    w.ctrl.start_cue(c1)
+    run(0.2)
+    assert w.output.isVisible() and not w.output.isFullScreen()
+    assert sh.settings["output_fullscreen"] is False                    # l'impostazione non cambia
+    w.ctrl.start_cue(c2)
+    run(0.2)
+    assert not w.output.isVisible()
+    w.show_data.dirty = False
+
+
 def t_osc_profile():
     from cuestage.osc_profiles import render
     assert render("chamsys_magicq", "go", {"pb": 3}) == ("/pb/3/go", "1")
@@ -2908,6 +2930,7 @@ if __name__ == "__main__":
     check("ducking: ingresso che non risponde non blocca l'interfaccia", t_ducking_open_nonblocking)
     check("grafico: barra di scorrimento; video: fade e crossfade dell'immagine separati", lambda: t_video_xfade_fades(w))
     check("«Volumi uscite a 0 dB»: volume della cue e uscite a 0 dB", lambda: t_levels_zero(w))
+    check("cue «Chiudi schermo intero»", lambda: t_fsclose(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))

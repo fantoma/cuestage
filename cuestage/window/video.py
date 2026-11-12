@@ -62,6 +62,20 @@ class VideoMixin:
         else:
             self.show_output()
 
+    def _output_request(self, what):
+        """Cue «Chiudi schermo intero»: la finestra di uscita esce dallo schermo intero (resta aperta in finestra,
+        sullo stesso schermo) oppure si nasconde. L'impostazione «Schermo intero» non cambia."""
+        out = self.output
+        if out is None or not out.isVisible():
+            return
+        if what == "hide":
+            out.hide()
+            self.act_out_show.setText(tr("Mostra finestra di uscita"))
+        elif out.isFullScreen():
+            scr = self.show_data.settings.get("output_screen", -1)
+            out.place_on_screen(scr if scr >= 0 else None, False)
+        self.status(tr("Schermo intero chiuso") if what != "hide" else tr("Finestra di uscita nascosta"))
+
     def toggle_fullscreen(self):
         self.show_data.settings["output_fullscreen"] = self.act_full.isChecked()
         self.show_data.dirty = True

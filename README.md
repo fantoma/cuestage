@@ -126,6 +126,7 @@ The web interface for phones and tablets and the start-up self-test messages are
 | **OSC** | Sends an OSC message (host, port, address, automatically typed arguments) |
 | **Video switcher** | Commands to a video switcher (Roland V-8HD, V-1HD via USB-MIDI), run in order: input on program/preset, CUT/AUTO, PinP, DSK, memories, effects, audio |
 | **Projector** | Command to a network video projector: power, shutter, input, freeze, lens, lens memory, specific commands (PJLink driver or plugin) |
+| **Close full screen** | The video output window leaves full screen and stays open as a window on the same screen, or is hidden (“Also hide the output window”); the “Full screen” setting does not change |
 | **Wait** | Timed pause, useful in chains |
 | **Memo** | Note for the operator |
 
