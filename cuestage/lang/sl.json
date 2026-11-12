@@ -359,7 +359,7 @@
   "a OUT −": "do OUT −",
   "ripetizioni": "ponovitev",
   "no": "ne",
-  "Crossfade del loop: gli ultimi istanti del giro sfumano mentre l'inizio del loop entra, così la ripetizione riparte morbida (ogni giro si accorcia di questo tempo). Vale anche mentre la cue suona.": "Navzkrižno pretapljanje zanke: zadnji trenutki kroga se pretopijo, medtem ko začetek zanke vstopi, zato se ponovitev začne mehko (vsak krog se skrajša za ta čas). Velja tudi med predvajanjem cue.",
+  "Crossfade del loop: gli ultimi istanti del giro sfumano mentre entra il suono che precede l'inizio del loop, così ogni giro riparte morbido esattamente dall'inizio del loop. Vale anche mentre la cue suona.": "Navzkrižno pretapljanje zanke: zadnji trenutki kroga se pretopijo, medtem ko vstopi zvok tik pred začetkom zanke, zato se vsak krog mehko začne točno na začetku zanke. Velja tudi med predvajanjem cue.",
   "Precarica": "Prednaloži",
   "Tiene il video pronto in anticipo (file aperto, fermo sul primo fotogramma) quando la cue è vicina al playhead o nella pagina del GRID: parte subito. Nei loop un secondo lettore aspetta all'inizio del loop, così la ripetizione non ha attese. Toglilo per risparmiare memoria con molti video grandi.": "Video vnaprej pripravi (datoteka odprta, ustavljena na prvi sličici), ko je cue blizu playheada ali na strani GRID: začne se takoj. Pri zankah drugi predvajalnik čaka na začetku zanke, zato ponovitev nima zamika. Izklopite za varčevanje s pomnilnikom pri številnih velikih videih.",
   "✕ curva opacità": "✕ krivulja motnosti",

@@ -620,10 +620,12 @@ class AudioEngine:
         while filled < frames:
             looping = v.loop and v.loops_left != 0
             seg_end = v.le if looping else v.end
-            xf = min(int(v.loop_xf), (v.le - v.ls) // 2) if looping else 0
+            xf, pre = v.loop_xfade() if looping else (0, False)
             xs = seg_end - xf
             if xf > 0 and p >= xs:
-                # ultimi xf campioni del giro: la coda sfuma e l'inizio del loop entra
+                # ultimi xf campioni del giro: la coda sfuma ed entra ciò che precede l'inizio del loop, così
+                # alla fine del giro si riparte esattamente dall'inizio del loop (senza materiale prima: entra
+                # l'inizio del loop e si riparte xf più avanti)
                 take = min(frames - filled, seg_end - p)
                 if take > 0:
                     if idx2 is None:
@@ -631,14 +633,14 @@ class AudioEngine:
                         wgt = np.zeros(frames, np.float32)
                     r = np.arange(p, p + take)
                     idx[filled:filled + take] = r
-                    idx2[filled:filled + take] = v.ls + (r - xs)
+                    idx2[filled:filled + take] = (v.ls - xf if pre else v.ls) + (r - xs)
                     wgt[filled:filled + take] = (r - xs + 0.5) / xf
                     p += take
                     filled += take
                     continue
                 if v.loops_left > 0:
                     v.loops_left -= 1
-                p = v.ls + xf                    # l'inizio è già suonato durante il crossfade
+                p = v.ls if pre else v.ls + xf
                 v.wraps += 1
                 continue
             take = min(frames - filled, (xs if xf > 0 else seg_end) - p)
@@ -775,6 +777,19 @@ class Voice:
         self.mtx_prev = None
         return self.mtx
 
+    def loop_xfade(self):
+        """(campioni di crossfade del loop, True se c'è abbastanza file prima dell'inizio del loop per farlo
+        senza spostare la ripartenza)."""
+        xf = min(int(self.loop_xf), (self.le - self.ls) // 2)
+        if xf <= 0:
+            return 0, False
+        return xf, self.ls >= xf
+
+    def lap_len(self):
+        """Campioni di un giro di loop (con il crossfade senza materiale prima del loop, un giro è più corto)."""
+        xf, pre = self.loop_xfade()
+        return self.le - self.ls - (0 if pre else xf)
+
     def set_bounds(self, end, loop, loop_start, loop_end):
         """OUT e marcatori del loop cambiati mentre suona (secondi del file, 0 = OUT/IN): valgono subito.
         Se la posizione è già oltre la nuova fine del loop, il giro riparte dall'inizio del loop."""
@@ -806,22 +821,23 @@ class Voice:
         """Porta la voce a «t» secondi dall'avvio (loop compresi), come se suonasse da allora: fade d'ingresso
         già finito. Serve per allinearsi a un'altra istanza (ridondanza)."""
         n = max(0, int(t * SR))
-        xf = min(int(self.loop_xf), (self.le - self.ls) // 2) if self.loop else 0
-        first = self.le - self.start - xf if self.loop else self.end - self.start
+        xf, pre = self.loop_xfade() if self.loop else (0, False)
+        back = 0 if pre else xf                           # dove riparte ogni giro: ls (o ls + xf)
+        first = self.le - self.start if self.loop else self.end - self.start
         if n < first:
             self.pos = self.start + n
-        elif self.loop and self.le - self.ls - xf > 0:
+        elif self.loop and self.lap_len() > 0:
             k = n - first
-            span = self.le - self.ls - xf                 # con il crossfade ogni giro riparte da ls + xf
+            span = self.lap_len()
             laps = k // span + 1
             if self.loops_left >= 0 and laps > self.loops_left:       # loop finiti: poi fino alla fine
                 rest = k - self.loops_left * span
                 self.loops_left = 0
-                self.pos = min(self.end, self.le + rest) if rest >= 0 else self.ls + xf + k % span
+                self.pos = min(self.end, self.le + rest) if rest >= 0 else self.ls + back + k % span
             else:
                 if self.loops_left > 0:
                     self.loops_left -= laps
-                self.pos = self.ls + xf + k % span
+                self.pos = self.ls + back + k % span
                 self.wraps += laps
         else:
             self.pos = self.end

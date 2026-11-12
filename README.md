@@ -393,8 +393,10 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
 - under the graph, **IN, OUT, volume, fades** (and opacity for video) and the **loop** settings are on a single row;
   the loop fields show the loop **relative to IN and OUT**: “from IN +” seconds after IN (IN = the loop starts at IN)
   and “to OUT −” seconds before OUT (OUT = it ends at OUT). Audio cues also have a **loop crossfade**: the last
-  moments of each lap fade out while the beginning of the loop fades in (equal power), so the restart is smooth;
-  each lap gets shorter by that time;
+  moments of each lap fade out while the sound that comes just before the loop start fades in (equal power), so
+  each lap restarts exactly at the loop start, smoothly, and keeps its length. When the loop starts at the very
+  beginning of the file there is nothing before it: the beginning of the loop fades in instead and each lap
+  restarts that much later (and is that much shorter);
   when the cue has volume points (or, for video, opacity points), the **Volume** (or **Opacity**) field shows the value
   of the curve **at the cursor** (with “@ time” next to it), and changing it moves the point at the cursor or creates
   one there; without points it is the cue's value;

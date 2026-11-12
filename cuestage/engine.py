@@ -472,8 +472,7 @@ class RoutedVoice:
             self._total = None
         else:
             n_loops = max(0, v.loops_left) if v.loop else 0
-            xf = min(v.loop_xf, (v.le - v.ls) // 2)
-            self._total = ((v.end - v.start) + n_loops * (v.le - v.ls - xf)) / SR
+            self._total = ((v.end - v.start) + n_loops * v.lap_len()) / SR
 
     def live_edit(self):
         """Curva di volume, volume, OUT, marcatori e crossfade del loop cambiati mentre suona: valgono subito."""
@@ -888,6 +887,10 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
         c = self.cue
         self.curve = curve_arrays(c.curve)
         self.op_curve = curve_arrays(getattr(c, "op_curve", None) or [])
+        _end, ls, _le = self._bounds()
+        alt = getattr(self, "alt", None)
+        if alt is not None and abs(alt.t - ls) > 0.02:
+            alt.arm(ls)                          # deck di riserva all'inizio del loop: segue il marcatore
         if self.voice is not None:
             RoutedVoice.live_edit(self)
             return

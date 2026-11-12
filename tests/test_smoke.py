@@ -1816,7 +1816,18 @@ def t_loop_edit(w):
     assert abs(blk[500]) < 1e-3 and blk[1500] > 0.03 and blk[-1] > blk[1500], (blk[500], blk[1500], blk[-1])
     v.pos = 2 * SR - 10
     w.audio._mix_voice(v, np.zeros((100, 1), np.float32), 100, 1)
-    assert v.wraps == 1 and v.pos == SR // 2 + 90, (v.wraps, v.pos)
+    assert v.wraps == 1 and v.pos == SR // 2 + 90, (v.wraps, v.pos)       # loop da IN: niente prima, ls + xf
+    # con del file prima dell'inizio del loop il crossfade usa quello: si riparte esattamente da ls
+    v2 = Voice(data, 0.0, 0.0, True, 1.0, 3.0, 0, 1.0, curve_arrays([]), 0.0, 0.0)
+    v2.loop_xf = SR // 2
+    v2.fit_matrix(1)
+    v2.pos = 3 * SR - 10
+    w.audio._mix_voice(v2, np.zeros((100, 1), np.float32), 100, 1)
+    assert v2.wraps == 1 and v2.pos == SR + 90 and v2.lap_len() == 2 * SR, (v2.pos, v2.lap_len())
+    v2.loops_left = -1
+    v2.wraps = 0
+    v2.seek(5.0)                                       # 3 s fino a fine loop (1–3), poi un giro intero di 2 s
+    assert v2.pos == SR and v2.wraps == 2, (v2.pos / SR, v2.wraps)
     # marcatori: loop alla fine (= OUT): in basso si prende il loop, in alto OUT, sulla linea il loop
     sh = Show()
     sh.settings["output_fullscreen"] = False
