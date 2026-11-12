@@ -1926,6 +1926,62 @@ def t_cluster_redundancy():
             x.close()
 
 
+def t_cluster_live_edit():
+    """Master + ridondanza mentre una cue suona: fader della matrice, curva di volume e loop cambiati
+    nell'ispettore del master arrivano alla ridondanza e valgono subito anche lì."""
+    from PySide6.QtWidgets import QSlider
+    from cuestage.audio_engine import SR
+    a = MainWindow()
+    b = MainWindow()
+    try:
+        sh = Show()
+        sh.settings["output_fullscreen"] = False
+        sh.cues = [Cue("audio", number="1", name="Lunga", file=tone("live_cl.wav", 30), loop=True)]
+        sh.save(os.path.join(TMP, "live_cl.cueshow"))
+        sh = Show.load(os.path.join(TMP, "live_cl.cueshow"))
+        sh.settings["output_fullscreen"] = False
+        a._set_show(sh)
+        old = dict(sh.settings)
+        sh.settings.update(cluster_enabled=True, cluster_port=18993)
+        a._apply_settings(old=old)
+        run(0.3)
+        done = []
+        b.cluster.syncDone.connect(lambda ok, t: done.append(ok))
+        b.cluster.connect_slave("127.0.0.1", 18993, "redundancy", "diff", True, os.path.join(TMP, "live_cl_b"), 500)
+        assert wait_until(lambda: done, 10)
+        assert done == [True], done
+        cue = sh.cues[0]
+        a.ctrl.start_cue(cue)
+        assert wait_until(lambda: cue.id in b.ctrl.instances, 5)
+        run(0.3)
+        vb = b.ctrl.instances[cue.id].voice
+        m0 = vb.mtx.copy()
+        # fader della matrice sul master (scheda Audio dell'ispettore)
+        ins = a.inspector
+        a.show()
+        ins.set_cue(cue)
+        ins.tabs.setCurrentIndex(ins._tab_keys.index("Audio"))
+        run(0.3)
+        fader = [f_ for f_ in ins.findChildren(QSlider, "matrix_fader") if f_.isVisible()][-1]
+        fader.setValue(-200)
+        bc = lambda: next(c for c in b.show_data.all_cues() if c.id == cue.id)
+        assert cue.matrix and wait_until(lambda: bc().matrix == cue.matrix, 5), (cue.matrix, bc().matrix)
+        assert wait_until(lambda: abs(vb.mtx.max() / m0.max() - 0.1) < 1e-3, 5), (m0, vb.mtx)
+        # curva di volume e fine del loop
+        cue.curve = [[0.0, -6.0], [20.0, -12.0]]
+        cue.loop_end = 10.0
+        ins._emit()
+        assert wait_until(lambda: vb.curve is not None and vb.le == 10 * SR, 5), (vb.curve, vb.le)
+        assert float(vb.curve[1][0]) == -6.0 and bc().curve == cue.curve
+        a.ctrl.stop_all(0)
+        run(0.3)
+    finally:
+        for x in (a, b):
+            x.ctrl.stop_all(0)
+            x.show_data.dirty = False
+            x.close()
+
+
 def t_cluster_join_align():
     """Una ridondanza che si collega mentre il master suona: le cue partono al punto del master, la pausa e
     gli scostamenti si allineano; spostamento di una voce audio anche con il loop."""
@@ -2526,6 +2582,7 @@ if __name__ == "__main__":
     check("istanze: file grande su rete lenta, Esci dalla modalità slave", t_cluster_slow_transfer)
     check("ridondanza collegata mentre il master suona: cue al punto del master, pause, scostamenti",
           t_cluster_join_align)
+    check("ridondanza: fader della matrice, curva e loop modificati sul master valgono subito", t_cluster_live_edit)
     check("istanze: accesso per PANEL / GRID, messaggi (anche web), disconnessione, trigger slave", t_cluster_perms_chat)
     check("istanze: programmi collegati via OSC avvisati del nuovo master", t_cluster_osc_clients)
     print(f"\n{'Tutto bene' if not FAILED else f'{len(FAILED)} prove fallite: ' + ', '.join(FAILED)}")
