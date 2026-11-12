@@ -190,11 +190,16 @@ class MediaTabsMixin:
                 self._emit()
             b1.clicked.connect(reset)
             b2 = QPushButton(tr("Volumi uscite a 0 dB"))
+            b2.setToolTip(tr("Riporta a 0 dB il volume della cue e i volumi delle uscite (ultima riga della matrice)"))
 
             def levels0():
-                cue.out_levels = []
+                cue.out_levels = [0.0] * n_out
+                cue.level_db = 0.0
                 mx.update()
                 self._emit()
+                self.refresh_fields()                    # campo Volume, fader, linea rosa
+                if self.timeline is not None:
+                    self.timeline.update()
             b2.clicked.connect(levels0)
             row.addWidget(b1)
             row.addWidget(b2)

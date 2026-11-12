@@ -2100,6 +2100,36 @@ def t_video_xfade_fades(w):
     w.show_data.dirty = False
 
 
+def t_levels_zero(w):
+    """«Volumi uscite a 0 dB»: volume della cue e volumi delle uscite a 0 dB (anche mentre suona)."""
+    from PySide6.QtWidgets import QPushButton
+    from cuestage.i18n import tr
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("audio", number="1", name="Z", file=tone("zero.wav", sec=10))
+    a.level_db, a.out_levels = -8.0, [-10.0, -12.0]
+    sh.cues = [a]
+    w._set_show(sh)
+    wait_until(lambda: w.loader.get_info(a.file) is not None, 10)
+    ins = w.inspector
+    ins.set_cue(a)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Audio"))
+    run(0.3)
+    w.ctrl.start_cue(a)
+    run(0.2)
+    vo = w.ctrl.instances[a.id].voice
+    m0 = vo.mtx.max()
+    b = [x for x in ins.findChildren(QPushButton) if x.text() == tr("Volumi uscite a 0 dB") and x.isVisible()][-1]
+    b.click()
+    run(0.3)
+    assert a.level_db == 0.0 and all(x == 0.0 for x in a.out_levels), (a.level_db, a.out_levels)
+    assert vo.mtx.max() > m0 * 3, (m0, vo.mtx.max())                 # le uscite tornano a 0 dB (+10 dB)
+    assert abs((vo.ramp[1] if vo.ramp else vo.env) - 1.0) < 1e-3       # volume della cue a 0 dB
+    w.ctrl.stop_all(0)
+    run(0.2)
+    w.show_data.dirty = False
+
+
 def t_osc_profile():
     from cuestage.osc_profiles import render
     assert render("chamsys_magicq", "go", {"pb": 3}) == ("/pb/3/go", "1")
@@ -2877,6 +2907,7 @@ if __name__ == "__main__":
     check("lista: colonne ridimensionabili e larghezze ricordate", lambda: t_column_widths(w))
     check("ducking: ingresso che non risponde non blocca l'interfaccia", t_ducking_open_nonblocking)
     check("grafico: barra di scorrimento; video: fade e crossfade dell'immagine separati", lambda: t_video_xfade_fades(w))
+    check("«Volumi uscite a 0 dB»: volume della cue e uscite a 0 dB", lambda: t_levels_zero(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))

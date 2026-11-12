@@ -416,6 +416,7 @@
   "Routing predefinito": "Privzeto usmerjanje",
   "Mono → Out 1-2 · stereo → Out 1/2 · multicanale → canale per canale (5.1/7.1 su stereo: downmix)": "Mono → Out 1-2 · stereo → Out 1/2 · večkanalno → kanal za kanalom (5.1/7.1 na stereo: downmix)",
   "Volumi uscite a 0 dB": "Glasnosti izhodov na 0 dB",
+  "Riporta a 0 dB il volume della cue e i volumi delle uscite (ultima riga della matrice)": "Ponastavi glasnost cue in glasnosti izhodov (zadnja vrstica matrike) na 0 dB",
   "Clic su un incrocio: acceso (0 dB) / spento · trascina in verticale o rotella: volume (Ctrl+rotella: decimi) · doppio clic: valore esatto · tasto destro: valori rapidi. L'ultima riga regola il volume di ogni uscita. Le modifiche valgono anche durante la riproduzione.": "Klik na križišče: vklop (0 dB) / izklop · navpično vlečenje ali kolesce: glasnost (Ctrl+kolesce: desetinke) · dvojni klik: točna vrednost · desni klik: hitre vrednosti. Zadnja vrstica nastavi glasnost vsakega izhoda. Spremembe veljajo tudi med predvajanjem.",
   " · video {0}×{1}": " · video {0}×{1}",
   "Durata file {0}{1}{2}": "Trajanje datoteke {0}{1}{2}",

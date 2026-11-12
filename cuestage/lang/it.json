@@ -416,6 +416,7 @@
   "Routing predefinito": "Routing predefinito",
   "Mono → Out 1-2 · stereo → Out 1/2 · multicanale → canale per canale (5.1/7.1 su stereo: downmix)": "Mono → Out 1-2 · stereo → Out 1/2 · multicanale → canale per canale (5.1/7.1 su stereo: downmix)",
   "Volumi uscite a 0 dB": "Volumi uscite a 0 dB",
+  "Riporta a 0 dB il volume della cue e i volumi delle uscite (ultima riga della matrice)": "Riporta a 0 dB il volume della cue e i volumi delle uscite (ultima riga della matrice)",
   "Clic su un incrocio: acceso (0 dB) / spento · trascina in verticale o rotella: volume (Ctrl+rotella: decimi) · doppio clic: valore esatto · tasto destro: valori rapidi. L'ultima riga regola il volume di ogni uscita. Le modifiche valgono anche durante la riproduzione.": "Clic su un incrocio: acceso (0 dB) / spento · trascina in verticale o rotella: volume (Ctrl+rotella: decimi) · doppio clic: valore esatto · tasto destro: valori rapidi. L'ultima riga regola il volume di ogni uscita. Le modifiche valgono anche durante la riproduzione.",
   " · video {0}×{1}": " · video {0}×{1}",
   "Durata file {0}{1}{2}": "Durata file {0}{1}{2}",
