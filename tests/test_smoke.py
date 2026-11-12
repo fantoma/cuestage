@@ -2116,7 +2116,7 @@ def t_levels_zero(w):
     sh = Show()
     sh.settings["output_fullscreen"] = False
     a = Cue("audio", number="1", name="Z", file=tone("zero.wav", sec=10))
-    a.level_db, a.out_levels = -8.0, [-10.0, -12.0]
+    a.level_db, a.out_levels, a.matrix = -8.0, [-10.0, -12.0], [[-20.0, None]]
     sh.cues = [a]
     w._set_show(sh)
     wait_until(lambda: w.loader.get_info(a.file) is not None, 10)
@@ -2132,7 +2132,8 @@ def t_levels_zero(w):
     b.click()
     run(0.3)
     assert a.level_db == 0.0 and all(x == 0.0 for x in a.out_levels), (a.level_db, a.out_levels)
-    assert vo.mtx.max() > m0 * 3, (m0, vo.mtx.max())                 # le uscite tornano a 0 dB (+10 dB)
+    assert a.matrix == [[0.0, None]], a.matrix                         # incroci accesi a 0, routing invariato
+    assert vo.mtx.max() > m0 * 20, (m0, vo.mtx.max())                # incrocio +20 dB e uscita +10 dB
     assert abs((vo.ramp[1] if vo.ramp else vo.env) - 1.0) < 1e-3       # volume della cue a 0 dB
     w.ctrl.stop_all(0)
     run(0.2)

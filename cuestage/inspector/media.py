@@ -190,9 +190,14 @@ class MediaTabsMixin:
                 self._emit()
             b1.clicked.connect(reset)
             b2 = QPushButton(tr("Volumi uscite a 0 dB"))
-            b2.setToolTip(tr("Riporta a 0 dB il volume della cue e i volumi delle uscite (ultima riga della matrice)"))
+            b2.setToolTip(tr("Riporta a 0 dB il volume della cue, gli incroci accesi della matrice e i volumi delle "
+                             "uscite (il routing non cambia)"))
 
             def levels0():
+                from ..audio_engine import effective_matrix
+                # incroci accesi a 0 dB (il routing resta: quelli spenti restano spenti), uscite e volume a 0 dB
+                cue.matrix = [[None if x is None else 0.0 for x in row]
+                              for row in effective_matrix(cue.matrix, n_src, n_out)]
                 cue.out_levels = [0.0] * n_out
                 cue.level_db = 0.0
                 mx.update()

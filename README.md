@@ -598,8 +598,8 @@ All the audio handling of an audio or video cue is in the inspector's **Audio** 
 - **Matrix**: rows = channels of the file (L/R, or L R C LFE Ls Rs for a 5.1…), columns = card outputs. Click a
   crosspoint = on (0 dB) / off; drag vertically or use the wheel for the volume (Ctrl+wheel: tenths);
   double-click = exact value; right-click = quick values or “only this output”. The last row (“Vol. out”) sets
-  the volume of each output. It can be changed during playback too. “Output volumes to 0 dB” resets the output volumes
-  and the cue volume to 0 dB. “Default routing”: mono → Out 1-2,
+  the volume of each output. It can be changed during playback too. “Output volumes to 0 dB” resets the cue volume, the
+  active crosspoints and the output volumes to 0 dB, keeping the routing (off crosspoints stay off). “Default routing”: mono → Out 1-2,
   stereo → Out 1/2, multichannel channel by channel, 5.1/7.1 to stereo as a downmix.
 - **Video**: by default the video's audio goes through the CueStage engine (card and matrix) and the picture
   locks to the audio (realigned if it drifts by more than 150 ms, loops included). Alternatively “System player”:
