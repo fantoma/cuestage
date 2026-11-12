@@ -363,6 +363,10 @@ that has it opens on it again.
   cue. It starts with its MIDI/OSC trigger, its keyboard shortcut, a Command cue, `/cue/<n>/start` or a click on
   its GRID tile. In the list its first column shows a yellow **T**.
 
+All the columns of the list (#, Type, Name, Target, …) can be **resized** by dragging the edge of their header
+(double-click the edge: fit to the content); the last column fills the remaining space and the widths are kept
+from one start to the next.
+
 After a GO the playhead (and the selection) jumps to the next manual cue; if the list has only one cue it stays
 on it, so GO restarts it. A click on a row always puts it in standby. The state of each cue (waiting, progress,
 elapsed/remaining time) is visible in the *Status* column and in the *Active cues* panel, where cues can be

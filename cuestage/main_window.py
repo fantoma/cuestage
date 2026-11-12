@@ -405,9 +405,30 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.table.setItemDelegateForColumn(C_PFL, PflDelegate(lambda: self.show_data, self.toggle_pfl, self.table))
         self.table.setColumnHidden(C_PFL, True)          # compare quando il preascolto è configurato
         hh = self.table.horizontalHeader()
-        for col, w in enumerate([30, 50, 125, 230, 220, 70, 70, 110, 190, 50]):
-            self.table.setColumnWidth(col, w)
-        hh.setSectionResizeMode(3, QHeaderView.Stretch)
+        # tutte le colonne si ridimensionano trascinando il bordo dell'intestazione (doppio clic: larghezza del
+        # contenuto); l'ultima riempie lo spazio rimasto. Le larghezze restano tra un avvio e l'altro.
+        hh.setSectionResizeMode(QHeaderView.Interactive)
+        hh.setStretchLastSection(True)
+        hh.setMinimumSectionSize(24)
+        widths = [30, 50, 125, 300, 220, 70, 70, 110, 190, 50]
+        saved = self.qs.value("cuelist_widths")
+        try:
+            saved = [int(x) for x in (saved or [])]
+        except (TypeError, ValueError):
+            saved = []
+        for col, w in enumerate(widths):
+            self.table.setColumnWidth(col, saved[col] if col < len(saved) and saved[col] >= 24 else w)
+
+        def save_widths(*_a):
+            try:
+                self.qs.setValue("cuelist_widths", [self.table.columnWidth(c) for c in range(len(widths))])
+            except RuntimeError:
+                pass
+        self._save_col_timer = QTimer(self)
+        self._save_col_timer.setSingleShot(True)
+        self._save_col_timer.setInterval(400)
+        self._save_col_timer.timeout.connect(save_widths)
+        hh.sectionResized.connect(lambda *_a: self._save_col_timer.start())
         self.table.selectionModel().selectionChanged.connect(self._selection_changed)
         # clic su una riga (anche già selezionata) la mette in standby
         self.table.clicked.connect(self._table_clicked)

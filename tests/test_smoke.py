@@ -1972,6 +1972,28 @@ def t_volume_field(w):
     w.show_data.dirty = False
 
 
+def t_column_widths(w):
+    """Colonne della lista ridimensionabili (anche # , Tipo, Nome) e larghezze ricordate al riavvio."""
+    from PySide6.QtWidgets import QHeaderView
+    from cuestage.ui_cuelist import C_NAME, C_NUM, C_TYPE
+    hh = w.table.horizontalHeader()
+    for c in (C_NUM, C_TYPE, C_NAME):
+        assert hh.sectionResizeMode(c) == QHeaderView.Interactive, c
+    hh.resizeSection(C_NAME, 333)
+    hh.resizeSection(C_NUM, 77)
+    run(0.6)
+    w2 = MainWindow()
+    try:
+        assert w2.table.columnWidth(C_NUM) == 77 and w2.table.columnWidth(C_NAME) == 333, \
+            (w2.table.columnWidth(C_NUM), w2.table.columnWidth(C_NAME))
+    finally:
+        w2.show_data.dirty = False
+        w2.close()
+    hh.resizeSection(C_NUM, 50)
+    hh.resizeSection(C_NAME, 300)
+    run(0.6)
+
+
 def t_osc_profile():
     from cuestage.osc_profiles import render
     assert render("chamsys_magicq", "go", {"pb": 3}) == ("/pb/3/go", "1")
@@ -2746,6 +2768,7 @@ if __name__ == "__main__":
     check("curva di volume e volume cambiati mentre la cue suona", lambda: t_live_curve(w))
     check("loop: marcatori, caselle rispetto a IN/OUT, modifiche in riproduzione, crossfade", lambda: t_loop_edit(w))
     check("campo Volume: segue la linea rosa al cursore (curva e fade)", lambda: t_volume_field(w))
+    check("lista: colonne ridimensionabili e larghezze ricordate", lambda: t_column_widths(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))
