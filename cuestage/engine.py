@@ -465,9 +465,7 @@ class RoutedVoice:
     _aud_override = None     # funzione(n_out) -> (livello dB, matrice dB, volumi uscite dB) oppure None
 
     def _loop_xf(self):
-        """Crossfade del loop in campioni (solo cue audio: nel video l'immagine riparte secca)."""
-        if self.cue.type != "audio":
-            return 0
+        """Crossfade del loop dell'audio in campioni (anche per l'audio dei video)."""
         return int(max(0.0, float(getattr(self.cue, "loop_xfade", 0) or 0)) * SR)
 
     def _calc_total(self):
@@ -692,11 +690,16 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
         if silent:
             self.env_vol.set(0.0)
             self.env_op.set(0.0)
-        elif c.fade_in > 0:
-            self.env_vol.set(0.0)
-            self.env_op.set(0.0)
-            self.env_vol.ramp_to(now, lvl, c.fade_in)
-            self.env_op.ramp_to(now, float(c.opacity), c.fade_in)
+        else:
+            vfi, _vfo = c.video_fades()               # fade dell'immagine (di serie uguali all'audio)
+            if c.fade_in > 0:
+                self.env_vol.set(0.0)
+                self.env_vol.ramp_to(now, lvl, c.fade_in)
+            if vfi > 0:
+                self.env_op.set(0.0)
+                self.env_op.ramp_to(now, float(c.opacity), vfi)
+        self._xf = None                       # crossfade dell'immagine a fine loop in corso
+        self._xf_layer = None
         self.curve = curve_arrays(c.curve)
         self.op_curve = curve_arrays(getattr(c, "op_curve", None) or [])      # punti di opacità
         self.seeked = deck.loaded
@@ -728,7 +731,11 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             self.file_dur = self.player.duration() / 1000.0
 
     def _deck_frame(self, deck, img):
-        if self.done or deck is not self.deck or self.layer is None:
+        if self.done or self.layer is None:
+            return
+        if deck is not self.deck:
+            if deck is self.alt and self._xf_layer is not None:
+                self._xf_layer.image = img            # crossfade del loop: l'inizio del loop entra sopra
             return
         self.layer.image = img
         self.frames += 1
@@ -770,6 +777,45 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
         self.alt = old
         self.sync_cool = self.ctrl.clock + 0.8
         return True
+
+    def _video_xf(self):
+        """Crossfade dell'immagine a fine loop (s): serve il deck di riserva, quindi «Precarica»."""
+        return max(0.0, float(self.cue.video_loop_xfade())) if self.cue.preload else 0.0
+
+    def _xf_start(self, now, pos, le):
+        """A fine loop − crossfade: parte il deck fermo all'inizio del loop, su un layer sopra quello della cue
+        che sale di opacità; la cue sotto continua fino a fine loop."""
+        alt = self.alt
+        c = self.cue
+        self._xf = {"t0": now, "dur": max(0.04, le - pos)}
+        self._xf_layer = self.ctrl.comp.add(self.key + "~xf", int(c.layer), c.fit, cue=self.view)
+        self._xf_layer.opacity = 0.0
+        if alt.image is not None:
+            self._xf_layer.image = alt.image
+        if not (self.paused or self.ctrl.paused_all):
+            alt.go()
+
+    def _xf_end(self):
+        """Fine del crossfade: il deck entrato diventa quello della cue, l'altro si riarma all'inizio del loop."""
+        _end, ls, _le = self._bounds()
+        alt, old = self.alt, self.deck
+        self._xf = None
+        if self._xf_layer is not None:
+            self.ctrl.comp.remove(self.key + "~xf", self._xf_layer)
+            self._xf_layer = None
+        self._use_deck(alt)
+        if alt.image is not None and self.layer is not None:
+            self.layer.image = alt.image
+        if self.aout is not None:
+            old.player.setAudioOutput(None)
+            self.player.setAudioOutput(self.aout)
+        self.ended = False
+        self.seeked = True
+        old.player.pause()
+        old.arm(ls)
+        old.owner = self
+        self.alt = old
+        self.sync_cool = self.ctrl.clock + 0.8
 
     def _bounds(self):
         c = self.cue
@@ -830,9 +876,13 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             return
         if v.wraps != self.wraps:             # l'audio è ripartito dall'inizio del loop
             self.wraps = v.wraps
-            if not self._loop_swap():
+            if self._xf is not None:
+                self._xf_end()                    # l'immagine era già in crossfade: prosegue da lì
+            elif not self._loop_swap():
                 self._seek_video(v.pos / SR)
             return
+        if self._xf is not None:
+            return                                # durante il crossfade dell'immagine niente riallineamenti
         if self.paused or self.ctrl.paused_all or now < self.sync_cool:
             return
         # tempo dell'audio che si sta sentendo ora (il mixer è avanti della latenza della scheda)
@@ -875,20 +925,33 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
                 if self.loops_left > 0:
                     self.loops_left -= 1
                 self.ended = False
-                if not self._loop_swap():
-                    self.player.setPosition(int(ls * 1000))
-                    if self.player.playbackState() != QMediaPlayer.PlayingState and not self.paused:
-                        self.player.play()
-                pos = ls
+                if self._xf is not None:
+                    self._xf_end()                    # il deck entrato nel crossfade è già avanti
+                    pos = self.player.position() / 1000.0
+                else:
+                    if not self._loop_swap():
+                        self.player.setPosition(int(ls * 1000))
+                        if self.player.playbackState() != QMediaPlayer.PlayingState and not self.paused:
+                            self.player.play()
+                    pos = ls
             elif not self.looping() and self.seeked and (self.ended or pos >= end - 0.01 or (
                     self.loop_on and getattr(c, "loop_stop", False) and not getattr(self, "_exited_loop", False)
                     and pos >= le - 0.01)):
                 self.finish()
                 return
             looping = self.looping()
+        # crossfade dell'immagine a fine loop
+        vxf = self._video_xf()
+        if (self._xf is None and vxf > 0 and looping and self.alt is not None and self.alt.ready
+                and le - vxf <= pos < le - 0.02 and not (self.paused or self.ctrl.paused_all)):
+            self._xf_start(now, pos, le)
         fo = 1.0
         if c.fade_out > 0 and not looping:
             fo = max(0.0, min(1.0, (end - pos) / c.fade_out))
+        _vfi, vfo = c.video_fades()
+        fov = 1.0
+        if vfo > 0 and not looping:
+            fov = max(0.0, min(1.0, (end - pos) / vfo))
         if self.aout is not None:
             vol = self.env_vol.get(now) * float(curve_gain(self.curve, pos)) * fo * self.ctrl.audio.master \
                 * self.kf_level_ratio * self.trim_gain * self.duck_gain() * self.ctrl.audio.duck.master_gain()
@@ -900,7 +963,11 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             base = float(c.opacity)
             v = max(0.0, min(1.0, curve_value(self.op_curve, pos)))
             oc = v / base if base > 1e-3 else v
-        self.layer.opacity = min(1.0, self.env_op.get(now) * fo * self.kf_op_ratio * self.trim_op * oc)
+        op = min(1.0, self.env_op.get(now) * fov * self.kf_op_ratio * self.trim_op * oc)
+        self.layer.opacity = op
+        if self._xf is not None and self._xf_layer is not None:
+            k = max(0.0, min(1.0, (now - self._xf["t0"]) / self._xf["dur"]))
+            self._xf_layer.opacity = op * k            # dissolvenza: l'inizio del loop sale sopra la coda
 
     def exit_loop(self):
         if not self.looping():
@@ -997,6 +1064,9 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
                 _bury(self.aout)
             self.bridge = None
             self.alt = None
+        if getattr(self, "_xf_layer", None) is not None:
+            self.ctrl.comp.remove(self.key + "~xf", self._xf_layer)
+            self._xf_layer = None
         self.ctrl.comp.remove(self.key, self.layer)
 
 

@@ -97,7 +97,9 @@ class Cue:
         "event_trig": [],
         # audio / video
         "file": "", "start": 0.0, "end": 0.0, "loop": False, "loop_start": 0.0,
-        "loop_end": 0.0, "loop_count": 0, "loop_xfade": 0.0, "loop_stop": False, "level_db": 0.0, "fade_in": 0.0,
+        "loop_end": 0.0, "loop_count": 0, "loop_xfade": 0.0, "loop_stop": False,
+        # video: crossfade del loop e fade dell'immagine separati dall'audio (di serie uguali all'audio)
+        "loop_xfade_video": 0.0, "loop_xfade_link": True, "v_fade_in": 0.0, "v_fade_out": 0.0, "fade_link": True, "level_db": 0.0, "fade_in": 0.0,
         "fade_out": 0.0, "curve": [],
         # video: curva di opacità [[secondi del file, opacità 0…1]] (come la curva di volume)
         "op_curve": [],
@@ -235,6 +237,17 @@ class Cue:
             if os.path.exists(alt):
                 c.file = alt
         return c
+
+    # ---- video: fade e crossfade del loop dell'immagine (uguali all'audio se collegati)
+    def video_fades(self):
+        if getattr(self, "fade_link", True):
+            return float(self.fade_in or 0), float(self.fade_out or 0)
+        return float(self.v_fade_in or 0), float(self.v_fade_out or 0)
+
+    def video_loop_xfade(self):
+        if getattr(self, "loop_xfade_link", True):
+            return float(self.loop_xfade or 0)
+        return float(self.loop_xfade_video or 0)
 
     # ---- preset della cue
     def preset_dict(self, kind):

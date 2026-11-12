@@ -2032,6 +2032,74 @@ def t_ducking_open_nonblocking():
     assert not d.listening and FakeStream.closed
 
 
+def t_video_xfade_fades(w):
+    """Barra di scorrimento del grafico ingrandito; video: fade e crossfade del loop dell'immagine separati
+    dall'audio (di serie uguali), crossfade dell'immagine a fine loop con il deck di riserva."""
+    from PySide6.QtCore import QPointF
+    from PySide6.QtWidgets import QScrollBar
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    v = Cue("video", number="1", name="V", file=make_video("vxf.mp4", sec=6), loop=True, preload=True)
+    v.loop_start, v.loop_end, v.loop_count = 1.0, 3.0, 3
+    sh.cues = [v]
+    w._set_show(sh)
+    wait_until(lambda: w.loader.get_info(v.file) is not None, 10)
+    ins = w.inspector
+    ins.set_cue(v)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Tempi e loop"))
+    run(0.3)
+    tl = ins.timeline
+    tl.zoom_all()
+    run(0.05)
+    sb = [x for x in ins.findChildren(QScrollBar, "timeline_scroll")][-1]
+    assert not sb.isVisible()
+    tl.v0, tl.v1 = 0.0, 2.0                                       # ingrandito: compare la barra
+    tl.repaint()
+    run(0.05)
+    assert sb.isVisible() and sb.maximum() > 0
+    sb.setValue(sb.maximum())
+    assert abs(tl.v1 - tl.duration) < 0.05 and abs((tl.v1 - tl.v0) - 2.0) < 1e-6, (tl.v0, tl.v1)
+    tl.zoom_all()
+    tl.repaint()
+    run(0.05)
+    assert not sb.isVisible()
+    # fade dell'immagine: di serie uguali all'audio, poi separati (quadratini arancioni sui fade video)
+    v.fade_in = 0.4
+    assert v.video_fades() == (0.4, 0.0)
+    v.fade_link, v.v_fade_in, v.v_fade_out = False, 1.5, 0.0
+    assert v.video_fades() == (1.5, 0.0)
+    xs, xfi, xfo, xe, y = tl._env_points()
+    assert abs(tl.x2t(xfi) - (v.start + 1.5)) < 0.05
+    yi, _yo = tl._handle_ys()
+    tl.drag = ("fade_in",)
+    from PySide6.QtCore import QEvent, Qt
+    from PySide6.QtGui import QMouseEvent
+    tl.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(tl.t2x(1.0), yi), QPointF(0, 0), Qt.NoButton,
+                                  Qt.LeftButton, Qt.NoModifier))
+    tl.drag = None
+    assert abs(v.v_fade_in - 1.0) < 0.05 and v.fade_in == 0.4, (v.v_fade_in, v.fade_in)
+    # in riproduzione: audio e immagine con i loro fade
+    v.loop_xfade_link, v.loop_xfade_video = False, 0.5
+    w.ctrl.start_cue(v)
+    assert wait_until(lambda: v.id in w.ctrl.instances, 5)
+    inst = w.ctrl.instances[v.id]
+    assert inst.env_op.ramp is not None and abs(inst.env_op.ramp[1] - 1.0) < 1e-6, inst.env_op.ramp
+    # crossfade dell'immagine a fine loop: parte prima di fine loop, poi il deck entrato diventa quello della cue
+    seen = []
+    t_end = time.monotonic() + 15
+    while time.monotonic() < t_end and not (seen and inst._xf is None and inst._xf_layer is None):
+        run(0.03)
+        if inst._xf is not None:
+            seen.append(inst._xf_layer is not None)
+        if inst.done:
+            break
+    assert seen and all(seen), "crossfade dell'immagine non partito"
+    assert inst._xf is None and inst._xf_layer is None
+    w.ctrl.stop_all(0)
+    run(0.3)
+    w.show_data.dirty = False
+
+
 def t_osc_profile():
     from cuestage.osc_profiles import render
     assert render("chamsys_magicq", "go", {"pb": 3}) == ("/pb/3/go", "1")
@@ -2808,6 +2876,7 @@ if __name__ == "__main__":
     check("campo Volume: segue la linea rosa al cursore (curva e fade)", lambda: t_volume_field(w))
     check("lista: colonne ridimensionabili e larghezze ricordate", lambda: t_column_widths(w))
     check("ducking: ingresso che non risponde non blocca l'interfaccia", t_ducking_open_nonblocking)
+    check("grafico: barra di scorrimento; video: fade e crossfade dell'immagine separati", lambda: t_video_xfade_fades(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))

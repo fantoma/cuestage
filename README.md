@@ -399,7 +399,12 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   and “to OUT −” seconds before OUT (OUT = it ends at OUT). Audio cues also have a **loop crossfade**: the last
   moments of each lap fade out while the beginning of the loop fades in (equal power): the loop start begins when
   the cursor reaches loop end − crossfade time, and after the crossfade it goes on from loop start + crossfade time
-  (each lap is that much shorter). **Stop at end**: when the repetitions are over the cue stops at the loop end
+  (each lap is that much shorter). For **video** cues the audio fades and loop crossfade are the ones of the row above; the
+  **Picture** row has the picture's own **fade in / fade out** and **loop crossfade**, by default the same as the
+  audio (“fades same as audio”, “loop crossfade same as audio”): untick to set them separately — the orange squares
+  of the graph then set the picture fades. The picture crossfade dissolves the beginning of the loop in over the
+  tail (it needs **Preload**, which keeps the second player ready at the loop start). When the graph is zoomed in
+  (wheel) a **scrollbar** appears under it. **Stop at end**: when the repetitions are over the cue stops at the loop end
   instead of going on to OUT (a Command cue “Exit loop” still sends it on to OUT);
   the **Volume** field always shows the pink line **at the cursor** (during **play**, at the playing position, so it
   follows the curve as the cue plays) — the volume you hear there, curve points and fades included (with “@ time” next to it when there are points or the cursor is in a fade); clicking a stretch of

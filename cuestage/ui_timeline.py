@@ -30,6 +30,7 @@ WAVE_H = 0.45                          # altezza massima della semionda (frazion
 class TimelineEditor(QWidget):
     changed = Signal()
     cursorMoved = Signal(float)        # clic sul grafico: nuovo cursore (tempo del file)
+    viewChanged = Signal()             # zoom o scorrimento: per la barra di scorrimento sotto il grafico
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -214,7 +215,19 @@ class TimelineEditor(QWidget):
         return m
 
     # ------------------------------------------------------------ disegno
+    def set_view(self, v0):
+        """Scorre la vista (zoom invariato) facendo partire il grafico da v0 secondi."""
+        span = self.v1 - self.v0
+        v0 = max(0.0, min(float(v0), max(self.duration, 1.0) - span))
+        if abs(v0 - self.v0) > 1e-9:
+            self.v0, self.v1 = v0, v0 + span
+            self.update()
+
     def paintEvent(self, e):
+        view = (round(self.v0, 4), round(self.v1, 4), round(float(self.duration or 0), 4))
+        if view != getattr(self, "_last_view", None):
+            self._last_view = view
+            self.viewChanged.emit()
         p = QPainter(self)
         p.fillRect(self.rect(), C_BG)
         if self.cue is None:
@@ -402,8 +415,11 @@ class TimelineEditor(QWidget):
         c = self.cue
         r = self._plot()
         end = c.end if c.end > 0 else self.duration
-        fi = max(0.0, float(c.fade_in or 0))
-        fo = max(0.0, float(c.fade_out or 0))
+        if self._video_mode():                      # video: i fade dell'immagine (linea arancione)
+            fi, fo = (max(0.0, x) for x in c.video_fades())
+        else:
+            fi = max(0.0, float(c.fade_in or 0))
+            fo = max(0.0, float(c.fade_out or 0))
         span = max(0.0, end - float(c.start or 0))
         if fi + fo > span > 0:                      # fade più lunghi della cue: si dividono la durata
             k = span / (fi + fo)
@@ -901,12 +917,15 @@ class TimelineEditor(QWidget):
         if kind in ("fade_in", "fade_out", "opacity", "level"):
             end = c.end if c.end > 0 else self.duration
             span = max(0.0, end - c.start)
+            # video con i fade dell'immagine separati: i quadratini arancioni regolano quelli
+            vsep = self._video_mode() and not getattr(c, "fade_link", True)
+            fin, fout = ("v_fade_in", "v_fade_out") if vsep else ("fade_in", "fade_out")
             if kind == "fade_in":
-                c.fade_in = round(max(0.0, min(t - c.start, span - float(c.fade_out or 0))), 2)
-                tip = tr("Fade in {0:.2f} s", c.fade_in)
+                setattr(c, fin, round(max(0.0, min(t - c.start, span - float(getattr(c, fout) or 0))), 2))
+                tip = tr("Fade in {0:.2f} s", getattr(c, fin))
             elif kind == "fade_out":
-                c.fade_out = round(max(0.0, min(end - t, span - float(c.fade_in or 0))), 2)
-                tip = tr("Fade out {0:.2f} s", c.fade_out)
+                setattr(c, fout, round(max(0.0, min(end - t, span - float(getattr(c, fin) or 0))), 2))
+                tip = tr("Fade out {0:.2f} s", getattr(c, fout))
             elif kind == "level":
                 c.level_db = round(self.y2db(pos.y()) * 2) / 2
                 tip = tr("Volume {0:+.1f} dB", c.level_db)

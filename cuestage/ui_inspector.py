@@ -72,6 +72,11 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
     def _emit(self, file_changed=False):
         self.show_fn().dirty = True
         self.edited.emit(file_changed)
+        for f in list(getattr(self, "_video_sep_syncs", None) or []):   # video: valori collegati all'audio
+            try:
+                f()
+            except RuntimeError:
+                pass
         if self.crop_panel is not None:
             self.crop_panel.refresh()
         if getattr(self, "_text_redraw", None) is not None:

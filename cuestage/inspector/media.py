@@ -4,6 +4,7 @@ import os
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox,
     QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QScrollArea, QSpinBox,
@@ -508,6 +509,7 @@ class MediaTabsMixin:
         self.timeline.setFixedHeight(114)
         self.timeline.changed.connect(self._timeline_changed)
         v.addWidget(self.timeline)
+        v.addWidget(self._timeline_scrollbar(self.timeline))
         if cue.type == "video":
             hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · quadratini arancioni = fade in e fade out · linea "
                              "arancione = {0} · clic o trascina = cursore · tasto destro: marker e keyframe · M = marker al "
@@ -585,7 +587,7 @@ class MediaTabsMixin:
         lsc.setToolTip(tr("Ferma la cue alla fine delle ripetizioni: dopo l'ultimo giro si ferma a fine loop invece "
                           "di proseguire fino a OUT. Una cue «Esci dal loop» la fa comunque proseguire fino a OUT."))
         row.addWidget(lsc)
-        if cue.type == "audio":
+        if cue.type in ("audio", "video"):
             row.addWidget(QLabel(tr("crossfade")))
             xs = self._dspin("loop_xfade", 0, 60, 0.05, 2)
             xs.setSpecialValueText(tr("no"))
@@ -659,6 +661,8 @@ class MediaTabsMixin:
         row.addWidget(bc)
         row.addWidget(bz)
         v.addLayout(top)
+        if cue.type == "video":
+            v.addLayout(self._video_sep_row())
         # ---- elenco dei marker: nome, tempo, note, azione
         from ..ui_markers import MarkersPanel
         mp = MarkersPanel(cue, self.show_fn)
@@ -753,6 +757,102 @@ class MediaTabsMixin:
         h.addWidget(sp)
         h.addWidget(b1)
         return w
+
+    def _video_sep_row(self):
+        """Video: fade e crossfade del loop dell'immagine, di serie uguali a quelli dell'audio."""
+        cue = self.cue
+        h = QHBoxLayout()
+        lab = QLabel(tr("Immagine:"))
+        lab.setStyleSheet("color:#ffa528; font-weight:bold;")
+        h.addWidget(lab)
+        pairs = []
+
+        def group(link_attr, link_text, fields):
+            ck = QCheckBox(link_text)
+            ck.setChecked(bool(getattr(cue, link_attr, True)))
+            spins = []
+            for label, attr, audio_attr in fields:
+                h.addWidget(QLabel(label))
+                sp = QDoubleSpinBox()
+                sp.setRange(0, 3600)
+                sp.setDecimals(2)
+                sp.setSingleStep(0.1)
+                sp.setSuffix(" s")
+                sp.setKeyboardTracking(False)
+                spins.append((sp, attr, audio_attr))
+                h.addWidget(sp)
+
+            def sync():
+                linked = bool(getattr(cue, link_attr, True))
+                ck.blockSignals(True)
+                ck.setChecked(linked)
+                ck.blockSignals(False)
+                for sp, attr, audio_attr in spins:
+                    sp.blockSignals(True)
+                    sp.setValue(float(getattr(cue, audio_attr if linked else attr) or 0))
+                    sp.setEnabled(not linked)
+                    sp.blockSignals(False)
+
+            def toggled(on):
+                if not on:                         # si separa: si parte dai valori dell'audio
+                    for _sp, attr, audio_attr in spins:
+                        setattr(cue, attr, float(getattr(cue, audio_attr) or 0))
+                setattr(cue, link_attr, bool(on))
+                self._emit()
+                if self.timeline:
+                    self.timeline.update()
+                sync()
+            ck.toggled.connect(toggled)
+            for sp, attr, _a in spins:
+                sp.valueChanged.connect(lambda val, attr=attr: (setattr(cue, attr, float(val)), self._emit(),
+                                                               self.timeline.update() if self.timeline else None))
+            h.insertWidget(h.count() - 2 * len(fields), ck)
+            sync()
+            self.bound.append((ck, sync))
+            pairs.append(sync)
+            return ck
+        ck = group("fade_link", tr("fade uguali all'audio"),
+                   [(tr("Fade in"), "v_fade_in", "fade_in"), (tr("Fade out"), "v_fade_out", "fade_out")])
+        ck.setToolTip(tr("Fade in e fade out dell'immagine uguali a quelli dell'audio. Togli la spunta per "
+                         "regolarli a parte (anche con i quadratini arancioni del grafico)."))
+        h.addSpacing(12)
+        ck2 = group("loop_xfade_link", tr("crossfade del loop uguale all'audio"),
+                    [(tr("crossfade"), "loop_xfade_video", "loop_xfade")])
+        ck2.setToolTip(tr("Crossfade dell'immagine a fine loop: quando il cursore arriva a fine loop − crossfade "
+                          "l'inizio del loop entra in dissolvenza sopra la coda. Richiede «Precarica»."))
+        h.addStretch(1)
+        # il collegamento si aggiorna quando cambiano i valori dell'audio
+        self._video_sep_syncs = pairs
+        return h
+
+    def _timeline_scrollbar(self, tl):
+        """Barra di scorrimento sotto il grafico: compare quando il grafico è ingrandito (rotella)."""
+        from PySide6.QtWidgets import QScrollBar
+        sb = QScrollBar(Qt.Horizontal)
+        sb.setObjectName("timeline_scroll")
+        sb.setFixedHeight(12)
+        sb.setVisible(False)
+        busy = [False]
+
+        def sync():
+            dur = max(float(tl.duration or 0), 1.0)
+            span = tl.v1 - tl.v0
+            zoomed = span < dur - 1e-6
+            busy[0] = True
+            sb.setRange(0, max(0, int(round((dur - span) * 1000))))
+            sb.setPageStep(max(1, int(round(span * 1000))))
+            sb.setSingleStep(max(1, int(round(span * 100))))
+            sb.setValue(int(round(tl.v0 * 1000)))
+            busy[0] = False
+            sb.setVisible(zoomed)
+
+        def moved(val):
+            if not busy[0]:
+                tl.set_view(val / 1000.0)
+        tl.viewChanged.connect(sync)
+        sb.valueChanged.connect(moved)
+        sync()
+        return sb
 
     def _loop_rel_spins(self):
         """Inizio e fine del loop come distanza da IN e da OUT (0 = il loop parte da IN / finisce a OUT).
