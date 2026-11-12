@@ -415,7 +415,9 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   clear them;
 - **Snap** (button on the marker row, on by default): a dragged point, marker or keyframe snaps to nearby points of the
   other curves, markers, IN/OUT and keyframes (a dotted white line shows it); hold **Alt** not to snap;
-- double-click or Ctrl+click adds a volume curve point; wheel = zoom, Shift+wheel or middle-button drag = scroll.
+- double-click or Ctrl+click adds a volume curve point; **dragging a straight stretch of the pink line** moves the two
+  points that define it up or down together, by the same amount (before the first point or after the last one:
+  only that point; with no points: the cue volume); wheel = zoom, Shift+wheel or middle-button drag = scroll.
 - changes made **while the cue is playing** take effect at once: volume and opacity curve points, the cue volume
   (**Volume** field, with a short ramp so there are no clicks) and the matrix (also with its fader) — also on the
   secondary instances. A Fade cue running on that cue is not

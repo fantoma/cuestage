@@ -548,6 +548,37 @@ class TimelineEditor(QWidget):
         p.setPen(C_CURVE)
         p.drawText(QPointF(xfi + 6, ty), txt)
 
+    def _vol_draw_y(self, x):
+        """y della linea rosa disegnata alla x (con i fade, dentro IN/OUT)."""
+        yv = self._vol_y(self.x2t(x))
+        if self.duration <= 0:
+            return yv
+        xs, xfi, xfo, xe, _y = self._env_points()
+        f = 1.0
+        if xfi > xs and xs <= x < xfi:
+            f = (x - xs) / (xfi - xs)
+        if xe > xfo and xfo < x <= xe:
+            f = min(f, (xe - x) / (xe - xfo))
+        bottom = self._plot().bottom()
+        return bottom - (bottom - yv) * max(0.0, f)
+
+    def _seg_hit(self, pos):
+        """Clic sul tratto rettilineo della linea rosa: ("seg", indici dei punti che lo definiscono). Senza punti
+        il tratto è il volume della cue."""
+        if self.cue is None or abs(self._vol_draw_y(pos.x()) - pos.y()) >= 5:
+            return None
+        pts = sorted(self.cue.curve or [])
+        self.cue.curve[:] = pts
+        t = self.x2t(pos.x())
+        if not pts:
+            return ("seg", ())
+        after = next((i for i, (a, _b) in enumerate(pts) if a >= t), None)
+        if after is None:
+            return ("seg", (len(pts) - 1,))                 # dopo l'ultimo punto
+        if after == 0:
+            return ("seg", (0,))                            # prima del primo punto
+        return ("seg", (after - 1, after))
+
     def _env_hit(self, pos):
         if self.cue is None or self.duration <= 0:
             return None
@@ -680,6 +711,9 @@ class TimelineEditor(QWidget):
         env = self._env_hit(pos)
         if env is not None:
             return env
+        seg = self._seg_hit(pos)
+        if seg is not None:
+            return seg
         for kx, ky, _tip, pt, ft in getattr(self, "_kf_hits", []):
             if abs(kx - pos.x()) < 6 and abs(ky - pos.y()) < 6:
                 return ("kf", pt, ft)
@@ -718,6 +752,10 @@ class TimelineEditor(QWidget):
         if e.button() == Qt.LeftButton:
             if hit and hit[0] == "kf":
                 self.drag = ("kf", hit[1], float(hit[1].get("t", 0)), hit[2])
+            elif hit and hit[0] == "seg":
+                c = self.cue
+                orig = [float(c.curve[i][1]) for i in hit[1]] if hit[1] else [float(c.level_db)]
+                self.drag = ("seg", hit[1], self.y2db(pos.y()), orig)
             elif hit:
                 self.drag = hit
             elif e.modifiers() & Qt.ControlModifier or pos.y() > HANDLE_H:
@@ -736,7 +774,8 @@ class TimelineEditor(QWidget):
             self.rename_marker(hit[1])
         elif hit and hit[0] == "opacity":
             self._add_point(e.position(), "opacity")       # doppio clic sulla linea dell'opacità
-        elif hit and hit[0] == "level":
+        elif hit and hit[0] in ("level", "seg"):
+            self.drag = None
             self._add_point(e.position(), "volume")
         elif not hit:
             # Maiusc+doppio clic: l'altro tipo di punto (volume ↔ opacità)
@@ -774,7 +813,7 @@ class TimelineEditor(QWidget):
             hit = self._hit(pos)
             self.setCursor(Qt.SizeHorCursor if hit and hit[0] in ("marker", "fade_in", "fade_out", "umark", "kf")
                            else Qt.PointingHandCursor if hit and hit[0] == "opoint"
-                           else Qt.SizeVerCursor if hit and hit[0] in ("opacity", "level")
+                           else Qt.SizeVerCursor if hit and hit[0] in ("opacity", "level", "seg")
                            else Qt.PointingHandCursor if hit else Qt.ArrowCursor)
             return
         kind = self.drag[0]
@@ -790,6 +829,26 @@ class TimelineEditor(QWidget):
             span = v1 - v0
             nv0 = max(0.0, min(v0 - dt, max(self.duration, 1) - span))
             self.v0, self.v1 = nv0, nv0 + span
+            self.update()
+            return
+        if kind == "seg":
+            # tratto della linea rosa: i due punti che lo definiscono si spostano insieme, della stessa quantità
+            _k, idx, db0, orig = self.drag
+            d = self.y2db(pos.y()) - db0
+            c = self.cue
+            base = self._base_db()
+            if idx:
+                for i, o in zip(idx, orig):
+                    if i < len(c.curve) and o > MIN_DB + 0.01:
+                        c.curve[i] = [c.curve[i][0], round(max(MIN_DB - base, min(MAX_DB - base, o + d)), 1)]
+                eff = base + float(c.curve[idx[0]][1]) if idx[0] < len(c.curve) else base
+            else:
+                lv = orig[0] + d if orig[0] > MIN_DB else MIN_DB + d
+                c.level_db = MIN_DB if lv <= MIN_DB + 0.01 else round(max(MIN_DB, min(MAX_DB, lv)) * 2) / 2
+                eff = c.level_db
+            QToolTip.showText(e.globalPosition().toPoint(),
+                              tr("volume −∞") if eff <= MIN_DB + 0.01 else tr("volume {0:+.1f} dB", eff), self)
+            self.changed.emit()
             self.update()
             return
         t = round(self.x2t(pos.x()), 3)

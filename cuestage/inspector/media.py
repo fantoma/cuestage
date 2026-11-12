@@ -514,8 +514,8 @@ class MediaTabsMixin:
                              "cursore · doppio clic o Ctrl+clic: {1} · rotella: zoom · Maiusc+rotella o tasto "
                              "centrale: scorri", tr("opacità (trasparenza)"), tr("punto di opacità (Maiusc: di volume)")))
         else:
-            hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · linea rosa = volume (con i fade; il volume della "
-                             "cue si regola con il campo Volume qui sotto) · quadratini = fade in e fade out · clic o "
+            hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · linea rosa = volume (con i fade; trascina un tratto "
+                             "per alzarlo o abbassarlo con i suoi due punti) · quadratini = fade in e fade out · clic o "
                              "trascina = cursore · tasto destro: marker e keyframe · M = marker al cursore · doppio clic "
                              "o Ctrl+clic: punto di volume · rotella: zoom · Maiusc+rotella o tasto centrale: scorri"))
         hint.setStyleSheet("color:#888; font-size:10px;")

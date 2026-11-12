@@ -752,7 +752,7 @@ def t_inspector_layout(w):
     a.level_db, a.fade_in, a.fade_out, a.start, a.end = 0.0, 1.0, 0.5, 0.0, 0.0
     xs, xfi, xfo, xe, y = tl._env_points()
     mid = QPointF((xfi + xfo) / 2, tl._vol_y(tl.x2t((xfi + xfo) / 2)))
-    assert tl._hit(mid) is None, tl._hit(mid)                       # la linea del volume non si trascina
+    assert tl._hit(mid) == ("seg", ()), tl._hit(mid)                # senza punti: il tratto è il volume della cue
     assert tl._hit(QPointF(xfi, tl._vol_y(tl.x2t(xfi)))) == ("fade_in",)   # i fade stanno sulla linea rosa
     a.fade_in = a.fade_out = 0.0
     ins.tabs.setCurrentIndex(ins._tab_keys.index("Audio"))
@@ -1721,6 +1721,27 @@ def t_live_curve(w):
     QTest.mouseMove(tl, QPoint(xp, int(round(tl.db2y(-30.0)))))                  # punto trascinato in giù
     QTest.mouseRelease(tl, Qt.LeftButton, Qt.NoModifier, QPoint(xp, int(round(tl.db2y(-30.0)))))
     assert -21.5 < a.curve[1][1] < -18.5, a.curve                                # −30 effettivi = −10 −20
+    # clic sul tratto rettilineo della linea rosa: i due punti che lo definiscono si spostano insieme
+    a.curve = [[2.0, 0.0], [6.0, -10.0]]
+    tl.update()
+    x4 = int(round(tl.t2x(4.0)))
+    assert tl._hit(QPointF(x4, tl._vol_draw_y(x4))) == ("seg", (0, 1)), tl._hit(QPointF(x4, tl._vol_draw_y(x4)))
+    y4 = int(round(tl._vol_draw_y(x4)))
+    QTest.mousePress(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x4, y4))
+    QTest.mouseMove(tl, QPoint(x4, int(round(tl.db2y(tl.y2db(y4) - 10)))))
+    QTest.mouseRelease(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x4, int(round(tl.db2y(tl.y2db(y4) - 10)))))
+    assert abs(a.curve[0][1] + 10) < 0.6 and abs(a.curve[1][1] + 20) < 0.6 and a.curve[0][0] == 2.0, a.curve
+    x1 = int(round(tl.t2x(1.0)))
+    assert tl._hit(QPointF(x1, tl._vol_draw_y(x1))) == ("seg", (0,))           # prima del primo punto: solo lui
+    a.curve = []
+    tl.update()
+    y1 = int(round(tl._vol_draw_y(x4)))
+    QTest.mousePress(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x4, y1))           # senza punti: volume della cue
+    QTest.mouseMove(tl, QPoint(x4, int(round(tl.db2y(tl.y2db(y1) + 6)))))
+    QTest.mouseRelease(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x4, int(round(tl.db2y(tl.y2db(y1) + 6)))))
+    assert abs(a.level_db + 4.0) < 0.6, a.level_db
+    a.level_db = -10.0
+    a.curve = [[2.0, 0.0], [6.0, -20.0]]
     ins.tabs.setCurrentIndex(ins._tab_keys.index("Audio"))
     run(0.1)
     from PySide6.QtWidgets import QSlider
