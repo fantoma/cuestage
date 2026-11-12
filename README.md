@@ -383,11 +383,18 @@ Audio and video cues have the same editor in the “Times and loop” tab (its h
   and fade out drawn on it; its squares set **fade in** and **fade out**. There is no orange line: the cue volume is
   set with the **Volume** field below the graph, which moves the whole pink line (points included);
 - **video**: the **orange envelope** sets fade in, fade out and the **opacity**; the pink volume line is drawn too;
-- **IN/OUT** and **loop** markers are dragged as before;
+- **IN/OUT** markers have their labels at the top, **loop** markers (L⟨ ⟩L) at the bottom of the graph, so they can be
+  grabbed separately even when the loop starts at IN or ends at OUT (on the shared line the loop marker wins; OUT is
+  then taken from its label at the top). Moving the loop markers, OUT or the loop fields **while the cue plays** takes
+  effect at once (if the position is already past the new loop end, the loop restarts from its beginning);
 - **markers**: right-click › “Add marker here” or the **M** key (at the cursor) adds a named marker (cyan). Drag it to
   move it, double-click its label to rename it, right-click it to set IN, OUT or the loop there, or to delete it.
   “Go to marker” in the right-click menu moves the cursor. Markers are saved with the show;
 - under the graph, **IN, OUT, volume, fades** (and opacity for video) and the **loop** settings are on a single row;
+  the loop fields show the loop **relative to IN and OUT**: “from IN +” seconds after IN (IN = the loop starts at IN)
+  and “to OUT −” seconds before OUT (OUT = it ends at OUT). Audio cues also have a **loop crossfade**: the last
+  moments of each lap fade out while the beginning of the loop fades in (equal power), so the restart is smooth;
+  each lap gets shorter by that time;
   when the cue has volume points (or, for video, opacity points), the **Volume** (or **Opacity**) field shows the value
   of the curve **at the cursor** (with “@ time” next to it), and changing it moves the point at the cursor or creates
   one there; without points it is the cue's value;

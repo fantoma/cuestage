@@ -549,9 +549,13 @@ class MediaTabsMixin:
             self.timeline.cursorMoved.connect(moved)
         top = QHBoxLayout()
         top.addWidget(QLabel("IN"))
-        top.addWidget(self._dspin("start", 0, 36000, 0.1, 3))
+        in_sp = self._dspin("start", 0, 36000, 0.1, 3)
+        top.addWidget(in_sp)
         top.addWidget(QLabel("OUT"))
-        top.addWidget(self._dspin("end", 0, 36000, 0.1, 3, special=tr("fine file")))
+        out_sp = self._dspin("end", 0, 36000, 0.1, 3, special=tr("fine file"))
+        top.addWidget(out_sp)
+        for x in (in_sp, out_sp):                # il loop è mostrato rispetto a IN e OUT: si aggiorna con loro
+            x.valueChanged.connect(lambda _v: getattr(self, "_loop_sync", lambda: None)())
         top.addWidget(QLabel(tr("Volume")))
         top.addWidget(self._cursor_value_spin("volume"))
         top.addWidget(QLabel(tr("Fade in")))
@@ -570,12 +574,21 @@ class MediaTabsMixin:
             lc.setToolTip(tr("Questa cue è in una Playlist: suona una volta sola. Per ripetere usa il loop del gruppo."))
             lc.setText(tr("Loop (ignorato nella Playlist)"))
         row.addWidget(lc)
-        row.addWidget(QLabel(tr("da")))
-        row.addWidget(self._dspin("loop_start", 0, 36000, 0.1, 3, special="IN"))
-        row.addWidget(QLabel(tr("a")))
-        row.addWidget(self._dspin("loop_end", 0, 36000, 0.1, 3, special="OUT"))
+        ls_sp, le_sp = self._loop_rel_spins()
+        row.addWidget(QLabel(tr("da IN +")))
+        row.addWidget(ls_sp)
+        row.addWidget(QLabel(tr("a OUT −")))
+        row.addWidget(le_sp)
         row.addWidget(QLabel(tr("ripetizioni")))
         row.addWidget(self._ispin("loop_count", 0, 100000, special="∞"))
+        if cue.type == "audio":
+            row.addWidget(QLabel(tr("crossfade")))
+            xs = self._dspin("loop_xfade", 0, 60, 0.05, 2)
+            xs.setSpecialValueText(tr("no"))
+            xs.setToolTip(tr("Crossfade del loop: gli ultimi istanti del giro sfumano mentre l'inizio del loop "
+                             "entra, così la ripetizione riparte morbida (ogni giro si accorcia di questo tempo). "
+                             "Vale anche mentre la cue suona."))
+            row.addWidget(xs)
         if cue.type == "video":
             pc = self._check("preload", tr("Precarica"))
             pc.setToolTip(tr("Tiene il video pronto in anticipo (file aperto, fermo sul primo fotogramma) quando la "
@@ -736,6 +749,64 @@ class MediaTabsMixin:
         h.addWidget(sp)
         h.addWidget(b1)
         return w
+
+    def _loop_rel_spins(self):
+        """Inizio e fine del loop come distanza da IN e da OUT (0 = il loop parte da IN / finisce a OUT).
+        Nella cue restano tempi del file (0 = IN / OUT), come i marcatori del grafico."""
+        cue = self.cue
+
+        def dur():
+            tl = self.timeline
+            return float(tl.duration) if tl is not None and tl.duration else 0.0
+
+        def out_t():
+            return float(cue.end) if cue.end and cue.end > 0 else dur()
+
+        sps = []
+        for kind in ("start", "end"):
+            sp = QDoubleSpinBox()
+            sp.setRange(0, 36000)
+            sp.setDecimals(3)
+            sp.setSingleStep(0.1)
+            sp.setSuffix(" s")
+            sp.setKeyboardTracking(False)
+            sp.setSpecialValueText("IN" if kind == "start" else "OUT")
+            sp.setToolTip(tr("Inizio del loop: secondi dopo IN") if kind == "start"
+                          else tr("Fine del loop: secondi prima di OUT"))
+            sps.append(sp)
+        ls_sp, le_sp = sps
+
+        def sync():
+            for x in sps:
+                x.blockSignals(True)
+            ls_sp.setValue(max(0.0, float(cue.loop_start) - float(cue.start or 0)) if cue.loop_start > 0 else 0.0)
+            o = out_t()
+            le_sp.setValue(max(0.0, o - float(cue.loop_end)) if cue.loop_end > 0 and o > 0 else 0.0)
+            for x in sps:
+                x.blockSignals(False)
+
+        def set_start(v):
+            cue.loop_start = 0.0 if v <= 0 else round(float(cue.start or 0) + float(v), 3)
+            done()
+
+        def set_end(v):
+            o = out_t()
+            cue.loop_end = 0.0 if v <= 0 or o <= 0 else round(max(float(cue.start or 0) + 0.05, o - float(v)), 3)
+            done()
+
+        def done():
+            self._emit()
+            if self.timeline:
+                self.timeline.update()
+            sync()
+        ls_sp.valueChanged.connect(set_start)
+        le_sp.valueChanged.connect(set_end)
+        sync()
+        self.bound.append((ls_sp, sync))
+        if self.timeline is not None:
+            self.timeline.changed.connect(sync)
+        self._loop_sync = sync
+        return ls_sp, le_sp
 
     def _cursor_value_spin(self, kind):
         """Volume (dB) o opacità (%) nella riga dei tempi. Senza curva è il valore della cue; con la curva dei

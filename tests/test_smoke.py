@@ -1795,6 +1795,74 @@ def t_live_curve(w):
     w.show_data.dirty = False
 
 
+def t_loop_edit(w):
+    """Loop: marcatori in basso (separati da IN/OUT anche quando coincidono), caselle rispetto a IN e OUT,
+    spostamenti in riproduzione recepiti subito, crossfade del loop."""
+    import numpy as np
+    from PySide6.QtCore import QPointF
+    from PySide6.QtWidgets import QDoubleSpinBox
+    from cuestage.audio_engine import SR, Voice
+    from cuestage.media import curve_arrays
+    # crossfade nel mixer: coda e inizio del loop si sommano a potenza costante, poi si riparte da ls + xf
+    data = np.zeros((SR * 4, 1), np.float32)
+    data[:SR] = 1.0                                           # 1 nel primo secondo (inizio del loop), 0 dopo
+    v = Voice(data, 0.0, 0.0, True, 0.0, 2.0, 0, 1.0, curve_arrays([]), 0.0, 0.0)
+    v.loop_xf = SR // 2
+    v.fit_matrix(1)
+    v.pos = int(1.5 * SR) - 1000                               # poco prima dell'inizio del crossfade
+    out = np.zeros((4000, 1), np.float32)
+    w.audio._mix_voice(v, out, 4000, 1)
+    blk = out[:, 0] / max(1e-9, float(w.audio.master))
+    assert abs(blk[500]) < 1e-3 and blk[1500] > 0.03 and blk[-1] > blk[1500], (blk[500], blk[1500], blk[-1])
+    v.pos = 2 * SR - 10
+    w.audio._mix_voice(v, np.zeros((100, 1), np.float32), 100, 1)
+    assert v.wraps == 1 and v.pos == SR // 2 + 90, (v.wraps, v.pos)
+    # marcatori: loop alla fine (= OUT): in basso si prende il loop, in alto OUT, sulla linea il loop
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("audio", number="1", name="L", file=tone("loopedit.wav", sec=8), loop=True)
+    sh.cues = [a]
+    w._set_show(sh)
+    wait_until(lambda: w.loader.get_info(a.file) is not None, 10)
+    ins = w.inspector
+    ins.set_cue(a)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Tempi e loop"))
+    run(0.3)
+    tl = ins.timeline
+    tl.zoom_all()
+    xo = tl.t2x(8.0) - 1
+    r = tl._plot()
+    assert tl._hit(QPointF(xo - 10, 5)) == ("marker", "end"), tl._hit(QPointF(xo - 10, 5))
+    assert tl._hit(QPointF(xo - 10, r.bottom() - 4)) == ("marker", "loop_end")
+    assert tl._hit(QPointF(xo, r.bottom() - 30)) == ("marker", "loop_end")       # sovrapposti: vince il loop
+    # caselle del loop rispetto a IN e OUT
+    a.start = 1.0
+    sps = [x for x in ins.findChildren(QDoubleSpinBox) if x.isVisible() and x.specialValueText() in ("IN", "OUT")]
+    ls_sp = next(x for x in sps if x.specialValueText() == "IN")
+    le_sp = next(x for x in sps if x.specialValueText() == "OUT")
+    ls_sp.setValue(0.5)
+    assert abs(a.loop_start - 1.5) < 1e-6, a.loop_start
+    le_sp.setValue(2.0)
+    assert abs(a.loop_end - 6.0) < 1e-6, a.loop_end                      # 8 s (fine file) − 2
+    a.loop_start, a.loop_end = 3.0, 5.0
+    ins.refresh_fields()
+    assert abs(ls_sp.value() - 2.0) < 1e-6 and abs(le_sp.value() - 3.0) < 1e-6
+    # in riproduzione: lo spostamento del loop vale subito
+    w.ctrl.start_cue(a)
+    run(0.3)
+    vo = w.ctrl.instances[a.id].voice
+    assert vo.ls == 3 * SR and vo.le == 5 * SR, (vo.ls, vo.le)
+    le_sp.setValue(4.0)                                                    # fine del loop a 4 s
+    run(0.05)
+    assert vo.le == 4 * SR, vo.le
+    a.loop_xfade = 0.5
+    ins._emit()
+    assert vo.loop_xf == SR // 2
+    w.ctrl.stop_all(0)
+    run(0.2)
+    w.show_data.dirty = False
+
+
 def t_osc_profile():
     from cuestage.osc_profiles import render
     assert render("chamsys_magicq", "go", {"pb": 3}) == ("/pb/3/go", "1")
@@ -2567,6 +2635,7 @@ if __name__ == "__main__":
     check("Blackmagic ATEM Mini / Pro / Extreme come regia video (UDP simulato)", lambda: t_atem(w))
     check("MIDI out: MMC, clock e profilo Akai MPC", lambda: t_midi_profiles(w))
     check("curva di volume e volume cambiati mentre la cue suona", lambda: t_live_curve(w))
+    check("loop: marcatori, caselle rispetto a IN/OUT, modifiche in riproduzione, crossfade", lambda: t_loop_edit(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))

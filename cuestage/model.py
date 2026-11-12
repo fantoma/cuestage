@@ -96,7 +96,7 @@ class Cue:
         "event_trig": [],
         # audio / video
         "file": "", "start": 0.0, "end": 0.0, "loop": False, "loop_start": 0.0,
-        "loop_end": 0.0, "loop_count": 0, "level_db": 0.0, "fade_in": 0.0,
+        "loop_end": 0.0, "loop_count": 0, "loop_xfade": 0.0, "level_db": 0.0, "fade_in": 0.0,
         "fade_out": 0.0, "curve": [],
         # video: curva di opacità [[secondi del file, opacità 0…1]] (come la curva di volume)
         "op_curve": [],

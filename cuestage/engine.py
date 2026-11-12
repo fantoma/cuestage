@@ -460,14 +460,33 @@ class RoutedVoice:
     voice = None
     _aud_override = None     # funzione(n_out) -> (livello dB, matrice dB, volumi uscite dB) oppure None
 
+    def _loop_xf(self):
+        """Crossfade del loop in campioni (solo cue audio: nel video l'immagine riparte secca)."""
+        if self.cue.type != "audio":
+            return 0
+        return int(max(0.0, float(getattr(self.cue, "loop_xfade", 0) or 0)) * SR)
+
+    def _calc_total(self):
+        v = self.voice
+        if v.looping_forever():
+            self._total = None
+        else:
+            n_loops = max(0, v.loops_left) if v.loop else 0
+            xf = min(v.loop_xf, (v.le - v.ls) // 2)
+            self._total = ((v.end - v.start) + n_loops * (v.le - v.ls - xf)) / SR
+
     def live_edit(self):
-        """Curva di volume e volume della cue cambiati mentre suona: valgono subito."""
+        """Curva di volume, volume, OUT, marcatori e crossfade del loop cambiati mentre suona: valgono subito."""
         v = self.voice
         if v is None:
             return
-        curve = curve_arrays(self.cue.curve)
+        c = self.cue
+        curve = curve_arrays(c.curve)
         lvl = _live_level(self)
         with self.ctrl.audio.lock:
+            v.set_bounds(c.end, self.loop_on, c.loop_start, c.loop_end)
+            v.loop_xf = self._loop_xf()
+            self._calc_total()
             v.curve = curve
             if lvl is not None:
                 if v.ramp is None:                  # rampa breve: nessun click cambiando il volume dal vivo
@@ -512,11 +531,8 @@ class RoutedVoice:
             v.env = 0.0
             v.ramp = None
         v.paused = paused
-        if v.looping_forever():
-            self._total = None
-        else:
-            n_loops = max(0, v.loops_left) if v.loop else 0
-            self._total = ((v.end - v.start) + n_loops * (v.le - v.ls)) / SR
+        v.loop_xf = self._loop_xf()
+        self._calc_total()
         self._route_sig = self._route_key()
         self.ctrl.audio.play(self.key, v, self._out_dev())
         return v

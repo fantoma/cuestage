@@ -306,7 +306,9 @@ class TimelineEditor(QWidget):
             p.setBrush(QBrush(col))
             p.setPen(Qt.NoPen)
             w = 26
-            box = QRectF(x - (w if name in ("end", "loop_end") else 0), 0, w, HANDLE_H - 2)
+            # IN/OUT in alto, marcatori del loop in basso: anche quando coincidono si prendono separatamente
+            top = r.bottom() - (HANDLE_H - 2) if name.startswith("loop") else 0
+            box = QRectF(x - (w if name in ("end", "loop_end") else 0), top, w, HANDLE_H - 2)
             p.drawRoundedRect(box, 3, 3)
             p.setPen(QColor(0, 0, 0))
             p.drawText(box, Qt.AlignCenter, lab)
@@ -721,11 +723,17 @@ class TimelineEditor(QWidget):
             if box.contains(pos) or (abs(x - pos.x()) < 5 and pos.y() > HANDLE_H):
                 return ("umark", i)
         best, bd = None, 7
+        bottom = self._plot().bottom()
         for name, (t, col, lab) in self._markers().items():
+            loop = name.startswith("loop")
             d = abs(self.t2x(t) - pos.x())
-            if pos.y() < HANDLE_H + 4:
+            on_box = (pos.y() > bottom - HANDLE_H) if loop else (pos.y() < HANDLE_H + 4)
+            if on_box:
                 d = min(d, abs(self.t2x(t) + (-13 if name in ("end", "loop_end") else 13) - pos.x()))
-            if d < bd:
+            elif (pos.y() < HANDLE_H + 4) if loop else (pos.y() > bottom - HANDLE_H):
+                d += 6                      # sull'etichetta dell'altro marcatore: vince quello
+            # a parità (marcatori sovrapposti) vince il loop: IN e OUT si prendono dall'etichetta in alto
+            if d < bd or (best is not None and d == bd and loop):
                 best, bd = ("marker", name), d
         return best
 

@@ -614,12 +614,34 @@ class AudioEngine:
 
     def _mix_voice(self, v, out, frames, C):
         idx = np.empty(frames, np.int64)
+        idx2 = None                      # crossfade del loop: posizione all'inizio del loop e peso (0→1)
         filled = 0
         p = v.pos
         while filled < frames:
             looping = v.loop and v.loops_left != 0
             seg_end = v.le if looping else v.end
-            take = min(frames - filled, seg_end - p)
+            xf = min(int(v.loop_xf), (v.le - v.ls) // 2) if looping else 0
+            xs = seg_end - xf
+            if xf > 0 and p >= xs:
+                # ultimi xf campioni del giro: la coda sfuma e l'inizio del loop entra
+                take = min(frames - filled, seg_end - p)
+                if take > 0:
+                    if idx2 is None:
+                        idx2 = np.full(frames, -1, np.int64)
+                        wgt = np.zeros(frames, np.float32)
+                    r = np.arange(p, p + take)
+                    idx[filled:filled + take] = r
+                    idx2[filled:filled + take] = v.ls + (r - xs)
+                    wgt[filled:filled + take] = (r - xs + 0.5) / xf
+                    p += take
+                    filled += take
+                    continue
+                if v.loops_left > 0:
+                    v.loops_left -= 1
+                p = v.ls + xf                    # l'inizio è già suonato durante il crossfade
+                v.wraps += 1
+                continue
+            take = min(frames - filled, (xs if xf > 0 else seg_end) - p)
             if take <= 0:
                 if looping:
                     if v.loops_left > 0:
@@ -672,6 +694,13 @@ class AudioEngine:
         if src.dtype == np.int16:
             src = src.astype(np.float32)
             g *= I16
+        if idx2 is not None:                 # crossfade del loop a potenza costante: coda ↘, inizio ↗
+            k = idx2[:filled] >= 0
+            if k.any():
+                head = v.data[idx2[:filled][k]].astype(np.float32)
+                wk = wgt[:filled][k][:, None] * (np.pi / 2)
+                src = src.astype(np.float32, copy=False)
+                src[k] = src[k] * np.cos(wk) + head * np.sin(wk)
         src *= g[:, None]
         m = v.mtx
         prev = v.mtx_prev
@@ -714,6 +743,7 @@ class Voice:
         if le - ls < 64:  # loop troppo corto: disattiva
             self.loop = False
         self.ls, self.le = ls, le
+        self.loop_xf = 0          # crossfade del loop (campioni): la ripetizione riparte morbida
         self.loops_left = (loop_count - 1) if loop_count and loop_count > 0 else -1
         self.pos = s
         self.played = 0
@@ -745,6 +775,20 @@ class Voice:
         self.mtx_prev = None
         return self.mtx
 
+    def set_bounds(self, end, loop, loop_start, loop_end):
+        """OUT e marcatori del loop cambiati mentre suona (secondi del file, 0 = OUT/IN): valgono subito.
+        Se la posizione è già oltre la nuova fine del loop, il giro riparte dall'inizio del loop."""
+        n = len(self.data)
+        e = int(end * SR) if end and end > 0 else n
+        e = min(max(e, self.start + 1), n)
+        ls = int(loop_start * SR) if loop_start and loop_start > 0 else self.start
+        le = int(loop_end * SR) if loop_end and loop_end > 0 else e
+        ls = min(max(ls, self.start), e)
+        le = min(max(le, ls + 1), e)
+        self.end = e
+        self.ls, self.le = ls, le
+        self.loop = bool(loop) and le - ls >= 64
+
     def set_mtx(self, m):
         """Nuova matrice; il mixer la raggiunge con una rampa sul blocco successivo."""
         m = np.asarray(m, np.float32)
@@ -762,21 +806,22 @@ class Voice:
         """Porta la voce a «t» secondi dall'avvio (loop compresi), come se suonasse da allora: fade d'ingresso
         già finito. Serve per allinearsi a un'altra istanza (ridondanza)."""
         n = max(0, int(t * SR))
-        first = self.le - self.start if self.loop else self.end - self.start
+        xf = min(int(self.loop_xf), (self.le - self.ls) // 2) if self.loop else 0
+        first = self.le - self.start - xf if self.loop else self.end - self.start
         if n < first:
             self.pos = self.start + n
-        elif self.loop and self.le - self.ls > 0:
+        elif self.loop and self.le - self.ls - xf > 0:
             k = n - first
-            span = self.le - self.ls
+            span = self.le - self.ls - xf                 # con il crossfade ogni giro riparte da ls + xf
             laps = k // span + 1
             if self.loops_left >= 0 and laps > self.loops_left:       # loop finiti: poi fino alla fine
                 rest = k - self.loops_left * span
                 self.loops_left = 0
-                self.pos = min(self.end, self.le + rest) if rest >= 0 else self.ls + k % span
+                self.pos = min(self.end, self.le + rest) if rest >= 0 else self.ls + xf + k % span
             else:
                 if self.loops_left > 0:
                     self.loops_left -= laps
-                self.pos = self.ls + k % span
+                self.pos = self.ls + xf + k % span
                 self.wraps += laps
         else:
             self.pos = self.end
