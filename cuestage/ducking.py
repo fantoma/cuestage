@@ -71,6 +71,14 @@ def list_input_devices():
         return []
 
 
+def _close_stream(st):
+    try:
+        st.stop()
+        st.close()
+    except Exception:
+        pass
+
+
 def find_input(dev_id):
     if not dev_id:
         return None
@@ -177,10 +185,32 @@ class Ducker:
             if not self.wanted():
                 self.close()
 
+    OPEN_TIMEOUT = 2.0
+
     def open(self):
-        from .audio_engine import sd
+        """Apre l'ingresso in un thread e aspetta al massimo OPEN_TIMEOUT: se la scheda (o PipeWire) non risponde
+        l'interfaccia non si blocca; l'ingresso, se poi si apre, entra in funzione da solo."""
         self.close()
         self.error = ""
+        self._gen = getattr(self, "_gen", 0) + 1
+        gen = self._gen
+        done = threading.Event()
+        res = [False]
+
+        def job():
+            try:
+                res[0] = self._open_now(gen)
+            finally:
+                done.set()
+        threading.Thread(target=job, daemon=True, name="ducking-open").start()
+        if not done.wait(self.OPEN_TIMEOUT):
+            self.error = tr("l'ingresso «{0}» non risponde: si riprova in sottofondo",
+                            (self.cfg.get("device") or "").split("|", 1)[-1] or tr("predefinito"))
+            return False
+        return res[0]
+
+    def _open_now(self, gen):
+        from .audio_engine import sd
         if sd is None:
             self.error = tr("PortAudio non installato")
             return False
@@ -206,27 +236,29 @@ class Ducker:
             # le schede «hw:» di ALSA accettano a volte solo tutti i canali insieme: si riprova così
             for n in dict.fromkeys((ch, max_ch)):
                 try:
-                    self.stream = sd.InputStream(samplerate=SR, channels=n, dtype="float32", blocksize=256,
-                                                 device=dev["index"] if dev else None, callback=self._cb)
-                    self.stream.start()
+                    st = sd.InputStream(samplerate=SR, channels=n, dtype="float32", blocksize=256,
+                                        device=dev["index"] if dev else None, callback=self._cb)
+                    st.start()
+                    if gen != self._gen:              # nel frattempo chiuso o riaperto: questo non serve più
+                        _close_stream(st)
+                        return False
+                    self.stream = st
+                    self.error = ""
                     return True
                 except Exception as e:
-                    self.stream = None
                     err = e
             raise err
         except Exception as e:
-            self.stream = None
-            self.error = tr("Impossibile aprire l'ingresso «{0}»: {1}", self.name, e)
+            if gen == self._gen:
+                self.error = tr("Impossibile aprire l'ingresso «{0}»: {1}", self.name, e)
             return False
 
     def close(self):
+        self._gen = getattr(self, "_gen", 0) + 1      # un'apertura ancora in corso non vale più
         s, self.stream = self.stream, None
         if s is not None:
-            try:
-                s.stop()
-                s.close()
-            except Exception:
-                pass
+            # chiusura in sottofondo: se la scheda non risponde l'interfaccia non si blocca
+            threading.Thread(target=_close_stream, args=(s,), daemon=True, name="ducking-close").start()
         self.env = 0.0
         self.hold_left = 0.0
         self.gate = False

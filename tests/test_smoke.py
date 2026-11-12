@@ -1994,6 +1994,44 @@ def t_column_widths(w):
     run(0.6)
 
 
+def t_ducking_open_nonblocking():
+    """Ingresso del ducking che non risponde (es. scheda bloccata): l'apertura non blocca l'interfaccia oltre
+    pochi secondi; se poi si apre entra in funzione, se nel frattempo è stato chiuso non resta aperto."""
+    from cuestage.ducking import Ducker
+    d = Ducker()
+    d.OPEN_TIMEOUT = 0.3
+    d.cfg = {"device": "", "channel": 1}
+
+    class FakeStream:
+        closed = False
+
+        def stop(self):
+            pass
+
+        def close(self):
+            FakeStream.closed = True
+
+    def slow(gen):
+        time.sleep(0.8)
+        if gen != d._gen:
+            FakeStream.closed = True
+            return False
+        d.stream = FakeStream()
+        return True
+    d._open_now = slow
+    t0 = time.monotonic()
+    assert d.open() is False and time.monotonic() - t0 < 0.6 and d.error
+    assert not d.listening
+    time.sleep(0.8)
+    assert d.listening                                     # aperto in sottofondo
+    d.close()
+    assert not d.listening
+    d.open()
+    d.close()                                              # chiuso mentre si apriva: non resta aperto
+    time.sleep(1.0)
+    assert not d.listening and FakeStream.closed
+
+
 def t_osc_profile():
     from cuestage.osc_profiles import render
     assert render("chamsys_magicq", "go", {"pb": 3}) == ("/pb/3/go", "1")
@@ -2769,6 +2807,7 @@ if __name__ == "__main__":
     check("loop: marcatori, caselle rispetto a IN/OUT, modifiche in riproduzione, crossfade", lambda: t_loop_edit(w))
     check("campo Volume: segue la linea rosa al cursore (curva e fade)", lambda: t_volume_field(w))
     check("lista: colonne ridimensionabili e larghezze ricordate", lambda: t_column_widths(w))
+    check("ducking: ingresso che non risponde non blocca l'interfaccia", t_ducking_open_nonblocking)
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))
