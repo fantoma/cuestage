@@ -30,20 +30,28 @@ if ! "$DEST/.venv/bin/pip" install python-rtmidi; then
   echo "!! python-rtmidi non installato: l'ingresso MIDI sarà disattivato (il resto funziona)."
 fi
 
-echo "==> Avviatore e voce di menu"
-mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications"
+echo "==> Avviatore, icona e voce di menu"
+mkdir -p "$HOME/.local/bin" "$HOME/.local/share/applications" "$HOME/.local/share/icons/hicolor/256x256/apps"
 ln -sf "$DEST/run.sh" "$HOME/.local/bin/cuestage"
+cp "$DIR/cuestage/icon.png" "$HOME/.local/share/icons/hicolor/256x256/apps/cuestage.png"
+# StartupWMClass e il nome del file (cuestage.desktop = setDesktopFileName nel programma) fanno sì che GNOME
+# riconosca la finestra di CueStage e ne mostri l'icona nella barra delle applicazioni (X11 e Wayland)
 cat > "$HOME/.local/share/applications/cuestage.desktop" <<DESK
 [Desktop Entry]
 Type=Application
 Name=CueStage
+GenericName=Show control
 Comment=Sistema di cue per spettacolo (audio, video, OSC, MIDI)
-Exec=$DEST/run.sh %f
-Icon=media-playback-start
+Exec="$DEST/run.sh" %f
+Icon=cuestage
 Terminal=false
+StartupNotify=true
+StartupWMClass=CueStage
 Categories=AudioVideo;Audio;Video;
+Keywords=cue;show;theatre;teatro;qlab;
 DESK
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
 
 # accesso alle porte MIDI ALSA
 if ! id -nG "$USER" | grep -qw audio; then
