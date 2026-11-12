@@ -2078,6 +2078,15 @@ def t_video_xfade_fades(w):
                                   Qt.LeftButton, Qt.NoModifier))
     tl.drag = None
     assert abs(v.v_fade_in - 1.0) < 0.05 and v.fade_in == 0.4, (v.v_fade_in, v.fade_in)
+    # quadratini rosa: i fade dell'audio del video
+    (axi, ayi), _o = tl._audio_handles()
+    assert tl._hit(QPointF(axi, ayi)) == ("afade_in",), tl._hit(QPointF(axi, ayi))
+    tl.drag = ("afade_in",)
+    tl.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, QPointF(tl.t2x(0.8), ayi), QPointF(0, 0), Qt.NoButton,
+                                  Qt.LeftButton, Qt.NoModifier))
+    tl.drag = None
+    assert abs(v.fade_in - 0.8) < 0.05 and abs(v.v_fade_in - 1.0) < 0.05, (v.fade_in, v.v_fade_in)
+    v.fade_in = 0.4
     # in riproduzione: audio e immagine con i loro fade
     v.loop_xfade_link, v.loop_xfade_video = False, 0.5
     w.ctrl.start_cue(v)

@@ -325,6 +325,7 @@ class TimelineEditor(QWidget):
             p.drawRoundedRect(box, 3, 3)
             p.setPen(QColor(0, 0, 0))
             p.drawText(box, Qt.AlignCenter, lab)
+        self._draw_fade_handles(p)
         # marker dell'utente
         self._umark_hits = []
         f2 = QFont()
@@ -508,9 +509,9 @@ class TimelineEditor(QWidget):
         video = self._video_mode()
         pts = sorted(c.curve or [])
         if self.duration > 0:
-            xs, xfi, xfo, xe, _y = self._env_points()
+            xs, xfi, _xfo, xe, _y = self._env_points()
         else:
-            xs, xfi, xfo, xe = 0.0, 0.0, float(W), float(W)
+            xs, xfi, xe = 0.0, 0.0, float(W)
         faint = QPen(QColor(255, 140, 220, 90), 1, Qt.DotLine)
         p.setBrush(Qt.NoBrush)
         p.setPen(faint)
@@ -540,12 +541,10 @@ class TimelineEditor(QWidget):
         p.setPen(Qt.NoPen)
         for t, db in pts:
             p.drawEllipse(QPointF(self.t2x(t), self.pt2y(db)), 4.5, 4.5)
-        if video or self.duration <= 0:
+        if self.duration <= 0:
             return
-        p.setPen(QPen(QColor(0, 0, 0, 160), 1))
-        yi, yo = self._handle_ys()
-        for x, hy in ((xfi, yi), (xfo, yo)):        # quadratini dei fade
-            p.drawRect(QRectF(x - 4, hy - 4, 8, 8))
+        if video:
+            return
         f = QFont()
         f.setPixelSize(10)
         f.setBold(True)
@@ -559,6 +558,36 @@ class TimelineEditor(QWidget):
         p.drawText(QPointF(xfi + 7, ty + 1), txt)
         p.setPen(C_CURVE)
         p.drawText(QPointF(xfi + 6, ty), txt)
+
+    def _draw_fade_handles(self, p):
+        """Quadratini rosa dei fade dell'audio: disegnati dopo i marcatori, così restano visibili anche quando
+        un fade è a zero (sopra la linea di IN o di OUT)."""
+        if self.cue is None or self.duration <= 0:
+            return
+        p.setPen(QPen(QColor(255, 255, 255, 220), 1.2))
+        p.setBrush(QBrush(C_CURVE))
+        if self._video_mode():
+            hs = self._audio_handles()
+            sz = 9
+        else:
+            xs, xfi, xfo, xe, _y = self._env_points()
+            yi, yo = self._handle_ys()
+            hs = [(xfi, yi), (xfo, yo)]
+            sz = 10
+        for x, hy in hs:
+            p.drawRect(QRectF(x - sz / 2, hy - sz / 2, sz, sz))
+
+    def _audio_handles(self):
+        """(x, y) dei quadratini dei fade dell'audio sulla linea rosa (fine fade in, inizio fade out)."""
+        c = self.cue
+        start = float(c.start or 0)
+        end = float(c.end) if c.end and c.end > 0 else float(self.duration or 0)
+        fi, fo = max(0.0, float(c.fade_in or 0)), max(0.0, float(c.fade_out or 0))
+        span = max(0.0, end - start)
+        if fi + fo > span > 0:
+            k = span / (fi + fo)
+            fi, fo = fi * k, fo * k
+        return [(self.t2x(start + fi), self._vol_y(start + fi)), (self.t2x(end - fo), self._vol_y(end - fo))]
 
     def fade_gain(self, t):
         """Guadagno dei fade al tempo t del file, come in riproduzione: fade in a curva S, fade out lineare."""
@@ -624,6 +653,12 @@ class TimelineEditor(QWidget):
             return ("fade_in",)
         if abs(pos.y() - yo) < 7 and abs(pos.x() - xfo) < 7:
             return ("fade_out",)
+        if self._video_mode():                      # quadratini rosa: fade dell'audio del video
+            (ax_i, ay_i), (ax_o, ay_o) = self._audio_handles()
+            if abs(pos.y() - ay_i) < 7 and abs(pos.x() - ax_i) < 7:
+                return ("afade_in",)
+            if abs(pos.y() - ay_o) < 7 and abs(pos.x() - ax_o) < 7:
+                return ("afade_out",)
         if self._video_mode() and self._curve_op(0.0) is not None:
             return None                     # con la curva dei punti l'opacità si regola con i punti
         if not self._video_mode():
@@ -854,7 +889,8 @@ class TimelineEditor(QWidget):
                     QToolTip.showText(e.globalPosition().toPoint(), tip, self)
                     break
             hit = self._hit(pos)
-            self.setCursor(Qt.SizeHorCursor if hit and hit[0] in ("marker", "fade_in", "fade_out", "umark", "kf")
+            self.setCursor(Qt.SizeHorCursor if hit and hit[0] in ("marker", "fade_in", "fade_out", "afade_in",
+                                                                 "afade_out", "umark", "kf")
                            else Qt.PointingHandCursor if hit and hit[0] == "opoint"
                            else Qt.SizeVerCursor if hit and hit[0] in ("opacity", "level", "seg")
                            else Qt.PointingHandCursor if hit else Qt.ArrowCursor)
@@ -911,6 +947,19 @@ class TimelineEditor(QWidget):
             _k, pt, ct0, ft0 = self.drag
             pt["t"] = round(max(0.0, ct0 + (t - ft0)), 2)
             QToolTip.showText(e.globalPosition().toPoint(), tr("keyframe — cue {0}", fmt_time(pt["t"])), self)
+            self.changed.emit()
+            self.update()
+            return
+        if kind in ("afade_in", "afade_out"):        # fade dell'audio di una cue video (quadratini rosa)
+            end = c.end if c.end > 0 else self.duration
+            span = max(0.0, end - c.start)
+            if kind == "afade_in":
+                c.fade_in = round(max(0.0, min(t - c.start, span - float(c.fade_out or 0))), 2)
+                tip = tr("Fade in audio {0:.2f} s", c.fade_in)
+            else:
+                c.fade_out = round(max(0.0, min(end - t, span - float(c.fade_in or 0))), 2)
+                tip = tr("Fade out audio {0:.2f} s", c.fade_out)
+            QToolTip.showText(e.globalPosition().toPoint(), tip, self)
             self.changed.emit()
             self.update()
             return

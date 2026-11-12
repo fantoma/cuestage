@@ -1768,6 +1768,8 @@
   "Mostra tutto": "Show all",
   "{0}: {1} — cue {2}": "{0}: {1} — cue {2}",
   "keyframe — cue {0}": "keyframe — cue {0}",
+  "Fade in audio {0:.2f} s": "Audio fade in {0:.2f} s",
+  "Fade out audio {0:.2f} s": "Audio fade out {0:.2f} s",
   "Fade in {0:.2f} s": "Fade in {0:.2f} s",
   "Aggiungi keyframe {0} qui": "Add {0} keyframe here",
   "Vai al marker": "Go to marker",

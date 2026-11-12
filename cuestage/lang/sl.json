@@ -1768,6 +1768,8 @@
   "Mostra tutto": "Prikaži vse",
   "{0}: {1} — cue {2}": "{0}: {1} — cue {2}",
   "keyframe — cue {0}": "ključna sličica — cue {0}",
+  "Fade in audio {0:.2f} s": "Vzpon zvoka {0:.2f} s",
+  "Fade out audio {0:.2f} s": "Upad zvoka {0:.2f} s",
   "Fade in {0:.2f} s": "Fade in {0:.2f} s",
   "Aggiungi keyframe {0} qui": "Dodaj ključno sličico ({0}) tukaj",
   "Vai al marker": "Pojdi na oznako",
