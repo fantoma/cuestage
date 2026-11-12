@@ -359,7 +359,7 @@
   "a OUT −": "a OUT −",
   "ripetizioni": "ripetizioni",
   "no": "no",
-  "Crossfade del loop: gli ultimi istanti del giro sfumano mentre entra il suono che precede l'inizio del loop, così ogni giro riparte morbido esattamente dall'inizio del loop. Vale anche mentre la cue suona.": "Crossfade del loop: gli ultimi istanti del giro sfumano mentre entra il suono che precede l'inizio del loop, così ogni giro riparte morbido esattamente dall'inizio del loop. Vale anche mentre la cue suona.",
+  "Crossfade del loop: quando il cursore arriva a fine loop − crossfade parte l'inizio del loop mentre la coda sfuma (ogni giro si accorcia di questo tempo). Vale anche mentre la cue suona.": "Crossfade del loop: quando il cursore arriva a fine loop − crossfade parte l'inizio del loop mentre la coda sfuma (ogni giro si accorcia di questo tempo). Vale anche mentre la cue suona.",
   "Precarica": "Precarica",
   "Tiene il video pronto in anticipo (file aperto, fermo sul primo fotogramma) quando la cue è vicina al playhead o nella pagina del GRID: parte subito. Nei loop un secondo lettore aspetta all'inizio del loop, così la ripetizione non ha attese. Toglilo per risparmiare memoria con molti video grandi.": "Tiene il video pronto in anticipo (file aperto, fermo sul primo fotogramma) quando la cue è vicina al playhead o nella pagina del GRID: parte subito. Nei loop un secondo lettore aspetta all'inizio del loop, così la ripetizione non ha attese. Toglilo per risparmiare memoria con molti video grandi.",
   "✕ curva opacità": "✕ curva opacità",

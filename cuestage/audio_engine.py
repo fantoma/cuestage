@@ -623,9 +623,7 @@ class AudioEngine:
             xf, pre = v.loop_xfade() if looping else (0, False)
             xs = seg_end - xf
             if xf > 0 and p >= xs:
-                # ultimi xf campioni del giro: la coda sfuma ed entra ciò che precede l'inizio del loop, così
-                # alla fine del giro si riparte esattamente dall'inizio del loop (senza materiale prima: entra
-                # l'inizio del loop e si riparte xf più avanti)
+                # a fine loop − xf parte l'inizio del loop mentre la coda sfuma; poi si continua da ls + xf
                 take = min(frames - filled, seg_end - p)
                 if take > 0:
                     if idx2 is None:
@@ -778,15 +776,13 @@ class Voice:
         return self.mtx
 
     def loop_xfade(self):
-        """(campioni di crossfade del loop, True se c'è abbastanza file prima dell'inizio del loop per farlo
-        senza spostare la ripartenza)."""
+        """(campioni di crossfade del loop, False): quando il cursore arriva a fine loop − crossfade l'inizio del
+        loop entra mentre la coda sfuma; finito il crossfade si continua da inizio loop + crossfade."""
         xf = min(int(self.loop_xf), (self.le - self.ls) // 2)
-        if xf <= 0:
-            return 0, False
-        return xf, self.ls >= xf
+        return (xf, False) if xf > 0 else (0, False)
 
     def lap_len(self):
-        """Campioni di un giro di loop (con il crossfade senza materiale prima del loop, un giro è più corto)."""
+        """Campioni di un giro di loop (con il crossfade un giro è più corto di quel tempo)."""
         xf, pre = self.loop_xfade()
         return self.le - self.ls - (0 if pre else xf)
 

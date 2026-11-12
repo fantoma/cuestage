@@ -585,9 +585,9 @@ class MediaTabsMixin:
             row.addWidget(QLabel(tr("crossfade")))
             xs = self._dspin("loop_xfade", 0, 60, 0.05, 2)
             xs.setSpecialValueText(tr("no"))
-            xs.setToolTip(tr("Crossfade del loop: gli ultimi istanti del giro sfumano mentre entra il suono che "
-                             "precede l'inizio del loop, così ogni giro riparte morbido esattamente dall'inizio del "
-                             "loop. Vale anche mentre la cue suona."))
+            xs.setToolTip(tr("Crossfade del loop: quando il cursore arriva a fine loop − crossfade parte l'inizio "
+                             "del loop mentre la coda sfuma (ogni giro si accorcia di questo tempo). Vale anche "
+                             "mentre la cue suona."))
             row.addWidget(xs)
         if cue.type == "video":
             pc = self._check("preload", tr("Precarica"))

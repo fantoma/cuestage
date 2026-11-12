@@ -359,7 +359,7 @@
   "a OUT −": "to OUT −",
   "ripetizioni": "repeats",
   "no": "no",
-  "Crossfade del loop: gli ultimi istanti del giro sfumano mentre entra il suono che precede l'inizio del loop, così ogni giro riparte morbido esattamente dall'inizio del loop. Vale anche mentre la cue suona.": "Loop crossfade: the last moments of each lap fade out while the sound just before the loop start fades in, so each lap restarts smoothly exactly at the loop start. Works while the cue is playing too.",
+  "Crossfade del loop: quando il cursore arriva a fine loop − crossfade parte l'inizio del loop mentre la coda sfuma (ogni giro si accorcia di questo tempo). Vale anche mentre la cue suona.": "Loop crossfade: when the cursor reaches loop end − crossfade, the loop start begins while the tail fades out (each lap gets shorter by this time). Works while the cue is playing too.",
   "Precarica": "Preload",
   "Tiene il video pronto in anticipo (file aperto, fermo sul primo fotogramma) quando la cue è vicina al playhead o nella pagina del GRID: parte subito. Nei loop un secondo lettore aspetta all'inizio del loop, così la ripetizione non ha attese. Toglilo per risparmiare memoria con molti video grandi.": "Keeps the video ready in advance (file open, paused on the first frame) when the cue is near the playhead or on the GRID page: it starts immediately. In loops a second player waits at the loop start, so the repeat has no delay. Turn it off to save memory with many large videos.",
   "✕ curva opacità": "✕ opacity curve",
