@@ -511,16 +511,10 @@ class TimelineEditor(QWidget):
         if x1 > x0:
             bottom = r.bottom()
             path = QPainterPath()
-            path.moveTo(x0, bottom if xfi > xs else self._vol_y(self.x2t(x0)))
+            path.moveTo(x0, bottom if xfi > xs else self._vol_draw_y(x0))
             x = x0
             while True:
-                f = 1.0
-                if xfi > xs and x < xfi:
-                    f = (x - xs) / (xfi - xs)
-                if xe > xfo and x > xfo:
-                    f = min(f, (xe - x) / (xe - xfo))
-                yv = self._vol_y(self.x2t(x))
-                path.lineTo(x, bottom - (bottom - yv) * max(0.0, f))
+                path.lineTo(x, self._vol_draw_y(x))
                 if x >= x1:
                     break
                 x = min(x1, x + 2.0)
@@ -550,19 +544,43 @@ class TimelineEditor(QWidget):
         p.setPen(C_CURVE)
         p.drawText(QPointF(xfi + 6, ty), txt)
 
+    def fade_gain(self, t):
+        """Guadagno dei fade al tempo t del file, come in riproduzione: fade in a curva S, fade out lineare."""
+        c = self.cue
+        if c is None:
+            return 1.0
+        start = float(c.start or 0)
+        end = float(c.end) if c.end and c.end > 0 else float(self.duration or 0)
+        fi, fo = max(0.0, float(c.fade_in or 0)), max(0.0, float(c.fade_out or 0))
+        span = max(0.0, end - start)
+        if fi + fo > span > 0:
+            k = span / (fi + fo)
+            fi, fo = fi * k, fo * k
+        g = 1.0
+        if fi > 0 and t < start + fi:
+            g = 0.5 - 0.5 * math.cos(math.pi * max(0.0, min(1.0, (t - start) / fi)))
+        if fo > 0 and end > 0 and t > end - fo:
+            g = min(g, max(0.0, min(1.0, (end - t) / fo)))
+        return g
+
+    def vol_db_at(self, t, fades=True):
+        """Volume (dB) che si sente al tempo t del file: volume della cue + curva dei punti (+ fade). −60 = −∞."""
+        c = self.cue
+        lv = float(c.level_db)
+        rel = self._curve_rel(t)
+        if lv <= MIN_DB or (rel is not None and rel <= MIN_DB + 0.01):
+            return MIN_DB
+        db = lv + (rel or 0.0)
+        if fades:
+            g = self.fade_gain(t)
+            if g <= 1e-4:
+                return MIN_DB
+            db += 20.0 * math.log10(g)
+        return max(MIN_DB, min(MAX_DB, db))
+
     def _vol_draw_y(self, x):
-        """y della linea rosa disegnata alla x (con i fade, dentro IN/OUT)."""
-        yv = self._vol_y(self.x2t(x))
-        if self.duration <= 0:
-            return yv
-        xs, xfi, xfo, xe, _y = self._env_points()
-        f = 1.0
-        if xfi > xs and xs <= x < xfi:
-            f = (x - xs) / (xfi - xs)
-        if xe > xfo and xfo < x <= xe:
-            f = min(f, (xe - x) / (xe - xfo))
-        bottom = self._plot().bottom()
-        return bottom - (bottom - yv) * max(0.0, f)
+        """y della linea rosa disegnata alla x: il volume che si sente, fade compresi (dentro IN/OUT)."""
+        return self.db2y(self.vol_db_at(self.x2t(x)))
 
     def _seg_hit(self, pos):
         """Clic sul tratto rettilineo della linea rosa: ("seg", indici dei punti che lo definiscono). Senza punti
@@ -764,6 +782,7 @@ class TimelineEditor(QWidget):
                 c = self.cue
                 orig = [float(c.curve[i][1]) for i in hit[1]] if hit[1] else [float(c.level_db)]
                 self.drag = ("seg", hit[1], self.y2db(pos.y()), orig)
+                self._move_cursor(pos.x())          # il campo Volume mostra il valore sotto il mouse
             elif hit:
                 self.drag = hit
             elif e.modifiers() & Qt.ControlModifier or pos.y() > HANDLE_H:
@@ -913,6 +932,7 @@ class TimelineEditor(QWidget):
             i = self.drag[1]
             if i < len(c.curve):
                 c.curve[i] = [t, self.y2pt(pos.y())]
+                self._move_cursor(self.t2x(t))     # il campo Volume segue il punto trascinato
                 eff = self.y2db(pos.y())
                 QToolTip.showText(e.globalPosition().toPoint(),
                                   tr("{0}  volume {1}", fmt_time(t), tr("−∞") if eff <= MIN_DB + 0.01

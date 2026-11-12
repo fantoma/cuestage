@@ -1914,6 +1914,52 @@ def t_loop_edit(w):
     w.show_data.dirty = False
 
 
+def t_volume_field(w):
+    """Campo Volume sotto il grafico: segue la linea rosa al cursore (curva e fade); cliccando un tratto o
+    trascinando un punto il cursore va lì; scrivendo un valore nel fade si tiene conto del fade."""
+    from PySide6.QtCore import QPoint, Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QDoubleSpinBox
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("audio", number="1", name="V", file=tone("volfield.wav", sec=8))
+    a.level_db, a.curve, a.fade_out = -6.0, [[2.0, 0.0], [6.0, -12.0]], 1.0
+    sh.cues = [a]
+    w._set_show(sh)
+    wait_until(lambda: w.loader.get_info(a.file) is not None, 10)
+    ins = w.inspector
+    ins.set_cue(a)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Tempi e loop"))
+    run(0.3)
+    tl = ins.timeline
+    tl.zoom_all()
+    sp = [x for x in ins.findChildren(QDoubleSpinBox) if x.isVisible() and x.suffix() == " dB"][0]
+    for t_, exp in ((1.0, -6.0), (4.0, -12.0), (6.5, -18.0)):
+        tl._move_cursor(tl.t2x(t_))
+        run(0.02)
+        assert abs(sp.value() - exp) < 0.2, (t_, sp.value(), exp)
+    tl._move_cursor(tl.t2x(7.5))                                       # metà del fade out: −6 dB in più
+    run(0.02)
+    assert abs(sp.value() - (-18.0 - 6.02)) < 0.3, sp.value()
+    assert abs(tl._vol_draw_y(tl.t2x(7.5)) - tl.db2y(sp.value())) < 1.0   # uguale alla linea rosa
+    sp.setValue(-20.0)                                                 # scritto nel fade: il punto tiene conto
+    assert abs(tl.vol_db_at(7.5) + 20.0) < 0.3, (tl.vol_db_at(7.5), a.curve)
+    a.curve = [[2.0, 0.0], [6.0, -12.0]]
+    tl.update()
+    x4 = int(round(tl.t2x(4.0)))
+    QTest.mousePress(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x4, int(round(tl._vol_draw_y(x4)))))
+    QTest.mouseRelease(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x4, int(round(tl._vol_draw_y(x4)))))
+    run(0.02)
+    assert abs(tl.cursor_t - 4.0) < 0.05 and abs(sp.value() + 12.0) < 0.3, (tl.cursor_t, sp.value())
+    x2 = int(round(tl.t2x(2.0)))
+    QTest.mousePress(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x2, int(round(tl.pt2y(0.0)))))
+    QTest.mouseMove(tl, QPoint(x2, int(round(tl.db2y(-16.0)))))
+    run(0.02)
+    assert abs(tl.cursor_t - 2.0) < 0.05 and abs(sp.value() + 16.0) < 0.6, (tl.cursor_t, sp.value())
+    QTest.mouseRelease(tl, Qt.LeftButton, Qt.NoModifier, QPoint(x2, int(round(tl.db2y(-16.0)))))
+    w.show_data.dirty = False
+
+
 def t_osc_profile():
     from cuestage.osc_profiles import render
     assert render("chamsys_magicq", "go", {"pb": 3}) == ("/pb/3/go", "1")
@@ -2687,6 +2733,7 @@ if __name__ == "__main__":
     check("MIDI out: MMC, clock e profilo Akai MPC", lambda: t_midi_profiles(w))
     check("curva di volume e volume cambiati mentre la cue suona", lambda: t_live_curve(w))
     check("loop: marcatori, caselle rispetto a IN/OUT, modifiche in riproduzione, crossfade", lambda: t_loop_edit(w))
+    check("campo Volume: segue la linea rosa al cursore (curva e fade)", lambda: t_volume_field(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))

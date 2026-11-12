@@ -845,8 +845,23 @@ class MediaTabsMixin:
             t = tl.cursor_t if tl is not None and tl.cursor_t is not None else None
             return float(cue.start or 0) if t is None else float(t)
 
+        def fade_db():
+            """Attenuazione dei fade al cursore (dB, ≤ 0), come la linea rosa; 0 dentro i fade profondi."""
+            tl = self.timeline
+            if kind != "volume" or tl is None or not tl.duration:
+                return 0.0
+            g = tl.fade_gain(cursor())
+            return 20.0 * np.log10(g) if 0.05 < g < 0.9999 else 0.0
+
+        def in_fade():
+            tl = self.timeline
+            return kind == "volume" and tl is not None and bool(tl.duration) and tl.fade_gain(cursor()) < 0.9999
+
         def value():
             p_ = sorted(pts())
+            tl = self.timeline
+            if kind == "volume" and tl is not None and tl.duration:
+                return tl.vol_db_at(cursor())           # come la linea rosa al cursore: curva e fade
             if kind == "volume":
                 lvl = float(cue.level_db)
                 if not p_:
@@ -862,17 +877,19 @@ class MediaTabsMixin:
             sp.setValue(value())
             sp.blockSignals(False)
             from ..media import fmt_time
-            if pts():
+            if pts() or in_fade():
                 lab.setText(tr("@ {0}", fmt_time(cursor())))
                 sp.setToolTip(tr("Valore della curva al cursore ({0}): modificandolo si sposta o si crea il punto al "
                                  "cursore", fmt_time(cursor())))
             else:
                 lab.setText("")
                 sp.setToolTip(tr("Volume della cue") if kind == "volume" else tr("Opacità della cue"))
-            lab.setVisible(bool(pts()))
+            lab.setVisible(bool(pts()) or in_fade())
 
         def changed(v):
             p_ = pts()
+            if kind == "volume" and v > MIN_DB + 0.01:
+                v = max(MIN_DB, min(MAX_DB, v - fade_db()))   # il valore mostrato comprende il fade
             if p_:
                 t = round(cursor(), 3)
                 if kind == "volume":
