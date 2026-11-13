@@ -2924,6 +2924,14 @@ def t_cluster_join_align():
             run(0.05)
         assert done == [True] and names(b) == ["Attesa", "Lunga"], (done, names(b))
         run(0.3)
+
+        def gap(c):
+            return abs(a.ctrl.instances[c.id].elapsed - b.ctrl.instances[c.id].elapsed)
+        # sulle macchine di prova lente (Windows in CI) la ridondanza può partire qualche decimo indietro:
+        # il riallineamento la riporta al punto del master entro pochi istanti
+        t0 = time.monotonic()
+        while any(gap(c) >= 0.5 for c in sh.cues) and time.monotonic() - t0 < 4:
+            run(0.05)
         for c in sh.cues:
             ea, eb = a.ctrl.instances[c.id].elapsed, b.ctrl.instances[c.id].elapsed
             # ea > 1: il master suona davvero (sulle macchine di prova senza scheda audio il tempo dell'audio
