@@ -85,6 +85,16 @@ def split_commands(payload):
     return out
 
 
+def no_udp_reset(sock):
+    """Windows: un pacchetto UDP verso una porta chiusa fa fallire la ricezione successiva con WinError 10054;
+    qui lo si disattiva (su Linux e macOS non serve)."""
+    if hasattr(socket, "SIO_UDP_CONNRESET"):
+        try:
+            sock.ioctl(socket.SIO_UDP_CONNRESET, False)
+        except (OSError, ValueError):
+            pass
+
+
 def cstr(b):
     return b.split(b"\0", 1)[0].decode("utf-8", "replace").strip()
 
@@ -96,6 +106,7 @@ class ATEMLink:
         self.addr = (host, port)
         self.sock = socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.settimeout(0.2)
+        no_udp_reset(self.sock)
         self.session = random.randint(0x0100, 0x7FFF)
         self.pid = 0
         self.lock = threading.Lock()
@@ -136,6 +147,8 @@ class ATEMLink:
                     data, _a = self.sock.recvfrom(2048)
                 except socket.timeout:
                     break
+                except ConnectionResetError:
+                    break                               # Windows: nessuno sulla porta (ICMP), si riprova
                 except OSError as e:
                     raise MixerError(tr("ATEM non raggiungibile su {0}: {1}", self.addr[0], e))
                 if len(data) >= 13 and (data[0] >> 3) & F_HELLO:
@@ -155,6 +168,8 @@ class ATEMLink:
                 if time.monotonic() - self.last_rx > TIMEOUT_LOST:
                     break
                 continue
+            except ConnectionResetError:
+                continue                        # Windows: «porta irraggiungibile» di un pacchetto precedente
             except OSError:
                 break
             if len(data) < 12:
@@ -493,6 +508,7 @@ class BlackmagicATEM(MixerDriver):
         try:
             s.bind(("0.0.0.0", 0))
             s.settimeout(0.1)
+            no_udp_reset(s)
             sess = random.randint(0x0100, 0x7FFF)
             pkt = header(F_HELLO, 12 + len(HELLO_PAYLOAD), sess) + HELLO_PAYLOAD
             for h in hosts:

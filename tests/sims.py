@@ -358,6 +358,8 @@ class ATEMSim:
         self.s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.s.bind(("127.0.0.1", port))
         self.s.settimeout(0.1)
+        if hasattr(socket, "SIO_UDP_CONNRESET"):            # Windows: niente WinError 10054 da client chiusi
+            self.s.ioctl(socket.SIO_UDP_CONNRESET, False)
         self.port = self.s.getsockname()[1]
         self.alive = True
         threading.Thread(target=self.loop, daemon=True).start()
@@ -458,6 +460,8 @@ class ATEMSim:
                 data, addr = self.s.recvfrom(4096)
             except socket.timeout:
                 continue
+            except ConnectionResetError:
+                continue                                           # Windows: un client se n'è andato
             except OSError:
                 break
             word, sess, ack, _x, _y, pid = st.unpack_from(">HHHHHH", data)
