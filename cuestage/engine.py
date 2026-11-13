@@ -337,6 +337,12 @@ def state_at(cue, T):
     return view
 
 
+def _goable(cue):
+    """La cue parte con il GO? No per «Solo trigger», per quelle che seguono la precedente e per i Memo, che
+    sono solo note per l'operatore (estetiche)."""
+    return cue.trigger == "manual" and cue.type != "memo"
+
+
 def _live_level(inst):
     """Volume della cue cambiato nell'ispettore da quando suona? → nuovo guadagno lineare, altrimenti None
     (così un Fade o un keyframe in corso non viene sovrascritto da una modifica alla sola curva)."""
@@ -2020,9 +2026,10 @@ class Controller(QObject):
         i = self.playhead_of(lst)
         if not (0 <= i < len(cues)):
             return
-        if cues[i].trigger == "trigger":          # «Solo trigger»: il GO la salta e avvia la prossima manuale
+        if cues[i].trigger == "trigger" or cues[i].type == "memo":
+            # «Solo trigger» o Memo (solo una nota): il GO la salta e avvia la prossima manuale
             j = i + 1
-            while j < len(cues) and cues[j].trigger != "manual":
+            while j < len(cues) and not _goable(cues[j]):
                 j += 1
             if j >= len(cues):
                 return
@@ -2045,7 +2052,7 @@ class Controller(QObject):
                 j = end                            # gli altri tipi: il GO successivo esce dal gruppo
         else:
             j = i + 1
-        while j < len(cues) and cues[j].trigger != "manual":
+        while j < len(cues) and not _goable(cues[j]):
             j += 1
         self.set_playhead(j, lst)
 
@@ -2085,9 +2092,9 @@ class Controller(QObject):
         """Avvia la cue in standby (e le sue «con la precedente») a volume/opacità zero."""
         cues = lst.cues
         i = self.playhead_of(lst)
-        while 0 <= i < len(cues) and cues[i].trigger == "trigger":     # «Solo trigger»: il crossfade la salta
+        while 0 <= i < len(cues) and not _goable(cues[i]):     # «Solo trigger» e Memo: il crossfade le salta
             i += 1
-            while i < len(cues) and cues[i].trigger != "manual":
+            while i < len(cues) and not _goable(cues[i]):
                 i += 1
         if not (0 <= i < len(cues)):
             return None

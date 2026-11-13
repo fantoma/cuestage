@@ -58,11 +58,25 @@ class GridMixin:
         self.grid.canvas.update()
 
     def grid_activate(self, cue, mode=None):
-        """Clic su una casella (o scorciatoia): avvia / ferma / riavvia secondo l'impostazione del PANEL."""
+        """Clic su una casella (o scorciatoia): avvia / ferma / riavvia secondo l'impostazione del PANEL, o
+        secondo il pulsante della cue (Toggle / Pushbutton)."""
         lst, _i = self.show_data.list_of(cue.id)
+        btn = getattr(cue, "grid_button", "") or ""
         if mode is None:
-            mode = lst.grid_click if (lst is not None and lst.is_grid) else "start"
+            mode = btn or (lst.grid_click if (lst is not None and lst.is_grid) else "start")
         ctrl = self.ctrl
+        if mode == "push":
+            # pushbutton: parte alla pressione e resta attiva finché il tasto è premuto (vedi grid_release)
+            if not hasattr(self, "_pushed"):
+                self._pushed = set()
+            if cue.id in self._pushed:
+                return                                   # ripetizione del tasto tenuto premuto
+            self._pushed.add(cue.id)
+            inst = ctrl.instances.get(cue.id)
+            if inst is None or inst.done:
+                ctrl.trigger(cue, cascade=False)
+            self.status(f"▶ {cue.label()}  " + tr("(pushbutton)"))
+            return
         inst = ctrl.instances.get(cue.id)
         active = (inst is not None and not inst.done) or any(p[1].id == cue.id for p in ctrl.pending)
         if mode == "toggle" and active:
@@ -75,6 +89,38 @@ class GridMixin:
             return
         ctrl.trigger(cue, cascade=False)
         self.status(f"▶ {cue.label()}")
+
+    def grid_set_button(self, cue, mode):
+        cue.grid_button = mode or ""
+        self.show_data.dirty = True
+        self._rebuild_hotkeys(force=True)
+        if self.inspector.cue is cue:
+            self.inspector.set_cue(cue)
+        if self._grid_list() is not None:
+            self.grid.canvas.update()
+
+    def grid_release(self, cue):
+        """Pushbutton rilasciato: la cue si ferma con il suo fade out (o quello del GRID) e, se impostata,
+        parte la cue «al rilascio»."""
+        pushed = getattr(self, "_pushed", set())
+        if cue is None or cue.id not in pushed:
+            return
+        pushed.discard(cue.id)
+        lst, _i = self.show_data.list_of(cue.id)
+        fade = float(getattr(cue, "fade_out", 0) or 0)
+        if fade <= 0:
+            fade = float(lst.grid_fade) if (lst is not None and lst.is_grid) else \
+                float(self.show_data.settings.get("stop_fade", 0.3))
+        self.ctrl.stop_cue(cue.id, fade)
+        rel = getattr(cue, "grid_release", "") or ""
+        tg = self.show_data.resolve_target(rel) if rel else None
+        if tg is not None and tg is not cue:
+            self.ctrl.trigger(tg, cascade=False)
+            self.status(f"■ {cue.label()}  ▶ {tg.label()}")
+        else:
+            self.status(f"■ {cue.label()}")
+        if self._grid_list() is not None:
+            self.grid.canvas.update()
 
     def grid_move(self, cue, cell):
         lst = self._grid_list()
@@ -239,7 +285,7 @@ class GridMixin:
         self.status(tr("Scorciatoia {0} → {1}", key, cue.label()) if key else tr("Scorciatoia tolta da {0}", cue.label()))
 
     def _rebuild_hotkeys(self, force=False):
-        sig = tuple((c.id, field, getattr(c, field)) for c in self.show_data.all_cues()
+        sig = tuple((c.id, field, getattr(c, field), getattr(c, "grid_button", "")) for c in self.show_data.all_cues()
                     for field in ("hotkey", "group_tap_key") if getattr(c, field, ""))
         if not force and sig == getattr(self, "_hotkey_sig", None):
             return
@@ -249,8 +295,10 @@ class GridMixin:
             s.setParent(None)
             s.deleteLater()
         self._hotkey_objs = {}
+        self._push_keys = {}
+        self._install_push_filter()
         reserved = None
-        for cid, field, key in sig:
+        for cid, field, key, _btn in sig:
             ks = QKeySequence.fromString(key, QKeySequence.PortableText)
             if ks.isEmpty():
                 continue
@@ -264,8 +312,32 @@ class GridMixin:
                 s.setAutoRepeat(False)          # tenere premuto non deve battere il tempo
                 s.activated.connect(lambda cid=cid: self.ctrl.group_tap(cid))
             else:
+                c_ = self.show_data.by_id(cid)
+                if c_ is not None and getattr(c_, "grid_button", "") == "push":
+                    s.setAutoRepeat(False)      # pushbutton: tenere premuto non deve ripartire
+                    self._push_keys = getattr(self, "_push_keys", {})
+                    self._push_keys[cid] = ks[0].key()
                 s.activated.connect(lambda cid=cid: self._hotkey_fired(cid))
             self._hotkey_objs[(cid, field)] = s
+
+    def _install_push_filter(self):
+        """Filtro sui tasti rilasciati: il rilascio della scorciatoia di un pushbutton ferma la cue."""
+        if getattr(self, "_push_filter", None) is not None:
+            return
+        from PySide6.QtCore import QEvent, QObject
+        from PySide6.QtWidgets import QApplication
+        mw = self
+
+        class _PushFilter(QObject):
+            def eventFilter(self, obj, ev):
+                if ev.type() == QEvent.KeyRelease and not ev.isAutoRepeat():
+                    keys = getattr(mw, "_push_keys", {}) or {}
+                    for cid, k in list(keys.items()):
+                        if ev.key() == k and cid in getattr(mw, "_pushed", set()):
+                            mw.grid_release(mw.show_data.by_id(cid))
+                return False
+        self._push_filter = _PushFilter(self)
+        QApplication.instance().installEventFilter(self._push_filter)
 
     def _hotkey_fired(self, cue_id):
         cue = self.show_data.by_id(cue_id)

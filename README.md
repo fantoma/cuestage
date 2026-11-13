@@ -128,7 +128,7 @@ The web interface for phones and tablets and the start-up self-test messages are
 | **Projector** | Command to a network video projector: power, shutter, input, freeze, lens, lens memory, specific commands (PJLink driver or plugin) |
 | **Close full screen** | The video output window leaves full screen and stays open as a window on the same screen, or is hidden (“Also hide the output window”); the “Full screen” setting does not change |
 | **Wait** | Timed pause, useful in chains |
-| **Memo** | Note for the operator |
+| **Memo** | Note for the operator: only for show; GO skips it (the playhead never stops on a Memo) |
 
 ## Cue lists: MAIN and PANEL
 
@@ -178,6 +178,10 @@ PANEL › “Show as grid” (and “Show as list” to go back: the cues stay t
 - **Click** on a tile: *start / stop* (default), *restart from the beginning* or *start (does nothing if already
   active)*. The active tile has a green border, the progress bar and the remaining time; in pre-wait the border
   is amber.
+- **Button** of each tile (right-click › Button, or the Trigger tab of the inspector): *same as the PANEL*,
+  **Toggle** (press = start, press again = stop) or **Pushbutton**: the cue starts when the tile (or its keyboard
+  shortcut) is pressed and stays active while it is held; on release it stops with its fade out (or the GRID fade)
+  and, if set, **another cue starts on release** (“On release start”). The tile shows a PUSH / TOGGLE label.
 - With **⚙ Options** open: click = select (inspector) · drag = move (onto an occupied tile the two cues swap) ·
   double-click an empty tile = new cue · drag audio/video files from the file manager onto a tile = new cues
   starting from there.

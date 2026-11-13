@@ -527,11 +527,11 @@ def t_inspector_layout(w):
     w.go()
     run(0.2)
     assert a.id in w.ctrl.instances and t.id not in w.ctrl.instances
-    assert w.ctrl.playhead == 2, w.ctrl.playhead              # dopo «A» la prossima manuale è «B»
-    w.ctrl.set_playhead(1)                                     # in standby la cue «Solo trigger»: GO avvia «B»
+    assert w.ctrl.playhead == 3, w.ctrl.playhead              # dopo «A» il Memo «B» si salta: tocca a «V»
+    w.ctrl.set_playhead(1)                                     # in standby la «Solo trigger»: GO avvia «V»
     w.go()
     run(0.2)
-    assert t.id not in w.ctrl.instances and w.ctrl.playhead == 3
+    assert t.id not in w.ctrl.instances and v.id in w.ctrl.instances and w.ctrl.playhead == 4
     w.ctrl.trigger(t, cascade=True)                            # parte con un trigger
     run(0.2)
     assert t.id in w.ctrl.instances
@@ -2241,6 +2241,95 @@ def t_rotation(w):
     w.show_data.dirty = False
 
 
+def t_grid_push_toggle(w):
+    """Pulsanti del GRID: Pushbutton (attiva finché premuto, al rilascio stop con il fade out e cue «al rilascio»,
+    anche da scorciatoia) e Toggle; etichetta sulla casella e scelta nell'ispettore."""
+    from PySide6.QtCore import QEvent, Qt
+    from PySide6.QtGui import QKeyEvent
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    w._set_show(sh)
+    run(0.2)
+    w.add_panel("grid")
+    run(0.2)
+    lst = w.show_data.current
+    w.grid_add_files([tone(f"push{i}.wav", sec=8, freq=300 + 80 * i) for i in range(3)], [0, 0, 0])
+    run(0.2)
+    a, b, c = lst.cues[:3]
+    w.grid.set_editing(False)
+
+    def alive(cue):
+        i = w.ctrl.instances.get(cue.id)
+        return i is not None and not i.done and not getattr(i, "user_stopped", False)
+    a.fade_out = 0.4
+    w.grid_set_button(a, "push")
+    a.grid_release = b.id
+    cv = w.grid.canvas
+    r = cv.cell_rect(*a.grid_pos[1:]).center().toPoint()
+    QTest.mousePress(cv, Qt.LeftButton, Qt.NoModifier, r)
+    run(0.3)
+    assert alive(a) and not alive(b)
+    QTest.mousePress(cv, Qt.LeftButton, Qt.NoModifier, r)          # ripetizione mentre è premuto: niente
+    run(0.1)
+    assert alive(a)
+    QTest.mouseRelease(cv, Qt.LeftButton, Qt.NoModifier, r)
+    run(0.1)
+    ia = w.ctrl.instances.get(a.id)
+    assert ia is not None and ia.user_stopped                          # si ferma con il fade out
+    assert wait_until(lambda: alive(b), 3)                              # e parte la cue «al rilascio»
+    assert wait_until(lambda: a.id not in w.ctrl.instances or w.ctrl.instances[a.id].done, 3)
+    w.ctrl.stop_all(0)
+    run(0.3)
+    # da scorciatoia: premuto = attiva, rilasciato = stop
+    w.set_hotkey(a, "Q")
+    run(0.1)
+    w._hotkey_fired(a.id)
+    run(0.2)
+    assert alive(a)
+    QApplication.sendEvent(w, QKeyEvent(QEvent.KeyRelease, Qt.Key_Q, Qt.NoModifier))
+    run(0.1)
+    assert w.ctrl.instances[a.id].user_stopped
+    w.ctrl.stop_all(0)
+    run(0.3)
+    # Toggle: premi = avvia, premi di nuovo = ferma
+    lst.grid_click = "start"
+    w.grid_set_button(c, "toggle")
+    w.grid_activate(c)
+    run(0.2)
+    assert alive(c)
+    w.grid_activate(c)
+    run(0.1)
+    assert not alive(c)
+    w.ctrl.stop_all(0)
+    run(0.2)
+    w.show_data.dirty = False
+
+
+def t_memo_skip(w):
+    """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("audio", number="1", name="A", file=tone("memo_a.wav", sec=3))
+    m = Cue("memo", number="2", name="Nota")
+    b = Cue("audio", number="3", name="B", file=tone("memo_b.wav", sec=3))
+    m2 = Cue("memo", number="4", name="Nota 2")
+    sh.cues = [m2, a, m, b]
+    w._set_show(sh)
+    w.ctrl.set_playhead(0)
+    w.go()                                                  # playhead sul Memo: parte A
+    run(0.2)
+    assert a.id in w.ctrl.instances and m2.id not in w.ctrl.instances
+    assert w.ctrl.playhead == 3, w.ctrl.playhead            # dopo A il playhead salta il Memo e va su B
+    w.go()
+    run(0.2)
+    assert b.id in w.ctrl.instances and m.id not in w.ctrl.instances
+    w.ctrl.stop_all(0)
+    run(0.2)
+    w.show_data.dirty = False
+
+
 def t_osc_profile():
     from cuestage.osc_profiles import render
     assert render("chamsys_magicq", "go", {"pb": 3}) == ("/pb/3/go", "1")
@@ -2765,9 +2854,9 @@ def t_cluster_perms_chat():
         sh.settings["output_fullscreen"] = False
         sh.cues = [Cue("audio", number="1", name="Main", file=tone("pm_main.wav", 0.5))]
         p1 = sh.add_panel("Luci")
-        p1.cues.append(Cue("audio", number="2", name="Panel", file=tone("pm_panel.wav", 0.5)))
+        p1.cues.append(Cue("audio", number="2", name="Panel", file=tone("pm_panel.wav", 4)))
         p2 = sh.add_panel("Effetti", kind="grid")
-        p2.cues.append(Cue("audio", number="3", name="Grid", file=tone("pm_grid.wav", 0.5)))
+        p2.cues.append(Cue("audio", number="3", name="Grid", file=tone("pm_grid.wav", 4)))
         sh.save(os.path.join(TMP, "perm.cueshow"))
         sh = Show.load(os.path.join(TMP, "perm.cueshow"))
         sh.settings["output_fullscreen"] = False
@@ -3021,6 +3110,8 @@ if __name__ == "__main__":
     check("«Volumi uscite a 0 dB»: volume della cue e uscite a 0 dB", lambda: t_levels_zero(w))
     check("cue «Chiudi schermo intero»", lambda: t_fsclose(w))
     check("rotazione di video e immagini", lambda: t_rotation(w))
+    check("GRID: pulsanti Pushbutton e Toggle, cue al rilascio", lambda: t_grid_push_toggle(w))
+    check("le cue Memo non partono con il GO", lambda: t_memo_skip(w))
     check("WAV letti anche senza ffmpeg", t_wav_without_ffmpeg)
     check("lingue: italiano, inglese, sloveno", t_languages)
     check("ispettore: tab, preset audio+video, Solo trigger, dimensione, deformazione, crop con Ctrl", lambda: t_inspector_layout(w))

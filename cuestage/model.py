@@ -100,7 +100,10 @@ class Cue:
         "file": "", "start": 0.0, "end": 0.0, "loop": False, "loop_start": 0.0,
         "loop_end": 0.0, "loop_count": 0, "loop_xfade": 0.0, "loop_stop": False,
         # video: crossfade del loop e fade dell'immagine separati dall'audio (di serie uguali all'audio)
-        "loop_xfade_video": 0.0, "loop_xfade_link": True, "fs_hide": False, "v_fade_in": 0.0, "v_fade_out": 0.0, "fade_link": True, "level_db": 0.0, "fade_in": 0.0,
+        "loop_xfade_video": 0.0, "loop_xfade_link": True, "fs_hide": False,
+        # pulsante del GRID e della scorciatoia: "" = come il PANEL, "toggle", "push" (attiva finché premuto);
+        # in «push» al rilascio si può avviare un'altra cue
+        "grid_button": "", "grid_release": "", "v_fade_in": 0.0, "v_fade_out": 0.0, "fade_link": True, "level_db": 0.0, "fade_in": 0.0,
         "fade_out": 0.0, "curve": [],
         # video: curva di opacità [[secondi del file, opacità 0…1]] (come la curva di volume)
         "op_curve": [],

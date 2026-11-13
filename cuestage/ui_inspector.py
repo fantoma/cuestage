@@ -152,7 +152,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         w.currentIndexChanged.connect(lambda i: (setattr(cue, attr, w.itemData(i)), self._emit()))
         return w
 
-    def _target_combo(self, on_change=None):
+    def _target_combo(self, on_change=None, attr="target"):
         w = QComboBox()
         w.setEditable(True)
         w.addItem("", "")
@@ -169,18 +169,19 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
                 ref = num if num and nums.get(num) == 1 else c.id     # numero ambiguo: si usa l'id
                 where = "" if lst.is_main else f"[{lst.name}] "
                 w.addItem(f"{where}{c.number or '·'} – {c.name or TYPE_LABELS[c.type]}", ref)
-        tg = self.show_fn().resolve_target(cue.target)
+        cur = getattr(cue, attr, "") or ""
+        tg = self.show_fn().resolve_target(cur) if cur else None
         if tg is not None:
             i = w.findData(tg.number or tg.id)
             if i < 0:
                 i = w.findData(tg.id)
             w.setCurrentIndex(max(0, i))
         else:
-            w.setEditText(cue.target)
+            w.setEditText(cur)
 
         def changed(i):
             d = w.itemData(i)
-            cue.target = d if d is not None else w.currentText()
+            setattr(cue, attr, d if d is not None else w.currentText())
             self._emit()
             if on_change:
                 on_change()
@@ -189,9 +190,9 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
             txt = w.currentText().strip()
             i = w.findText(txt)
             new = w.itemData(i) if i >= 0 else txt.split(" – ")[0]
-            if new == cue.target:
+            if new == getattr(cue, attr, ""):
                 return
-            cue.target = new
+            setattr(cue, attr, new)
             self._emit()
             if on_change:
                 on_change()
@@ -547,6 +548,26 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
             f.addRow(label, row)
         f.addRow(tr("Trigger OSC"), self._line("osc_trigger", tr("es. /scena/1  (oltre a /cue/<numero>/start)")))
         f.addRow(tr("Scorciatoia"), self._hotkey_row(cue))
+        # pulsante del GRID (e della scorciatoia): toggle o pushbutton, con la cue da avviare al rilascio
+        bm = QComboBox()
+        for val, lab in (("", tr("come il PANEL (Opzioni del GRID)")), ("toggle", tr("Toggle: premi = avvia, premi di nuovo = ferma")),
+                         ("push", tr("Pushbutton: attiva finché è premuto, al rilascio si ferma (fade out)"))):
+            bm.addItem(lab, val)
+        bm.setCurrentIndex(max(0, bm.findData(getattr(cue, "grid_button", "") or "")))
+        rel_row = QWidget()
+        rh = QHBoxLayout(rel_row)
+        rh.setContentsMargins(0, 0, 0, 0)
+        rh.addWidget(self._target_combo(attr="grid_release"), 1)
+        rel_row.setToolTip(tr("Pushbutton: al rilascio del tasto parte anche questa cue (vuoto = nessuna)"))
+
+        def bm_changed(i):
+            cue.grid_button = bm.itemData(i) or ""
+            rel_row.setEnabled(cue.grid_button == "push")
+            self._emit()
+        bm.currentIndexChanged.connect(bm_changed)
+        rel_row.setEnabled((getattr(cue, "grid_button", "") or "") == "push")
+        f.addRow(tr("Pulsante"), bm)
+        f.addRow(tr("Al rilascio avvia"), rel_row)
         from .model import EVENT_LABELS
         from PySide6.QtWidgets import QCheckBox
         for label, keys in ((tr("Ducking"), ("duck_on", "duck_off")),

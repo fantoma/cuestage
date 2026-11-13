@@ -171,6 +171,19 @@ class GridCanvas(QWidget):
             p.setPen(fg)
             p.drawText(badge, Qt.AlignCenter, hk)
             right = badge.left() - 4
+        btn = getattr(cue, "grid_button", "") or ""
+        if btn in ("push", "toggle"):
+            # modalità del pulsante: PUSH (attiva finché premuto) o TOGGLE
+            lab = "PUSH" if btn == "push" else "TOGGLE"
+            fm = p.fontMetrics()
+            w = fm.horizontalAdvance(lab) + 10
+            badge = QRect(int(right) - w, inner.top(), w, fm.height() + 2)
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor(255, 140, 40, 150) if btn == "push" else QColor(0, 0, 0, 90))
+            p.drawRoundedRect(badge, 4, 4)
+            p.setPen(fg)
+            p.drawText(badge, Qt.AlignCenter, lab)
+            right = badge.left() - 4
         if self._pfl_on and cue.type in PFL_TYPES:
             # pulsante PFL dentro la casella: manda la cue al preascolto (clic sul pulsante, non avvia la cue)
             fm = p.fontMetrics()
@@ -220,6 +233,7 @@ class GridCanvas(QWidget):
             return
         if cue is not None:
             self.panel.mw.grid_activate(cue)
+            self.press_cue = cue if (getattr(cue, "grid_button", "") or "") == "push" else None
             self.panel.mw.grid_select(cue, move_playhead=False)
             self.update()
 
@@ -243,6 +257,10 @@ class GridCanvas(QWidget):
             self.update()
 
     def mouseReleaseEvent(self, e):
+        pc = getattr(self, "press_cue", None)
+        if pc is not None and e.button() == Qt.LeftButton:
+            self.press_cue = None
+            self.panel.mw.grid_release(pc)        # pushbutton: rilasciato (anche fuori dalla casella)
         if self.drag_from is not None:
             cue = self.drag_from[0]
             target = self.drag_over
@@ -669,6 +687,13 @@ class GridPanel(QWidget):
         cm.addSeparator()
         cm.addAction(tr("Altro colore…"), lambda: self.pick_color(cue))
         cm.addAction(tr("Nessun colore"), lambda: mw.grid_set_color(cue, ""))
+        bm = m.addMenu(tr("Pulsante"))
+        for val, lab in (("", tr("Come il PANEL")), ("toggle", tr("Toggle (premi = avvia, di nuovo = ferma)")),
+                         ("push", tr("Pushbutton (attiva finché premuto)"))):
+            a = bm.addAction(lab)
+            a.setCheckable(True)
+            a.setChecked((getattr(cue, "grid_button", "") or "") == val)
+            a.triggered.connect(lambda _=False, val=val: mw.grid_set_button(cue, val))
         m.addAction(tr("Impara scorciatoia da tastiera…"), lambda: mw.learn_hotkey(cue))
         a = m.addAction(tr("Togli scorciatoia"), lambda: mw.set_hotkey(cue, ""))
         a.setEnabled(bool(cue.hotkey))
