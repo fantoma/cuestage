@@ -137,6 +137,17 @@ def midi_spec(msg):
     return None
 
 
+def midi_release(msg):
+    """Rilascio di un tasto: Note Off (o Note On con velocità 0) e CC a 0 -> spec normalizzata (o None).
+    Serve ai pulsanti Pushbutton: la cue avviata dal Note On si ferma con il Note Off della stessa nota."""
+    t = msg.type
+    if t == "note_off" or (t == "note_on" and msg.velocity == 0):
+        return f"note {msg.channel + 1} {msg.note}"
+    if t == "control_change" and msg.value == 0:
+        return f"cc {msg.channel + 1} {msg.control}"
+    return None
+
+
 def midi_control(msg):
     """Controlli continui: (spec, valore 0..1) oppure None.
     cc = control change (fader, potenziometri) · pb = pitch bend (fader motorizzati, 14 bit) ·
@@ -301,6 +312,7 @@ class MidiInput(QObject):
     """Una o più porte MIDI in ingresso, aperte insieme. I messaggi portano il nome della porta."""
     message = Signal(str, str)          # spec normalizzata («note 1 60»), porta
     control = Signal(str, float, str)   # controllo continuo: spec, valore 0..1, porta
+    release = Signal(str, str)          # tasto rilasciato (Note Off / CC 0): spec, porta
     status = Signal(str)
 
     def __init__(self):
@@ -385,6 +397,9 @@ class MidiInput(QObject):
         s = midi_spec(msg)
         if s:
             self.message.emit(s, port_name)
+        r = midi_release(msg)
+        if r and not self.learning:
+            self.release.emit(r, port_name)
         c = midi_control(msg)
         if c:
             self.control.emit(c[0], float(c[1]), port_name)

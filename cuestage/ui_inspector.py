@@ -554,6 +554,8 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
                          ("push", tr("Pushbutton: attiva finché è premuto, al rilascio si ferma (fade out)"))):
             bm.addItem(lab, val)
         bm.setCurrentIndex(max(0, bm.findData(getattr(cue, "grid_button", "") or "")))
+        bm.setToolTip(tr("Pushbutton con trigger MIDI: il Note On avvia la cue e il Note Off della stessa nota "
+                         "la ferma (con un CC: valore 0 = rilascio)"))
         rel_row = QWidget()
         rh = QHBoxLayout(rel_row)
         rh.setContentsMargins(0, 0, 0, 0)

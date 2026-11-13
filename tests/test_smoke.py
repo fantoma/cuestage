@@ -2293,6 +2293,38 @@ def t_grid_push_toggle(w):
     assert w.ctrl.instances[a.id].user_stopped
     w.ctrl.stop_all(0)
     run(0.3)
+    # da MIDI: il Note On avvia, il Note Off della stessa nota (o Note On a velocità 0) ferma, senza configurare altro
+    try:
+        import mido
+    except ImportError:
+        mido = None
+    if mido is not None:
+        a.grid_release = ""
+        a.midi = "note 1 60"
+        for off in (mido.Message("note_off", channel=0, note=60),
+                    mido.Message("note_on", channel=0, note=60, velocity=0)):
+            w.midi._cb(mido.Message("note_on", channel=0, note=60, velocity=100), "")
+            run(0.2)
+            assert alive(a)
+            w.midi._cb(mido.Message("note_off", channel=0, note=61), "")        # altra nota: niente
+            run(0.1)
+            assert alive(a)
+            w.midi._cb(off, "")
+            run(0.1)
+            assert w.ctrl.instances[a.id].user_stopped
+            w.ctrl.stop_all(0)
+            run(0.3)
+        # con un CC: valore > 0 = premuto, 0 = rilasciato
+        a.midi = "cc 1 20"
+        w.midi._cb(mido.Message("control_change", channel=0, control=20, value=127), "")
+        run(0.2)
+        assert alive(a)
+        w.midi._cb(mido.Message("control_change", channel=0, control=20, value=0), "")
+        run(0.1)
+        assert w.ctrl.instances[a.id].user_stopped
+        w.ctrl.stop_all(0)
+        run(0.3)
+        a.midi = ""
     # Toggle: premi = avvia, premi di nuovo = ferma
     lst.grid_click = "start"
     w.grid_set_button(c, "toggle")

@@ -184,6 +184,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.osc.status.connect(self.status)
         self.midi.message.connect(self._midi_message)
         self.midi.control.connect(self._midi_control)
+        self.midi.release.connect(self._midi_release)
         self._ctl_status_t = 0.0
         self.midi.status.connect(self.status)
 

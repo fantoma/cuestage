@@ -182,6 +182,9 @@ PANEL › “Show as grid” (and “Show as list” to go back: the cues stay t
   **Toggle** (press = start, press again = stop) or **Pushbutton**: the cue starts when the tile (or its keyboard
   shortcut) is pressed and stays active while it is held; on release it stops with its fade out (or the GRID fade)
   and, if set, **another cue starts on release** (“On release start”). The tile shows a PUSH / TOGGLE label.
+  A Pushbutton cue with a **MIDI trigger** works the same way from a controller: the *Note On* starts it and the
+  *Note Off* of the same note (or Note On with velocity 0) releases it — no extra configuration; with a CC trigger,
+  value 0 is the release.
 - With **⚙ Options** open: click = select (inspector) · drag = move (onto an occupied tile the two cues swap) ·
   double-click an empty tile = new cue · drag audio/video files from the file manager onto a tile = new cues
   starting from there.

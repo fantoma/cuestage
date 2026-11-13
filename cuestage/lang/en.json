@@ -1525,6 +1525,7 @@
   "Trigger MIDI": "MIDI trigger",
   "Trigger OSC": "OSC trigger",
   "Scorciatoia": "Shortcut",
+  "Pushbutton con trigger MIDI: il Note On avvia la cue e il Note Off della stessa nota la ferma (con un CC: valore 0 = rilascio)": "Pushbutton with a MIDI trigger: Note On starts the cue and the Note Off of the same note stops it (with a CC: value 0 = release)",
   "Pushbutton: al rilascio del tasto parte anche questa cue (vuoto = nessuna)": "Pushbutton: when the button is released this cue starts too (empty = none)",
   "Al rilascio avvia": "On release start",
   "Ducking: la cue parte quando l'ingresso del ducking (Impostazioni › Ducking) supera la soglia o torna sotto (dopo l'hold). Slave: parte su questa istanza secondaria quando il master non risponde più o quando diventa indipendente.": "Ducking: the cue starts when the ducking input (Settings › Ducking) goes above the threshold or back below it (after the hold). Slave: it starts on this secondary instance when the master stops responding or when it becomes independent.",

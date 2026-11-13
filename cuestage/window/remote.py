@@ -247,6 +247,14 @@ class RemoteMixin:
                 else:
                     self.midi.close()
 
+    def _midi_release(self, spec, port=""):
+        """Note Off (o CC a 0): rilascia i pulsanti Pushbutton avviati dal Note On della stessa nota."""
+        if self.learn_dialog is not None:
+            return
+        for c in self.show_data.all_cues():
+            if (getattr(c, "grid_button", "") or "") == "push" and c.midi and spec_matches(c.midi, spec, port):
+                self.grid_release(c)
+
     def _midi_message(self, spec, port=""):
         if self.learn_dialog is not None:
             if getattr(self.learn_dialog, "mode", "trigger") == "trigger":
@@ -270,5 +278,9 @@ class RemoteMixin:
                 return
         for c in self.show_data.all_cues():
             if c.midi and spec_matches(c.midi, spec, port):
-                self.ctrl.trigger(c, cascade=True)
+                if (getattr(c, "grid_button", "") or "") == "push":
+                    # pushbutton: attiva finché il tasto MIDI è tenuto (il Note Off la ferma, vedi _midi_release)
+                    self.grid_activate(c, "push")
+                else:
+                    self.ctrl.trigger(c, cascade=True)
                 self.status(tr("MIDI ← {0}: cue {1}", spec, c.label()))

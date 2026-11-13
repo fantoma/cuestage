@@ -1525,6 +1525,7 @@
   "Trigger MIDI": "Sprožilec MIDI",
   "Trigger OSC": "Sprožilec OSC",
   "Scorciatoia": "Bližnjica",
+  "Pushbutton con trigger MIDI: il Note On avvia la cue e il Note Off della stessa nota la ferma (con un CC: valore 0 = rilascio)": "Tipka z MIDI sprožilcem: Note On zažene cue, Note Off iste note pa jo ustavi (pri CC: vrednost 0 = spust)",
   "Pushbutton: al rilascio del tasto parte anche questa cue (vuoto = nessuna)": "Tipka: ob sprostitvi se zažene tudi ta cue (prazno = nobena)",
   "Al rilascio avvia": "Ob sprostitvi zaženi",
   "Ducking: la cue parte quando l'ingresso del ducking (Impostazioni › Ducking) supera la soglia o torna sotto (dopo l'hold). Slave: parte su questa istanza secondaria quando il master non risponde più o quando diventa indipendente.": "Ducking: cue se zažene, ko vhod duckinga (Nastavitve › Ducking) preseže prag ali pade pod njega (po holdu). Slave: zažene se na tej sekundarni instanci, ko se master ne odziva več ali ko postane neodvisna.",
