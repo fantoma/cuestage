@@ -120,6 +120,7 @@ def cue_duration(cue, loader):
 class CueTableModel(QAbstractTableModel):
     filesDropped = Signal(list, int)
     rowsMoved = Signal(list, int)
+    rowsCopied = Signal(list, int)       # Ctrl + trascina: copie delle righe alla riga indicata
     edited = Signal()
 
     def __init__(self, show, ctrl, loader):
@@ -393,7 +394,7 @@ class CueTableModel(QAbstractTableModel):
         return Qt.MoveAction | Qt.CopyAction
 
     def supportedDragActions(self):
-        return Qt.MoveAction
+        return Qt.MoveAction | Qt.CopyAction
 
     def mimeTypes(self):
         return [ROW_MIME, "text/uri-list"]
@@ -417,7 +418,10 @@ class CueTableModel(QAbstractTableModel):
                 row = block_end(cues, row)
         if data.hasFormat(ROW_MIME):
             rows = json.loads(bytes(data.data(ROW_MIME)).decode())
-            self.rowsMoved.emit(rows, row)
+            if action == Qt.CopyAction:              # Ctrl + trascina = duplica
+                self.rowsCopied.emit(rows, row)
+            else:
+                self.rowsMoved.emit(rows, row)
             return False  # gestito da noi: la vista non deve rimuovere righe
         if data.hasUrls():
             paths = [u.toLocalFile() for u in data.urls() if u.isLocalFile()]

@@ -389,6 +389,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.model = CueTableModel(self.show_data, self.ctrl, self.loader)
         self.model.filesDropped.connect(self._files_dropped)
         self.model.rowsMoved.connect(self._rows_moved)
+        self.model.rowsCopied.connect(self._rows_copied)
         self.model.edited.connect(self._model_edited)
         self.table = QTableView()
         self.table.setModel(self.model)

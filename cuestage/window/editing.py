@@ -172,6 +172,34 @@ class EditingMixin:
         self.model.endResetModel()
         self._structure_changed(select=range(dest, dest + len(moving)))
 
+    def _rows_copied(self, rows, dest):
+        """Ctrl + trascina nella lista: le copie delle righe vanno alla riga «dest» (un gruppo con le sue cue;
+        rilasciate dentro un gruppo, le cue ne diventano membri, un gruppo va dopo di esso)."""
+        from ..groups import block_end, membership_for_insert
+        cues = self.show_data.cues
+        rows = sorted(set(r for r in rows if 0 <= r < len(cues)))
+        for r in list(rows):
+            if cues[r].type == "group":
+                rows += list(range(r + 1, block_end(cues, r)))
+        rows = sorted(set(rows))
+        if not rows:
+            return
+        dest = max(0, min(int(dest), len(cues)))
+        src = [cues[r] for r in rows]
+        clones = self._clone_block(src)
+        ids = {c.id for c in clones}
+        for k in clones:
+            if k.type != "group" and k.group not in ids:
+                k.group = ""                       # prende il gruppo della posizione di arrivo
+        if any(k.type == "group" for k in clones):
+            g = membership_for_insert(cues, dest)
+            if g:                                  # niente gruppi dentro i gruppi
+                hi = next(i for i, x in enumerate(cues) if x.id == g)
+                dest = block_end(cues, hi)
+        self._insert_cues(clones, dest)
+        self._select_rows(range(dest, dest + len(clones)))
+        self.status(tr("{0} cue duplicate", len(clones)))
+
     def move_selected(self, delta):
         rows = self._selected_rows()
         if not rows:

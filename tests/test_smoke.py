@@ -2360,6 +2360,187 @@ def t_grid_push_toggle(w):
     w.show_data.dirty = False
 
 
+def t_grid_move_between(w):
+    """GRID: «Sposta in» (altro PANEL, MAIN, gruppo di questo o di un altro PANEL) e trascinamento sul tab di
+    un'altra lista o sulla barra del gruppo aperto; un gruppo si sposta con tutte le sue cue."""
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtWidgets import QMenu
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    main_a = Cue("audio", number="1", name="A")
+    sh.cues = [main_a]
+    w._set_show(sh)
+    run(0.1)
+    w.add_panel("grid")
+    w.add_panel("grid")
+    run(0.1)
+    p1, p2 = sh.lists[1], sh.lists[2]
+    x = Cue("memo", number="10", name="X")
+    y = Cue("memo", number="11", name="Y")
+    g = Cue("group", number="12", name="G")
+    m1 = Cue("memo", number="13", name="M1", group=g.id)
+    m2 = Cue("memo", number="14", name="M2", group=g.id)
+    p1.cues[:] = [x, y, g, m1, m2]
+    h = Cue("group", number="20", name="H")
+    hm = Cue("memo", number="21", name="HM", group=h.id)
+    p2.cues[:] = [h, hm]
+    w.show_list(2)
+    w._grid_sync(force=True)
+    w.show_list(1)
+    w._grid_sync(force=True)
+    run(0.1)
+    # menu «Sposta in»: gruppi di questo PANEL, le altre liste, i gruppi delle altre liste
+    m = QMenu()
+    w.grid._fill_move(m, x)
+    texts = [a.text() for a in m.actions()] + [a.text() for a in m.actions() if a.menu() for a in a.menu().actions()]
+    assert any("G" in t and "◫" in t for t in texts) and any(p2.name in t for t in texts) and any(sh.lists[0].name in t for t in texts), texts
+    m = QMenu()
+    w.grid._fill_move(m, g)                                       # un gruppo: niente gruppi di destinazione
+    assert not any("◫" in a.text() for a in m.actions()), [a.text() for a in m.actions()]
+    # in un altro PANEL GRID: prende una casella libera
+    assert w.move_cue_to(x, 2)
+    assert x in p2.cues and x not in p1.cues and len(x.grid_pos) == 3
+    # un gruppo si porta dietro le sue cue
+    assert w.move_cue_to(g, 2)
+    assert [c.id for c in p2.cues if c.group == g.id] == [m1.id, m2.id] and g in p2.cues
+    assert not any(c in p1.cues for c in (g, m1, m2))
+    i = p2.cues.index(g)
+    assert p2.cues[i + 1:i + 3] == [m1, m2]
+    # nel gruppo di un'altra lista; un gruppo non entra in un gruppo
+    assert w.move_cue_to(y, group=h)
+    assert y in p2.cues and y.group == h.id and y.grid_pos == []
+    assert not w.move_cue_to(g, group=h)
+    # nella MAIN: in fondo, fuori dal gruppo
+    assert w.move_cue_to(y, 0)
+    assert sh.lists[0].cues[-1] is y and y.group == ""
+    # trascinamento (in ⚙ Opzioni) sul tab della MAIN
+    w.show_list(2)
+    w._grid_sync(force=True)
+    run(0.1)
+    w.grid.set_editing(True)
+    cv = w.grid.canvas
+    bar = w.list_tabs.bar
+
+    def drag(cue, gpos):
+        r = cv.cell_rect(*cue.grid_pos[1:]).center()
+        cv.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, r, cv.mapToGlobal(r), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+        lp = QPointF(cv.mapFromGlobal(gpos))
+        cv.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, lp, QPointF(gpos), Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+        cv.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, lp, QPointF(gpos), Qt.LeftButton, Qt.NoButton, Qt.NoModifier))
+        run(0.1)
+    drag(x, bar.mapToGlobal(bar.tabRect(0).center()))
+    assert x in sh.lists[0].cues and x not in p2.cues
+    # gruppo aperto: la casella trascinata sulla barra del gruppo esce dal gruppo
+    w.grid.open_group(h)
+    run(0.1)
+    hm_cell = next(k for k, v in w.grid.cue_map().items() if v is hm)
+    r = cv.cell_rect(*hm_cell[1:]).center()
+    gb = w.grid.group_bar
+    gpos = gb.mapToGlobal(gb.rect().center())
+    cv.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, r, cv.mapToGlobal(r), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    lp = QPointF(cv.mapFromGlobal(gpos))
+    cv.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, lp, QPointF(gpos), Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+    cv.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, lp, QPointF(gpos), Qt.LeftButton, Qt.NoButton, Qt.NoModifier))
+    run(0.1)
+    assert hm.group == "" and hm in p2.cues
+    w.grid.close_group()
+    run(0.1)
+    # tenuta sul tab di un altro GRID: lo apre, e la si lascia in una casella libera (il gruppo con le sue cue)
+    r = cv.cell_rect(*g.grid_pos[1:]).center()
+    cv.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, r, cv.mapToGlobal(r), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    gpos = bar.mapToGlobal(bar.tabRect(1).center())
+    lp = QPointF(cv.mapFromGlobal(gpos))
+    cv.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, lp, QPointF(gpos), Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+    assert wait_until(lambda: sh.view == 1, 3)
+    assert w.grid.lst is p1
+    free = next((0, rr, cc) for rr in range(p1.grid_rows) for cc in range(p1.grid_cols)
+                if (0, rr, cc) not in w.grid.cue_map())
+    lp = cv.cell_rect(*free[1:]).center()
+    cv.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, lp, cv.mapToGlobal(lp), Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+    cv.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, lp, cv.mapToGlobal(lp), Qt.LeftButton, Qt.NoButton, Qt.NoModifier))
+    run(0.1)
+    assert g in p1.cues and list(g.grid_pos) == list(free) and m1.group == g.id and m1 in p1.cues, (g.grid_pos, free)
+    w.move_cue_to(g, 2)
+    w.show_list(2)
+    w._grid_sync(force=True)
+    # Ctrl + trascina = duplica: la copia va nella lista di arrivo, l'originale resta (un gruppo con le sue cue)
+    run(0.1)
+    n2 = len(p2.cues)
+    r = cv.cell_rect(*g.grid_pos[1:]).center()
+    cv.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, r, cv.mapToGlobal(r), Qt.LeftButton, Qt.LeftButton, Qt.ControlModifier))
+    gpos = bar.mapToGlobal(bar.tabRect(0).center())
+    lp = QPointF(cv.mapFromGlobal(gpos))
+    cv.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, lp, QPointF(gpos), Qt.NoButton, Qt.LeftButton, Qt.ControlModifier))
+    cv.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, lp, QPointF(gpos), Qt.LeftButton, Qt.NoButton, Qt.ControlModifier))
+    run(0.1)
+    assert len(p2.cues) == n2 and g in p2.cues
+    main = sh.lists[0].cues
+    gc = [c for c in main if c.type == "group" and c.name == "G"]
+    assert len(gc) == 1 and gc[0] is not g and gc[0].id != g.id
+    kids = [c for c in main if c.group == gc[0].id]
+    assert [c.name for c in kids] == ["M1", "M2"] and all(k.id not in (m1.id, m2.id) for k in kids)
+    # Ctrl + trascina su una casella libera dello stesso GRID: copia lì
+    free = next((0, rr, cc) for rr in range(p2.grid_rows) for cc in range(p2.grid_cols)
+                if (0, rr, cc) not in w.grid.cue_map())
+    r = cv.cell_rect(*hm.grid_pos[1:]).center()
+    lp = cv.cell_rect(*free[1:]).center()
+    cv.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, r, cv.mapToGlobal(r), Qt.LeftButton, Qt.LeftButton, Qt.ControlModifier))
+    cv.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, lp, cv.mapToGlobal(lp), Qt.NoButton, Qt.LeftButton, Qt.ControlModifier))
+    cv.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, lp, cv.mapToGlobal(lp), Qt.LeftButton, Qt.NoButton, Qt.ControlModifier))
+    run(0.1)
+    cp = w.grid.cell_cue(free)
+    assert cp is not None and cp is not hm and cp.name == "HM" and hm in p2.cues
+    w.grid.set_editing(False)
+    # lista: «Sposta in» con il solo gruppo selezionato porta con sé le sue cue
+    w.show_list(2)
+    w.grid_set_kind = None
+    w.set_panel_kind(2, "list")
+    run(0.1)
+    w._select_rows([p2.cues.index(g)])
+    w.move_cues_to(1)
+    assert g in p1.cues and m1 in p1.cues and m2 in p1.cues and m1.group == g.id
+    w.show_data.dirty = False
+
+
+def t_list_ctrl_copy(w):
+    """Lista: Ctrl + trascina duplica (un gruppo con le sue cue; dentro un gruppo la copia ne diventa membro)."""
+    import json
+    from PySide6.QtCore import QMimeData, QModelIndex, Qt
+    from cuestage.ui_cuelist import ROW_MIME
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("memo", number="1", name="A")
+    g = Cue("group", number="2", name="G")
+    m1 = Cue("memo", number="3", name="M1", group=g.id)
+    b = Cue("memo", number="4", name="B")
+    sh.cues = [a, g, m1, b]
+    w._set_show(sh)
+    run(0.1)
+    md = QMimeData()
+    md.setData(ROW_MIME, json.dumps([0]).encode())
+    w.model.dropMimeData(md, Qt.CopyAction, 4, 0, QModelIndex())      # A copiata in fondo
+    names = [c.name for c in sh.cues]
+    assert names == ["A", "G", "M1", "B", "A"], names
+    assert sh.cues[4] is not a and sh.cues[4].number not in ("1", "2", "3", "4")
+    md = QMimeData()
+    md.setData(ROW_MIME, json.dumps([1]).encode())
+    w.model.dropMimeData(md, Qt.CopyAction, 0, 0, QModelIndex())      # il gruppo copiato in cima, con le sue cue
+    assert [c.name for c in sh.cues[:3]] == ["G", "M1", "A"], [c.name for c in sh.cues]
+    assert sh.cues[0] is not g and sh.cues[1].group == sh.cues[0].id and sh.cues[1] is not m1
+    md = QMimeData()
+    md.setData(ROW_MIME, json.dumps([5]).encode())                     # B dentro il gruppo originale
+    gi = sh.cues.index(g)
+    w.model.dropMimeData(md, Qt.CopyAction, gi + 2, 0, QModelIndex())
+    assert sh.cues[gi + 2].name == "B" and sh.cues[gi + 2].group == g.id and b.group == ""
+    md = QMimeData()
+    md.setData(ROW_MIME, json.dumps([2]).encode())                     # senza Ctrl: si sposta (come prima)
+    n = len(sh.cues)
+    w.model.dropMimeData(md, Qt.MoveAction, n, 0, QModelIndex())
+    assert len(sh.cues) == n
+    w.show_data.dirty = False
+
+
 def t_memo_skip(w):
     """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
     sh = Show()
@@ -3162,6 +3343,8 @@ if __name__ == "__main__":
     check("grafico: barra di scorrimento; video: fade e crossfade dell'immagine separati", lambda: t_video_xfade_fades(w))
     check("«Volumi uscite a 0 dB»: volume della cue e uscite a 0 dB", lambda: t_levels_zero(w))
     check("cue «Schermo intero» (Apri / Chiudi)", lambda: t_fsclose(w))
+    check("GRID: sposta cue e gruppi in altri PANEL e nei gruppi (menu e trascinamento)", lambda: t_grid_move_between(w))
+    check("lista: Ctrl + trascina duplica", lambda: t_list_ctrl_copy(w))
     check("rotazione di video e immagini", lambda: t_rotation(w))
     check("GRID: pulsanti Pushbutton e Toggle, cue al rilascio", lambda: t_grid_push_toggle(w))
     check("le cue Memo non partono con il GO", lambda: t_memo_skip(w))

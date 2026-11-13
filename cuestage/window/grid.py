@@ -186,20 +186,15 @@ class GridMixin:
         self._structure_changed(select=[lst.index_of(cue.id)])
         self._grid_sync(force=True)
 
-    def grid_add_to_group(self, cue, group):
-        """Una casella trascinata su un gruppo diventa l'ultima cue del gruppo."""
-        from ..groups import block_end
-        lst = self.show_data.current
-        self.model.beginResetModel()
-        lst.cues.remove(cue)
-        cue.group = group.id
-        cue.grid_pos = []
-        hi = lst.index_of(group.id)
-        lst.cues.insert(block_end(lst.cues, hi), cue)
-        self.model.endResetModel()
-        self._structure_changed(select=[lst.index_of(cue.id)])
-        self._grid_sync(force=True)
-        self.status(tr("«{0}» ora è nel gruppo «{1}»", cue.label(), group.label()))
+    def grid_add_to_group(self, cue, group, copy=False):
+        """Una casella trascinata su un gruppo diventa l'ultima cue del gruppo (anche da un'altra lista); con
+        copy=True ci entra una copia. Restituisce la cue entrata nel gruppo (o None)."""
+        moved = self.move_cue_to(cue, group=group, copy=copy)
+        if moved:
+            lst, i = self.show_data.list_of(moved.id)
+            if lst is self.show_data.current:
+                self._select_rows([i])
+        return moved
 
     def grid_ungroup_member(self, cue):
         self.grid_select(cue, move_playhead=False)

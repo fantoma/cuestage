@@ -142,26 +142,135 @@ class ListsMixin:
         a.setEnabled(bool(rows))
 
     def move_cues_to(self, i):
-        """Sposta le cue selezionate in fondo a un'altra lista (None = in un nuovo PANEL)."""
+        """Sposta le cue selezionate in fondo a un'altra lista (None = in un nuovo PANEL). Un gruppo si porta
+        dietro tutte le sue cue."""
+        from ..groups import block_end
+        from .. import grid as G
         sh = self.show_data
         rows = self._selected_rows()
         if not rows:
             return
+        full = set(rows)
+        for r in rows:
+            if sh.cues[r].type == "group":
+                full.update(range(r, block_end(sh.cues, r)))
+        rows = sorted(full)
         if i is None:
             sh.add_panel()
             i = len(sh.lists) - 1
         dest = sh.lists[i]
         moving = [sh.cues[r] for r in rows]
+        moved_ids = {c.id for c in moving}
         self.model.beginResetModel()
         for r in reversed(rows):
             del sh.cues[r]
+        for c in moving:
+            if c.group and c.group not in moved_ids:       # il suo gruppo resta qui: esce dal gruppo
+                c.group = ""
+            c.grid_pos = []
         dest.cues.extend(moving)
         self.model.endResetModel()
+        if dest.is_grid:
+            G.ensure_positions(dest)
+            G.sort_cues(dest)
+        self._structure_changed()
         sh.dirty = True
         self.ctrl.set_playhead(min(rows[0], len(sh.cues)))
         self._select_row(min(rows[0], len(sh.cues) - 1))
         self.status(tr("{0} cue spostate in «{1}»", len(moving), dest.name))
         self._update_standby()
+
+    def _clone_block(self, block):
+        """Copie di una cue (o di un gruppo con le sue cue), con id e numeri nuovi."""
+        clones, idmap = [], {}
+        for c in block:
+            k = c.clone()
+            idmap[c.id] = k.id
+            k.number = ""
+            k.grid_pos = []
+            k.hotkey = ""                        # la scorciatoia resta all'originale
+            clones.append(k)
+        for k in clones:
+            if k.group in idmap:
+                k.group = idmap[k.group]
+                if k.type == "groupexit":
+                    k.target = k.group
+        n = self.show_data.next_number()
+        try:
+            for j, k in enumerate(clones):
+                k.number = str(int(n) + j)
+        except ValueError:
+            pass
+        return clones
+
+    def move_cue_to(self, cue, dest_i=None, group=None, cell=None, copy=False):
+        """Sposta una cue in un'altra lista (dest_i) o dentro un gruppo (group, di qualsiasi lista). Un gruppo si
+        porta dietro tutte le sue cue; un gruppo non entra in un altro gruppo. In un PANEL GRID la cue va nella
+        casella «cell» se è libera, altrimenti nella prima libera. Con copy=True sposta una copia (l'originale
+        resta dov'è). Restituisce la cue spostata (o la copia), None se non è cambiato nulla."""
+        from ..groups import block_end
+        from .. import grid as G
+        sh = self.show_data
+        src, i = sh.list_of(cue.id)
+        if src is None:
+            return None
+        if group is not None:
+            if cue.type == "group" or group is cue:
+                self.status(tr("Un gruppo non può entrare in un altro gruppo"))
+                return None
+            if cue.group == group.id and not copy:
+                return None
+            dest, _gi = sh.list_of(group.id)
+        else:
+            dest = sh.lists[dest_i] if dest_i is not None else src
+            if dest is src and not cue.group and not copy:
+                return None
+        if dest is None:
+            return None
+        block = src.cues[i:block_end(src.cues, i)] if cue.type == "group" else [cue]
+        ph = self.ctrl.playhead_of(src)
+        ph_cue = src.cues[ph] if 0 <= ph < len(src.cues) else None
+        self.model.beginResetModel()
+        if copy:
+            block = self._clone_block(block)
+            cue = block[0]
+        else:
+            for c in block:
+                src.cues.remove(c)
+        for c in block:
+            c.grid_pos = []
+        if group is not None:
+            cue.group = group.id
+            hi = dest.cues.index(group)
+            dest.cues.insert(block_end(dest.cues, hi), cue)
+        else:
+            if cue.type != "group":
+                cue.group = ""
+            if cell is not None and dest.is_grid and G.cell_cue(dest, *cell) is None:
+                cue.grid_pos = list(cell)
+            dest.cues.extend(block)
+        self.model.endResetModel()
+        for lst in {id(src): src, id(dest): dest}.values():
+            if lst.is_grid:
+                G.ensure_positions(lst)
+                G.sort_cues(lst)
+        self._structure_changed()
+        if src is not dest:
+            if ph_cue is not None and ph_cue in src.cues:
+                self.ctrl.set_playhead(src.index_of(ph_cue.id), src)
+            elif src.cues:
+                self.ctrl.set_playhead(min(i, len(src.cues) - 1), src)
+        if self._grid_list() is not None:
+            self._grid_sync(force=True)
+        self._update_tabs()
+        pre = tr("Copia: ") if copy else ""
+        if group is not None:
+            self.status(pre + tr("«{0}» ora è nel gruppo «{1}»", cue.label(), group.label()))
+        elif cue.type == "group":
+            self.status(pre + tr("Gruppo «{0}» spostato in «{1}» con le sue {2} cue", cue.label(), dest.name, len(block) - 1))
+        else:
+            self.status(pre + tr("«{0}» spostata in «{1}»", cue.label(), dest.name))
+        return cue
 
     def _new_cue_menu(self, menu):
         from ..model import CUE_TYPES, TYPE_ICONS, TYPE_LABELS

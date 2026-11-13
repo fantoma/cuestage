@@ -140,7 +140,7 @@ walk-in music, effects on call, emergency cues).
 - Each list has its own **playhead** (cue in standby): clicking a cue in a PANEL does not move the MAIN.
   “With previous” and “After previous” apply within the same list.
 - **Moving cues** between lists: select the cues, then right-click › Move to (or Cue › Move the selected
-  to), also into a new PANEL.
+  to), also into a new PANEL. A selected group takes all its cues with it.
 - Fade, Change preset and Command cues can target cues in any list (in the target menus PANEL cues are
   marked [PANEL name]). New numbers are unique across the whole show; “Renumber” in a PANEL uses P1.1,
   P1.2… so it does not overlap the MAIN.
@@ -188,6 +188,15 @@ PANEL › “Show as grid” (and “Show as list” to go back: the cues stay t
 - With **⚙ Options** open: click = select (inspector) · drag = move (onto an occupied tile the two cues swap) ·
   double-click an empty tile = new cue · drag audio/video files from the file manager onto a tile = new cues
   starting from there.
+- **Moving tiles to other lists and groups**: right-click › **Move to** › a group of this PANEL, another PANEL or
+  the MAIN, or a group of another list. With ⚙ Options open (or inside an opened group) you can also drag a tile
+  onto the **tab** of another list (it goes to the first free tile, or to the end of a list); hold it on the tab
+  of a GRID for a moment and that GRID opens, so you can drop it on a precise tile or onto a group. Dragging a
+  tile of an opened group onto the group bar takes it out of the group. A **group always moves with all its
+  cues** (and cannot enter another group).
+- **Ctrl + drag duplicates** instead of moving, both in a GRID (onto a tile, a group, the group bar or the tab of
+  another list) and in the lists (MAIN and list PANELs): the copy gets new numbers, the original stays where it
+  was; a copied group comes with copies of all its cues.
 - **Colour** of each tile: right-click › Colour (12 ready-made colours or “Other colour…”), or from the
   inspector's “Base” tab (“Colour” button). The colour also tints the cue's row in the lists.
 - **Keyboard shortcuts**: right-click › “Learn keyboard shortcut…” (or “Learn…” in the Trigger tab) and press the

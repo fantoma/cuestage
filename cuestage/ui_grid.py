@@ -46,6 +46,8 @@ class GridCanvas(QWidget):
         lst = self.panel.lst
         if lst is None or self.width() <= 0 or self.height() <= 0:
             return None
+        if not (0 <= pos.x() < self.width() and 0 <= pos.y() < self.height()):
+            return None                      # fuori dalle caselle (int() tronca verso lo zero i valori negativi)
         c = int(pos.x() / (self.width() / lst.grid_cols))
         r = int(pos.y() / (self.height() / lst.grid_rows))
         if 0 <= r < lst.grid_rows and 0 <= c < lst.grid_cols:
@@ -246,6 +248,33 @@ class GridCanvas(QWidget):
         self.update()
         return True
 
+    def _outside_target(self, gpos):
+        """Durante il trascinamento di una casella, fuori dalle caselle: ("list", i) sopra il tab di un'altra
+        lista, ("ungroup", None) sopra la barra del gruppo aperto, altrimenti None."""
+        mw = self.panel.mw
+        bar = getattr(getattr(mw, "list_tabs", None), "bar", None)
+        if bar is not None and bar.isVisible():
+            lp = bar.mapFromGlobal(gpos)
+            if bar.rect().contains(lp):
+                i = bar.tabAt(lp)
+                if i >= 0 and i != mw.show_data.view:
+                    return ("list", i)
+        gb = self.panel.group_bar
+        if gb.isVisible() and gb.rect().contains(gb.mapFromGlobal(gpos)):
+            return ("ungroup", None)
+        return None
+
+    def _spring(self):
+        """Casella tenuta sopra il tab di un altro PANEL GRID: lo apre, per lasciarla in una casella o in un gruppo."""
+        i = getattr(self, "_spring_i", None)
+        self._spring_i = None
+        mw = self.panel.mw
+        if self.drag_from is None or i is None or not (0 <= i < len(mw.show_data.lists)):
+            return
+        mw.show_list(i)
+        mw._update_tabs()
+        self.update()
+
     def mouseMoveEvent(self, e):
         cell = self.cell_at(e.position().toPoint())
         if cell != self.hover:
@@ -253,7 +282,24 @@ class GridCanvas(QWidget):
             self.update()
         if self.drag_from is not None and (e.position().toPoint() - self.drag_from[1]).manhattanLength() > 8:
             self.drag_over = cell
-            self.setCursor(Qt.ClosedHandCursor)
+            self.setCursor(Qt.DragCopyCursor if e.modifiers() & Qt.ControlModifier else Qt.ClosedHandCursor)
+            out = None if cell is not None else self._outside_target(e.globalPosition().toPoint())
+            if out != getattr(self, "_drag_out", None):
+                self._drag_out = out
+                mw = self.panel.mw
+                cue = self.drag_from[0]
+                if out is not None and out[0] == "list":
+                    lst = mw.show_data.lists[out[1]]
+                    mw.status(tr("Rilascia per spostare «{0}» in «{1}»", cue.label(), lst.name)
+                              + (tr(" (tieni fermo per aprirlo)") if lst.is_grid else ""))
+                elif out is not None:
+                    mw.status(tr("Rilascia per togliere «{0}» dal gruppo", cue.label()))
+                from PySide6.QtCore import QTimer
+                if out is not None and out[0] == "list" and mw.show_data.lists[out[1]].is_grid:
+                    self._spring_i = out[1]
+                    QTimer.singleShot(700, lambda i=out[1]: getattr(self, "_spring_i", None) == i and self._spring())
+                else:
+                    self._spring_i = None
             self.update()
 
     def mouseReleaseEvent(self, e):
@@ -264,10 +310,36 @@ class GridCanvas(QWidget):
         if self.drag_from is not None:
             cue = self.drag_from[0]
             target = self.drag_over
+            moved = (e.position().toPoint() - self.drag_from[1]).manhattanLength() > 8
             self.drag_from = None
             self.drag_over = None
+            self._drag_out = None
+            self._spring_i = None
             self.unsetCursor()
-            if target is not None:
+            mw = self.panel.mw
+            here = self.panel.lst
+            copy = bool(e.modifiers() & Qt.ControlModifier)     # Ctrl + trascina = duplica
+            out = self._outside_target(e.globalPosition().toPoint()) if (target is None and moved) else None
+            if out is not None and out[0] == "list":
+                mw.move_cue_to(cue, out[1], copy=copy)          # sul tab di un'altra lista
+            elif out is not None:                               # sulla barra del gruppo: esce dal gruppo
+                if copy:
+                    mw.move_cue_to(cue, mw.show_data.lists.index(here), copy=True)
+                else:
+                    mw.grid_ungroup_member(cue)
+            elif target is not None and here is not None and (copy or mw.show_data.list_of(cue.id)[0] is not here):
+                # casella copiata, o portata da un'altra lista (il tab è stato aperto tenendola sopra)
+                tcue = self.panel.cell_cue(target)
+                g = self.panel.group_cue()
+                if g is not None:
+                    k = mw.grid_add_to_group(cue, g, copy=copy)
+                    if k is not None:
+                        mw.grid_group_move(k, self.panel.cell_index(target))
+                elif tcue is not None and tcue.type == "group" and tcue is not cue:
+                    mw.grid_add_to_group(cue, tcue, copy=copy)
+                else:
+                    mw.move_cue_to(cue, mw.show_data.lists.index(here), cell=target, copy=copy)
+            elif target is not None:
                 tcue = self.panel.cell_cue(target)
                 if self.panel.group_id:
                     self.panel.mw.grid_group_move(cue, self.panel.cell_index(target))
@@ -429,6 +501,8 @@ class GridPanel(QWidget):
     def set_list(self, lst):
         if self.lst is not None:
             self._pages[self.lst.id] = self.page
+        if lst is not self.lst:
+            self.group_id = None
         self.lst = lst
         self.page = min(self._pages.get(lst.id, 0), len(lst.grid_pages) - 1)
         self.sync()
@@ -548,13 +622,16 @@ class GridPanel(QWidget):
     def _set_hint_body(self):
         pre = getattr(self, "_hint_prefix", "")
         if self.group_cue() is not None:
-            self.hint.setText(pre + tr("Gruppo aperto: clic = seleziona (ispettore) · trascina = cambia l'ordine · doppio clic "
+            self.hint.setText(pre + tr("Gruppo aperto: clic = seleziona (ispettore) · trascina = cambia l'ordine (sulla barra "
+                              "del gruppo = esce dal gruppo, sul tab di un'altra lista = ci si sposta) · doppio clic "
                               "su una casella vuota = nuova cue nel gruppo · trascina qui dei file = nuove cue nel "
-                              "gruppo · tasto destro = avvia, togli dal gruppo, elimina…"))
+                              "gruppo · tasto destro = avvia, sposta, togli dal gruppo, elimina…") + tr(" · Ctrl + trascina = duplica"))
         elif self.editing:
             self.hint.setText(pre + tr("Opzioni: clic = seleziona · trascina = sposta (o scambia; su un gruppo = entra nel "
-                              "gruppo) · doppio clic su una casella vuota = nuova cue, su un gruppo = lo apre · tasto "
-                              "destro = colore, scorciatoia, elimina · trascina qui dei file audio/video per creare le cue."))
+                              "gruppo; sul tab di un'altra lista = ci si sposta, tenendola ferma sul tab di un GRID lo "
+                              "apre) · doppio clic su una casella vuota = nuova cue, su un gruppo = lo apre · tasto "
+                              "destro = colore, scorciatoia, sposta in, elimina · trascina qui dei file audio/video per "
+                              "creare le cue.") + tr(" · Ctrl + trascina = duplica"))
         else:
             mode = dict(CLICK_MODES).get(self.lst.grid_click if self.lst else "toggle", "")
             solo = tr(" · Solo") if (self.lst and self.lst.grid_solo) else ""
@@ -698,6 +775,7 @@ class GridPanel(QWidget):
         a = m.addAction(tr("Togli scorciatoia"), lambda: mw.set_hotkey(cue, ""))
         a.setEnabled(bool(cue.hotkey))
         m.addSeparator()
+        self._fill_move(m.addMenu(tr("Sposta in")), cue)
         m.addAction(tr("Modifica nell'ispettore"), lambda: mw.grid_select(cue, move_playhead=False))
         if g is not None:
             m.addAction(tr("Togli dal gruppo (diventa una casella)"), lambda: mw.grid_ungroup_member(cue))
@@ -706,6 +784,39 @@ class GridPanel(QWidget):
             m.addSeparator()
             m.addAction(tr("◀ Torna alla griglia"), self.close_group)
         m.exec(gpos)
+
+    def _fill_move(self, menu, cue):
+        """«Sposta in»: un gruppo di questo PANEL, un altro PANEL (o la MAIN) oppure un gruppo di un'altra lista.
+        Un gruppo si sposta con tutte le sue cue (e non entra in un altro gruppo)."""
+        mw = self.mw
+        sh = mw.show_data
+        here = self.lst
+        can_group = cue.type != "group"
+
+        def groups_of(lst):
+            return [c for c in lst.cues if c.type == "group" and c.id != cue.group and c is not cue]
+        if can_group:
+            gs = groups_of(here)
+            if gs:
+                menu.addSection(tr("Gruppo in questo PANEL"))
+                for g in gs:
+                    menu.addAction(f"◫  {g.label()}", lambda _=False, g=g: mw.grid_add_to_group(cue, g))
+        others = [(i, l) for i, l in enumerate(sh.lists) if l is not here]
+        if others:
+            menu.addSection(tr("Altra lista"))
+        for i, lst in others:
+            name = ("▦ " if lst.is_grid else "") + lst.name
+            gs = groups_of(lst) if can_group else []
+            if not gs:
+                menu.addAction(name, lambda _=False, i=i: mw.move_cue_to(cue, i))
+                continue
+            sm = menu.addMenu(name)
+            sm.addAction(tr("Nella lista (casella libera / in fondo)"), lambda _=False, i=i: mw.move_cue_to(cue, i))
+            sm.addSeparator()
+            for g in gs:
+                sm.addAction(f"◫  {g.label()}", lambda _=False, g=g: mw.grid_add_to_group(cue, g))
+        if menu.isEmpty():
+            menu.setEnabled(False)
 
     def pick_color(self, cue):
         col = QColorDialog.getColor(QColor(cue.color or DEFAULT_BG), self, tr("Colore della casella"))
