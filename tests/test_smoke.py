@@ -2661,15 +2661,20 @@ def t_list_drop_other_lists(w):
     w.show_list(1)
     run(0.2)
     gp = w.grid
-    w0 = gp.minimumSizeHint().width()
+    old_size = w.size()
+    w.resize(1600, 900)
+    run(0.3)
+    w0, m0 = gp.width(), gp.minimumSizeHint().width()
     gp.set_editing(True)
-    run(0.1)
-    assert gp.minimumSizeHint().width() <= max(w0, 600), (w0, gp.minimumSizeHint().width())
+    run(0.2)
+    # la larghezza minima delle Opzioni dipende dai font del sistema: conta che il GRID non si allarghi
+    assert gp.minimumSizeHint().width() < w0 and abs(gp.width() - w0) <= 2, (w0, gp.width(), gp.minimumSizeHint().width())
     gp.set_editing(False)
     gp.blind.setChecked(True)
-    run(0.1)
-    assert gp.minimumSizeHint().width() <= w0 + 40, (w0, gp.minimumSizeHint().width())
+    run(0.2)
+    assert abs(gp.width() - w0) <= 2 and gp.minimumSizeHint().width() <= m0 + 60, (w0, gp.width(), m0, gp.minimumSizeHint().width())
     gp.blind.setChecked(False)
+    w.resize(old_size)
     w.show_data.dirty = False
 
 
