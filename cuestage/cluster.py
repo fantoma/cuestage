@@ -593,7 +593,13 @@ class ClusterHub(QObject):
                     self._receive_upload(cid, sock, msg)
                 elif t == "show_up":
                     if self.client_can_edit(cid):
-                        self.slaveShow.emit(msg.get("data"), c["name"], dict(self.client_perms(cid)))
+                        perms = dict(self.client_perms(cid))
+                        self.slaveShow.emit(msg.get("data"), c["name"], perms)
+                        if "*" not in perms:
+                            # accesso limitato: le modifiche alle liste non consentite non entrano; si rimanda
+                            # alla secondaria lo show del master (anche se qui non è cambiato) per riportarle
+                            # indietro, appena il master ha applicato la parte consentita
+                            threading.Timer(0.4, self._resend_show, args=(cid,)).start()
                     else:
                         self._send_client(cid, {"t": "edit_refused"})
                 elif t == "web_info":
@@ -667,6 +673,17 @@ class ClusterHub(QObject):
                 "name": os.path.basename(sh.path) if sh.path else "senza-titolo.cueshow",
                 "playheads": dict(self.ctrl.playheads), "hw": self.hw_fn() if self.hw_fn else {},
                 "seed": [self.ctrl.seed_base, self.ctrl.seed_count]}
+
+    def _resend_show(self, cid):
+        c = self.clients.get(cid)
+        if c is None or not c.get("accepted"):
+            return
+        try:
+            msg = self._show_message(cid)
+            msg["update"] = True
+            self._send_client(cid, msg)
+        except (OSError, RuntimeError):
+            pass
 
     def _send_show(self, cid):
         self._send_client(cid, self._show_message(cid))

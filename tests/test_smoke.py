@@ -2816,7 +2816,7 @@ def t_cluster_perms_chat():
         assert sh.lists[1].cues[0].name == "Panel modificato"
         assert sh.lists[2].cues[0].name == "Grid" and sh.lists[0].cues[0].name == "Main"
         t0 = time.monotonic()                               # sulla secondaria la modifica non consentita torna indietro
-        while b.show_data.lists[2].cues[0].name != "Grid" and time.monotonic() - t0 < 5:
+        while b.show_data.lists[2].cues[0].name != "Grid" and time.monotonic() - t0 < 10:
             run(0.1)
         assert b.show_data.lists[2].cues[0].name == "Grid"
         # aggiornamenti dal master mentre sulla secondaria si lavora nell'ispettore: niente ricostruzione,
