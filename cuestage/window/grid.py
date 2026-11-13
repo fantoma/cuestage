@@ -107,11 +107,33 @@ class GridMixin:
             return
         pushed.discard(cue.id)
         lst, _i = self.show_data.list_of(cue.id)
-        fade = float(getattr(cue, "fade_out", 0) or 0)
-        if fade <= 0:
-            fade = float(lst.grid_fade) if (lst is not None and lst.is_grid) else \
-                float(self.show_data.settings.get("stop_fade", 0.3))
-        self.ctrl.stop_cue(cue.id, fade)
+        base = float(lst.grid_fade) if (lst is not None and lst.is_grid) else \
+            float(self.show_data.settings.get("stop_fade", 0.3))
+
+        def own_fade(c):
+            """Fade out della cue (per video e immagini anche quello del video), altrimenti quello del GRID."""
+            f = float(getattr(c, "fade_out", 0) or 0)
+            if c.type in ("video", "image"):
+                f = max(f, float(getattr(c, "v_fade_out", 0) or 0))
+            return f if f > 0 else base
+        inst = self.ctrl.instances.get(cue.id)
+        spawned = getattr(inst, "spawned", None)
+        if cue.type == "group" and inst is not None and not inst.done and spawned is not None:
+            # gruppo: ogni sua cue in riproduzione sfuma con il proprio fade out, poi il gruppo esce
+            gf = float(getattr(cue, "fade_out", 0) or 0)
+            for k in list(spawned):
+                ci = self.ctrl.instances.get(k)
+                cc = self.show_data.by_id(k)
+                if ci is not None and not ci.done and cc is not None:
+                    f = float(getattr(cc, "fade_out", 0) or 0)
+                    if cc.type in ("video", "image"):
+                        f = max(f, float(getattr(cc, "v_fade_out", 0) or 0))
+                    ci.stop(f if f > 0 else (gf if gf > 0 else base))
+            spawned.clear()                      # già fermate: il gruppo non le rifà sfumare
+            self.ctrl.pending = [p for p in self.ctrl.pending if p[1].group != cue.id]
+            self.ctrl.stop_cue(cue.id, 0.0)
+        else:
+            self.ctrl.stop_cue(cue.id, own_fade(cue))
         rel = getattr(cue, "grid_release", "") or ""
         tg = self.show_data.resolve_target(rel) if rel else None
         if tg is not None and tg is not cue:

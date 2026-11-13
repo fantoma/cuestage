@@ -234,8 +234,16 @@ class GridCanvas(QWidget):
             self.update()
             return
         if cue is not None:
-            self.panel.mw.grid_activate(cue)
-            self.press_cue = cue if (getattr(cue, "grid_button", "") or "") == "push" else None
+            push = (getattr(cue, "grid_button", "") or "") == "push"
+            mods = e.modifiers()
+            if push and not (mods & (Qt.ShiftModifier | Qt.ControlModifier)):
+                # pushbutton: parte alla pressione (si trascina con Shift, si duplica con Ctrl)
+                self.panel.mw.grid_activate(cue)
+                self.press_cue = cue
+            else:
+                # le altre caselle partono al rilascio del clic, così si possono trascinare (Ctrl = duplica)
+                self.drag_from = (cue, e.position().toPoint())
+                self._click_cue = None if push else cue
             self.panel.mw.grid_select(cue, move_playhead=False)
             self.update()
 
@@ -277,6 +285,12 @@ class GridCanvas(QWidget):
 
     def mouseMoveEvent(self, e):
         cell = self.cell_at(e.position().toPoint())
+        hc = self.panel.cell_cue(cell) if (cell is not None and self.drag_from is None) else None
+        push = hc is not None and (getattr(hc, "grid_button", "") or "") == "push" and \
+            not (self.panel.editing or self.panel.group_id)
+        tip = tr("Per trascinare usa Shift (Ctrl + trascina = duplica)") if push else ""
+        if self.toolTip() != tip:
+            self.setToolTip(tip)
         if cell != self.hover:
             self.hover = cell
             self.update()
@@ -311,6 +325,15 @@ class GridCanvas(QWidget):
             cue = self.drag_from[0]
             target = self.drag_over
             moved = (e.position().toPoint() - self.drag_from[1]).manhattanLength() > 8
+            click = getattr(self, "_click_cue", None)
+            self._click_cue = None
+            if click is not None and not moved and e.button() == Qt.LeftButton:
+                self.drag_from = None                           # semplice clic (fuori da Opzioni): avvia
+                self.drag_over = None
+                self.unsetCursor()
+                self.panel.mw.grid_activate(click)
+                self.update()
+                return
             self.drag_from = None
             self.drag_over = None
             self._drag_out = None
@@ -635,7 +658,8 @@ class GridPanel(QWidget):
         else:
             mode = dict(CLICK_MODES).get(self.lst.grid_click if self.lst else "toggle", "")
             solo = tr(" · Solo") if (self.lst and self.lst.grid_solo) else ""
-            self.hint.setText(tr("{0}{1}{2} · tasto destro: colore, scorciatoia, nuova cue, apri gruppo · il GO del PANEL avanza casella dopo casella.", pre, mode, solo))
+            self.hint.setText(tr("{0}{1}{2} · tasto destro: colore, scorciatoia, nuova cue, apri gruppo · il GO del PANEL avanza casella dopo casella.", pre, mode, solo)
+                              + tr(" · trascina = sposta (Pushbutton: Shift + trascina) · Ctrl + trascina = duplica"))
 
     def set_editing(self, on):
         self.editing = bool(on)

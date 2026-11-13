@@ -182,6 +182,8 @@ PANEL › “Show as grid” (and “Show as list” to go back: the cues stay t
   **Toggle** (press = start, press again = stop) or **Pushbutton**: the cue starts when the tile (or its keyboard
   shortcut) is pressed and stays active while it is held; on release it stops with its fade out (or the GRID fade)
   and, if set, **another cue starts on release** (“On release start”). The tile shows a PUSH / TOGGLE label.
+  A **group** set as Pushbutton stops on release with **each cue's own fade out** (cues without one use the
+  group's fade out, or the GRID fade).
   A Pushbutton cue with a **MIDI trigger** works the same way from a controller: the *Note On* starts it and the
   *Note Off* of the same note (or Note On with velocity 0) releases it — no extra configuration; with a CC trigger,
   value 0 is the release.
@@ -194,6 +196,9 @@ PANEL › “Show as grid” (and “Show as list” to go back: the cues stay t
   of a GRID for a moment and that GRID opens, so you can drop it on a precise tile or onto a group. Dragging a
   tile of an opened group onto the group bar takes it out of the group. A **group always moves with all its
   cues** (and cannot enter another group).
+- Tiles can be dragged **also outside ⚙ Options**: in normal use a tile starts when the click is released (so a
+  drag moves it instead of starting it); **Pushbutton** tiles still start on press and are dragged with
+  **Shift + drag** (the tooltip says so).
 - **Ctrl + drag duplicates** instead of moving, both in a GRID (onto a tile, a group, the group bar or the tab of
   another list) and in the lists (MAIN and list PANELs): the copy gets new numbers, the original stays where it
   was; a copied group comes with copies of all its cues.

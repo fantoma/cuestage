@@ -2346,6 +2346,22 @@ def t_grid_push_toggle(w):
         w.ctrl.stop_all(0)
         run(0.3)
         a.midi = ""
+    # gruppo Pushbutton: al rilascio ogni sua cue sfuma con il proprio fade out
+    grp = Cue("group", number="90", name="PG", group_mode="all")
+    mem = Cue("audio", number="91", name="PM", file=tone("push_g.wav", sec=8), group=grp.id, fade_out=1.5)
+    lst.cues.extend([grp, mem])
+    w._grid_sync(force=True)
+    run(0.2)
+    w.grid_set_button(grp, "push")
+    w.grid_activate(grp)
+    assert wait_until(lambda: alive(mem), 3)
+    w.grid_release(grp)
+    run(0.5)
+    im = w.ctrl.instances.get(mem.id)
+    assert im is not None and im.user_stopped and not im.done           # sta ancora sfumando (1,5 s)
+    assert wait_until(lambda: mem.id not in w.ctrl.instances or w.ctrl.instances[mem.id].done, 4)
+    w.ctrl.stop_all(0)
+    run(0.3)
     # Toggle: premi = avvia, premi di nuovo = ferma
     lst.grid_click = "start"
     w.grid_set_button(c, "toggle")
@@ -2492,6 +2508,35 @@ def t_grid_move_between(w):
     cp = w.grid.cell_cue(free)
     assert cp is not None and cp is not hm and cp.name == "HM" and hm in p2.cues
     w.grid.set_editing(False)
+    # fuori da Opzioni: trascina = sposta (la cue parte al rilascio del clic); Pushbutton solo con Shift
+    w.show_list(2)
+    w._grid_sync(force=True)
+    run(0.1)
+
+    def press_move_release(cue, lp, mods=Qt.NoModifier):
+        r = cv.cell_rect(*cue.grid_pos[1:]).center()
+        cv.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, r, cv.mapToGlobal(r), Qt.LeftButton, Qt.LeftButton, mods))
+        cv.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, lp, cv.mapToGlobal(lp), Qt.NoButton, Qt.LeftButton, mods))
+        cv.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, lp, cv.mapToGlobal(lp), Qt.LeftButton, Qt.NoButton, mods))
+        run(0.1)
+
+    def free_cell():
+        return next((0, rr, cc) for rr in range(p2.grid_rows) for cc in range(p2.grid_cols)
+                    if (0, rr, cc) not in w.grid.cue_map())
+    f = free_cell()
+    press_move_release(hm, cv.cell_rect(*f[1:]).center())
+    assert list(hm.grid_pos) == list(f)
+    hm.grid_button = "push"
+    before = list(hm.grid_pos)
+    f = free_cell()
+    press_move_release(hm, cv.cell_rect(*f[1:]).center())
+    assert list(hm.grid_pos) == before                              # Pushbutton: senza Shift non si sposta
+    w.grid_release(hm)
+    press_move_release(hm, cv.cell_rect(*f[1:]).center(), Qt.ShiftModifier)
+    assert list(hm.grid_pos) == list(f)
+    hm.grid_button = ""
+    w.ctrl.stop_all(0)
+    run(0.2)
     # lista: «Sposta in» con il solo gruppo selezionato porta con sé le sue cue
     w.show_list(2)
     w.grid_set_kind = None
