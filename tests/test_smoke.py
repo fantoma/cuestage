@@ -1930,10 +1930,18 @@ def t_volume_field(w):
     ins = w.inspector
     ins.set_cue(a)
     ins.tabs.setCurrentIndex(ins._tab_keys.index("Tempi e loop"))
-    run(0.3)
+    # l'ispettore si ricostruisce quando arrivano le informazioni del file (su Windows anche più tardi):
+    # si aspetta il grafico con la durata e si prendono i campi ogni volta da capo
+    assert wait_until(lambda: ins.timeline is not None and ins.timeline.duration > 0, 10)
+    run(0.5)
     tl = ins.timeline
     tl.zoom_all()
-    sp = [x for x in ins.findChildren(QDoubleSpinBox) if x.isVisible() and x.suffix() == " dB"][0]
+
+    class _Spin:
+        def __getattr__(self, k):
+            sb = [x for x in ins.findChildren(QDoubleSpinBox) if x.isVisible() and x.suffix() == " dB"][0]
+            return getattr(sb, k)
+    sp = _Spin()
     for t_, exp in ((1.0, -6.0), (4.0, -12.0), (6.5, -18.0)):
         tl._move_cursor(tl.t2x(t_))
         run(0.02)
@@ -2047,11 +2055,20 @@ def t_video_xfade_fades(w):
     ins = w.inspector
     ins.set_cue(v)
     ins.tabs.setCurrentIndex(ins._tab_keys.index("Tempi e loop"))
-    run(0.3)
+    assert wait_until(lambda: ins.timeline is not None and ins.timeline.duration > 0, 10)
+    run(0.5)                                                      # (l'ispettore si ricostruisce con le info)
     tl = ins.timeline
     tl.zoom_all()
     run(0.05)
-    sb = [x for x in ins.findChildren(QScrollBar, "timeline_scroll")][-1]
+
+    class _Bar:
+        def __getattr__(self, k):
+            sbs = [x for x in ins.findChildren(QScrollBar, "timeline_scroll") if x.parent() is not None
+                   and x.parentWidget().isVisible()]
+            return getattr(sbs[-1], k)
+    sb = _Bar()
+    tl.repaint()
+    run(0.05)
     assert not sb.isVisible()
     tl.v0, tl.v1 = 0.0, 2.0                                       # ingrandito: compare la barra
     tl.repaint()
