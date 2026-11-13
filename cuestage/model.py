@@ -8,19 +8,19 @@ import uuid
 from .system import local_path, portable_rel
 
 CUE_TYPES = ["audio", "video", "image", "text", "group", "groupexit", "fade", "preset", "control", "stoppanel",
-             "osc", "midiout", "projector", "mixer", "switcher", "fsclose", "wait", "memo"]
+             "osc", "midiout", "projector", "mixer", "switcher", "fullscreen", "wait", "memo"]
 TYPE_LABELS = {
     "audio": tr("Audio"), "video": tr("Video"), "image": tr("Immagine"), "fade": tr("Fade"),
     "preset": tr("Cambia preset"), "control": tr("Comando"), "osc": "OSC", "projector": tr("Proiettore"), "mixer": tr("Mixer"),
     "switcher": tr("Regia video"),
     "group": tr("Gruppo"), "groupexit": tr("Esci dal gruppo"), "text": tr("Testo"), "midiout": tr("MIDI out"),
     "wait": tr("Attesa"), "memo": tr("Memo"), "stoppanel": tr("Stop panel"),
-    "fsclose": tr("Chiudi schermo intero"),
+    "fullscreen": tr("Schermo intero"),
 }
 TYPE_ICONS = {
     "audio": "♪", "video": "▶", "image": "▣", "fade": "◢", "preset": "⇢", "control": "⌘", "projector": "⌖",
     "osc": "⇄", "wait": "⧗", "memo": "✎", "mixer": "≣", "group": "◫", "groupexit": "⇥", "text": "T", "midiout": "♫",
-    "stoppanel": "⊠", "switcher": "◧", "fsclose": "⇲",
+    "stoppanel": "⊠", "switcher": "◧", "fullscreen": "⛶",
 }
 
 # campi salvati nei preset (per tipo di preset)
@@ -100,7 +100,7 @@ class Cue:
         "file": "", "start": 0.0, "end": 0.0, "loop": False, "loop_start": 0.0,
         "loop_end": 0.0, "loop_count": 0, "loop_xfade": 0.0, "loop_stop": False,
         # video: crossfade del loop e fade dell'immagine separati dall'audio (di serie uguali all'audio)
-        "loop_xfade_video": 0.0, "loop_xfade_link": True, "fs_hide": False,
+        "loop_xfade_video": 0.0, "loop_xfade_link": True, "fs_action": "open", "fs_hide": False,
         # pulsante del GRID e della scorciatoia: "" = come il PANEL, "toggle", "push" (attiva finché premuto);
         # in «push» al rilascio si può avviare un'altra cue
         "grid_button": "", "grid_release": "", "v_fade_in": 0.0, "v_fade_out": 0.0, "fade_link": True, "level_db": 0.0, "fade_in": 0.0,
@@ -232,6 +232,9 @@ class Cue:
         for k in cls.FIELDS:
             if k in d:
                 setattr(c, k, d[k])
+        if c.type == "fsclose":                  # show precedenti: «Chiudi schermo intero» -> Schermo intero › Chiudi
+            c.type = "fullscreen"
+            c.fs_action = "close"
         from .keyframes import migrate_points
         c.preset_points = migrate_points(c.preset_points)
         if c.type == "mixer" and "mix_states" not in d:

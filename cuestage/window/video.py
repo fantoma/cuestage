@@ -63,8 +63,18 @@ class VideoMixin:
             self.show_output()
 
     def _output_request(self, what):
-        """Cue «Chiudi schermo intero»: la finestra di uscita esce dallo schermo intero (resta aperta in finestra,
-        sullo stesso schermo) oppure si nasconde. L'impostazione «Schermo intero» non cambia."""
+        """Cue «Schermo intero». Apri: la finestra di uscita si mostra a schermo intero sullo schermo scelto (con un
+        solo schermo resta in finestra, per non coprire la regia). Chiudi: esce dallo schermo intero (resta aperta in
+        finestra, sullo stesso schermo) oppure si nasconde. L'impostazione «Schermo intero» non cambia."""
+        if what == "open":
+            self._create_output()
+            scr = self.show_data.settings.get("output_screen", -1)
+            screens = QApplication.screens()
+            full = not (len(screens) == 1 and scr in (-1, 0))
+            self.output.place_on_screen(scr if scr >= 0 else None, full)
+            self.act_out_show.setText(tr("Nascondi finestra di uscita"))
+            self.status(tr("Schermo intero aperto") if full else tr("Finestra di uscita aperta (un solo schermo)"))
+            return
         out = self.output
         if out is None or not out.isVisible():
             return

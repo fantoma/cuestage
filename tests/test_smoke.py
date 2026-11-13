@@ -2171,13 +2171,34 @@ def t_levels_zero(w):
 
 
 def t_fsclose(w):
-    """Cue «Chiudi schermo intero»: la finestra di uscita esce dallo schermo intero (o si nasconde)."""
+    """Cue «Schermo intero»: Apri (finestra di uscita a schermo intero) e Chiudi (esce dallo schermo intero o si
+    nasconde); le vecchie cue «Chiudi schermo intero» diventano Schermo intero › Chiudi."""
+    from PySide6.QtWidgets import QApplication, QComboBox
+    old = Cue.from_dict({"type": "fsclose", "number": "9", "fs_hide": True})
+    assert old.type == "fullscreen" and old.fs_action == "close" and old.fs_hide
+    assert Cue("fullscreen").fs_action == "open"
     sh = Show()
     sh.settings["output_fullscreen"] = False
-    c1 = Cue("fsclose", number="1", name="Chiudi")
-    c2 = Cue("fsclose", number="2", name="Nascondi", fs_hide=True)
-    sh.cues = [c1, c2]
+    c1 = Cue("fullscreen", number="1", name="Chiudi", fs_action="close")
+    c2 = Cue("fullscreen", number="2", name="Nascondi", fs_action="close", fs_hide=True)
+    c3 = Cue("fullscreen", number="3", name="Apri")
+    sh.cues = [c1, c2, c3]
     w._set_show(sh)
+    ins = w.inspector
+    ins.set_cue(c3)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Schermo intero"))
+    run(0.1)
+    cb = [x for x in w.inspector.findChildren(QComboBox) if x.isVisible() and x.findData("close") >= 0][-1]
+    cb.setCurrentIndex(cb.findData("close"))
+    assert c3.fs_action == "close"
+    cb.setCurrentIndex(cb.findData("open"))
+    assert c3.fs_action == "open"
+    w.ctrl.start_cue(c3)                         # Apri: la finestra di uscita compare (a schermo intero se c'è un 2° schermo)
+    run(0.3)
+    assert w.output is not None and w.output.isVisible()
+    assert w.output.isFullScreen() == (len(QApplication.screens()) > 1)
+    assert sh.settings["output_fullscreen"] is False
+    w.output.hide()
     w._create_output()
     w.output.place_on_screen(None, True)
     run(0.2)
@@ -3140,7 +3161,7 @@ if __name__ == "__main__":
     check("ducking: ingresso che non risponde non blocca l'interfaccia", t_ducking_open_nonblocking)
     check("grafico: barra di scorrimento; video: fade e crossfade dell'immagine separati", lambda: t_video_xfade_fades(w))
     check("«Volumi uscite a 0 dB»: volume della cue e uscite a 0 dB", lambda: t_levels_zero(w))
-    check("cue «Chiudi schermo intero»", lambda: t_fsclose(w))
+    check("cue «Schermo intero» (Apri / Chiudi)", lambda: t_fsclose(w))
     check("rotazione di video e immagini", lambda: t_rotation(w))
     check("GRID: pulsanti Pushbutton e Toggle, cue al rilascio", lambda: t_grid_push_toggle(w))
     check("le cue Memo non partono con il GO", lambda: t_memo_skip(w))

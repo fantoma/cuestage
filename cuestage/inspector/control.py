@@ -581,16 +581,32 @@ class ControlTabsMixin:
         f.addRow(b)
         return w
 
-    def _tab_fsclose(self):
+    def _tab_fullscreen(self):
         w = QWidget()
         f = QFormLayout(w)
-        f.addRow(self._check("fs_hide", tr("Nascondi anche la finestra di uscita")))
-        lab = QLabel(tr("Al GO la finestra di uscita video esce dallo schermo intero e resta aperta in finestra sullo "
-                        "stesso schermo (con la spunta: si nasconde). L'impostazione «Schermo intero» del menu Uscita "
-                        "video non cambia: «Mostra finestra di uscita» la riporta a schermo intero."))
+        cue = self.cue
+        act = self._combo("fs_action", ["open", "close"], {"open": tr("Apri"), "close": tr("Chiudi")})
+        f.addRow(tr("Azione"), act)
+        hide = self._check("fs_hide", tr("Nascondi anche la finestra di uscita"))
+        f.addRow(hide)
+        lab = QLabel()
         lab.setWordWrap(True)
         lab.setStyleSheet("color:#999;")
         f.addRow(lab)
+        texts = {
+            "open": tr("Al GO la finestra di uscita video si apre a schermo intero sullo schermo scelto nel menu "
+                       "Uscita video (con un solo schermo resta in finestra, per non coprire la regia). "
+                       "L'impostazione «Schermo intero» del menu non cambia."),
+            "close": tr("Al GO la finestra di uscita video esce dallo schermo intero e resta aperta in finestra sullo "
+                        "stesso schermo (con la spunta: si nasconde). L'impostazione «Schermo intero» del menu Uscita "
+                        "video non cambia: «Mostra finestra di uscita» la riporta a schermo intero.")}
+
+        def sync(_i=None):
+            a = getattr(cue, "fs_action", "open") or "open"
+            hide.setVisible(a == "close")
+            lab.setText(texts.get(a, ""))
+        act.currentIndexChanged.connect(sync)
+        sync()
         return w
 
     def _tab_wait(self):
