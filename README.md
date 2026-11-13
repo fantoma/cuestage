@@ -182,6 +182,9 @@ PANEL › “Show as grid” (and “Show as list” to go back: the cues stay t
   **Toggle** (press = start, press again = stop) or **Pushbutton**: the cue starts when the tile (or its keyboard
   shortcut) is pressed and stays active while it is held; on release it stops with its fade out (or the GRID fade)
   and, if set, **another cue starts on release** (“On release start”). The tile shows a PUSH / TOGGLE label.
+  With “Wait for the active cues to end” (under “On release start”) the release cue starts only when the
+  released cue — or all the active cues of the group — have finished their fade out; pressing the button again
+  before then cancels it.
   A **group** set as Pushbutton stops on release with **each cue's own fade out** (cues without one use the
   group's fade out, or the GRID fade).
   A Pushbutton cue with a **MIDI trigger** works the same way from a controller: the *Note On* starts it and the

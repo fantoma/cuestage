@@ -72,6 +72,7 @@ class GridMixin:
             if cue.id in self._pushed:
                 return                                   # ripetizione del tasto tenuto premuto
             self._pushed.add(cue.id)
+            (getattr(self, "_release_waits", None) or {}).pop(cue.id, None)   # ripremuto: niente cue «al rilascio»
             inst = ctrl.instances.get(cue.id)
             if inst is None or inst.done:
                 ctrl.trigger(cue, cascade=False)
@@ -118,7 +119,9 @@ class GridMixin:
             return f if f > 0 else base
         inst = self.ctrl.instances.get(cue.id)
         spawned = getattr(inst, "spawned", None)
+        stopping = [cue.id]                      # cue che stanno finendo (per «attendi la fine»)
         if cue.type == "group" and inst is not None and not inst.done and spawned is not None:
+            stopping += list(spawned)
             # gruppo: ogni sua cue in riproduzione sfuma con il proprio fade out, poi il gruppo esce
             gf = float(getattr(cue, "fade_out", 0) or 0)
             for k in list(spawned):
@@ -136,13 +139,44 @@ class GridMixin:
             self.ctrl.stop_cue(cue.id, own_fade(cue))
         rel = getattr(cue, "grid_release", "") or ""
         tg = self.show_data.resolve_target(rel) if rel else None
-        if tg is not None and tg is not cue:
+        if tg is not None and tg is not cue and getattr(cue, "grid_release_wait", False):
+            # parte quando le cue attive (anche quelle del gruppo) hanno finito il loro fade out
+            waits = getattr(self, "_release_waits", None)
+            if waits is None:
+                waits = self._release_waits = {}
+            waits[cue.id] = (stopping, tg)
+            self._release_wait_timer().start()
+            self.status(f"■ {cue.label()}  … ▶ {tg.label()}")
+        elif tg is not None and tg is not cue:
             self.ctrl.trigger(tg, cascade=False)
             self.status(f"■ {cue.label()}  ▶ {tg.label()}")
         else:
             self.status(f"■ {cue.label()}")
         if self._grid_list() is not None:
             self.grid.canvas.update()
+
+    def _release_wait_timer(self):
+        t = getattr(self, "_rel_timer", None)
+        if t is None:
+            from PySide6.QtCore import QTimer
+            t = self._rel_timer = QTimer(self)
+            t.setInterval(40)
+            t.timeout.connect(self._release_wait_tick)
+        return t
+
+    def _release_wait_tick(self):
+        """«Al rilascio avvia» con attesa: la cue parte quando tutte le cue che stavano finendo sono ferme."""
+        waits = getattr(self, "_release_waits", {}) or {}
+        ctrl = self.ctrl
+        for cid, (ids, tg) in list(waits.items()):
+            busy = any((ctrl.instances.get(k) is not None and not ctrl.instances[k].done) for k in ids)
+            if not busy:
+                del waits[cid]
+                if self.show_data.by_id(tg.id) is not None:
+                    ctrl.trigger(tg, cascade=False)
+                    self.status(f"▶ {tg.label()}")
+        if not waits:
+            self._release_wait_timer().stop()
 
     def grid_move(self, cue, cell):
         lst = self._grid_list()

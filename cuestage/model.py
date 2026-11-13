@@ -103,7 +103,7 @@ class Cue:
         "loop_xfade_video": 0.0, "loop_xfade_link": True, "fs_action": "open", "fs_hide": False,
         # pulsante del GRID e della scorciatoia: "" = come il PANEL, "toggle", "push" (attiva finché premuto);
         # in «push» al rilascio si può avviare un'altra cue
-        "grid_button": "", "grid_release": "", "v_fade_in": 0.0, "v_fade_out": 0.0, "fade_link": True, "level_db": 0.0, "fade_in": 0.0,
+        "grid_button": "", "grid_release": "", "grid_release_wait": False, "v_fade_in": 0.0, "v_fade_out": 0.0, "fade_link": True, "level_db": 0.0, "fade_in": 0.0,
         "fade_out": 0.0, "curve": [],
         # video: curva di opacità [[secondi del file, opacità 0…1]] (come la curva di volume)
         "op_curve": [],

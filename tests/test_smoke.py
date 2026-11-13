@@ -2362,6 +2362,30 @@ def t_grid_push_toggle(w):
     assert wait_until(lambda: mem.id not in w.ctrl.instances or w.ctrl.instances[mem.id].done, 4)
     w.ctrl.stop_all(0)
     run(0.3)
+    # «Al rilascio avvia» con attesa: parte solo dopo il fade out delle cue del gruppo; ripremendo prima, non parte
+    grp.grid_release = b.id
+    grp.grid_release_wait = True
+    w.grid_activate(grp)
+    assert wait_until(lambda: alive(mem), 3)
+    w.grid_release(grp)
+    run(0.6)
+    playing = lambda c: c.id in w.ctrl.instances and not w.ctrl.instances[c.id].done   # noqa: E731
+    assert not alive(b) and playing(mem)                                # sta ancora sfumando
+    assert wait_until(lambda: alive(b), 4)
+    assert not playing(mem)
+    w.ctrl.stop_all(0)
+    run(0.3)
+    w.grid_activate(grp)
+    assert wait_until(lambda: alive(mem), 3)
+    w.grid_release(grp)
+    run(0.3)
+    w.grid_activate(grp)                                               # ripremuto durante il fade: niente B
+    run(2.0)
+    assert not alive(b)
+    w.grid_release(grp)
+    grp.grid_release_wait = False
+    w.ctrl.stop_all(0)
+    run(0.3)
     # Toggle: premi = avvia, premi di nuovo = ferma
     lst.grid_click = "start"
     w.grid_set_button(c, "toggle")

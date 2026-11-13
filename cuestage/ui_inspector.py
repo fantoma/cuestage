@@ -561,15 +561,21 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         rh.setContentsMargins(0, 0, 0, 0)
         rh.addWidget(self._target_combo(attr="grid_release"), 1)
         rel_row.setToolTip(tr("Pushbutton: al rilascio del tasto parte anche questa cue (vuoto = nessuna)"))
+        rel_wait = self._check("grid_release_wait", tr("Attendi la fine delle cue attive (anche del gruppo, dopo il fade out)"))
+        rel_wait.setToolTip(tr("La cue «al rilascio» parte solo quando la cue rilasciata (o tutte le cue attive del "
+                               "gruppo) ha finito il suo fade out; ripremendo il pulsante prima, non parte"))
 
         def bm_changed(i):
             cue.grid_button = bm.itemData(i) or ""
             rel_row.setEnabled(cue.grid_button == "push")
+            rel_wait.setEnabled(cue.grid_button == "push")
             self._emit()
         bm.currentIndexChanged.connect(bm_changed)
         rel_row.setEnabled((getattr(cue, "grid_button", "") or "") == "push")
+        rel_wait.setEnabled((getattr(cue, "grid_button", "") or "") == "push")
         f.addRow(tr("Pulsante"), bm)
         f.addRow(tr("Al rilascio avvia"), rel_row)
+        f.addRow("", rel_wait)
         from .model import EVENT_LABELS
         from PySide6.QtWidgets import QCheckBox
         for label, keys in ((tr("Ducking"), ("duck_on", "duck_off")),
