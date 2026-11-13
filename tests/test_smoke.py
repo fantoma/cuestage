@@ -2617,6 +2617,11 @@ def t_list_drop_other_lists(w):
     from PySide6.QtCore import QMimeData, QModelIndex, Qt
     from cuestage.ui_cuelist import CUES_MIME, hand_pixmap
     assert not hand_pixmap().isNull() and not hand_pixmap(True).isNull()
+    from cuestage.ui_cuelist import drag_image
+    pm, hot = drag_image(3, with_hand=True)                         # Wayland: la manina segue il puntatore
+    assert not pm.isNull() and pm.width() > 32 and (hot.x(), hot.y()) == (14, 14)
+    pm2, _hot2 = drag_image(1, copy=True)
+    assert pm2.width() < pm.width()
     sh = Show()
     sh.settings["output_fullscreen"] = False
     a = Cue("memo", number="1", name="A")

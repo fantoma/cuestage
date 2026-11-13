@@ -3,7 +3,7 @@ from .i18n import tr
 import json
 
 from PySide6.QtCore import QAbstractTableModel, QEvent, QMimeData, QModelIndex, QRectF, Qt, Signal, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPen
 from PySide6.QtWidgets import QStyledItemDelegate, QStyle, QTableView, QWidget
 
 from .media import fmt_time
@@ -145,6 +145,40 @@ def cue_duration(cue, loader):
     return 0.0
 
 
+def wayland():
+    return QGuiApplication.platformName().startswith("wayland")
+
+
+def drag_image(n, copy=False, with_hand=False):
+    """Immagine che segue il puntatore durante il trascinamento: «N cue» e, dove il cursore non si può
+    cambiare (Wayland: lo decide il compositor), anche la manina. Restituisce (pixmap, hotspot)."""
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QFontMetrics, QPixmap
+    text = tr("{0} cue", n)
+    f = QFont()
+    f.setBold(True)
+    fm = QFontMetrics(f)
+    tw, th = fm.horizontalAdvance(text) + 14, fm.height() + 6
+    hand = hand_pixmap(copy) if with_hand else None
+    W = (32 if hand else 18) + tw
+    H = max(32, th + 18)
+    pm = QPixmap(W, H)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    if hand is not None:
+        p.drawPixmap(0, 0, hand)
+    x0 = W - tw
+    p.setPen(Qt.NoPen)
+    p.setBrush(QColor(40, 170, 80) if copy else QColor(58, 74, 106))
+    p.drawRoundedRect(QRectF(x0, H - th, tw, th), 5, 5)
+    p.setPen(QColor(255, 255, 255))
+    p.setFont(f)
+    p.drawText(QRectF(x0, H - th, tw, th), Qt.AlignCenter, text)
+    p.end()
+    return pm, (QPoint(14, 14) if hand is not None else QPoint(-6, -6))
+
+
 class CueTableView(QTableView):
     """Tabella delle cue: durante il trascinamento il cursore è una manina (con «+» se Ctrl duplica)."""
 
@@ -156,8 +190,15 @@ class CueTableView(QTableView):
         md = self.model().mimeData(idx)
         drag = QDrag(self)
         drag.setMimeData(md)
-        drag.setDragCursor(hand_pixmap(False), Qt.MoveAction)
-        drag.setDragCursor(hand_pixmap(True), Qt.CopyAction)
+        n = len({i.row() for i in idx})
+        pm, hot = drag_image(n, copy=bool(QGuiApplication.keyboardModifiers() & Qt.ControlModifier),
+                             with_hand=wayland())
+        drag.setPixmap(pm)
+        drag.setHotSpot(hot)
+        if not wayland():
+            # X11, Windows, macOS: il cursore stesso diventa la manina
+            drag.setDragCursor(hand_pixmap(False), Qt.MoveAction)
+            drag.setDragCursor(hand_pixmap(True), Qt.CopyAction)
         drag.exec(actions, Qt.MoveAction)
 
     def _foreign(self, e):
