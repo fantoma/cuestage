@@ -34,6 +34,7 @@ class ListTabs(QWidget):
     moveRequested = Signal(int, int)        # indice, direzione
     addGridRequested = Signal()
     kindRequested = Signal(int, str)        # indice, «list» / «grid»
+    cuesDropped = Signal(int, list, bool)   # cue trascinate su un tab: indice, id, copia (Ctrl)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -51,6 +52,15 @@ class ListTabs(QWidget):
         self.bar.setStyleSheet("QTabBar::tab{padding:4px 14px;font-weight:bold;}"
                                "QTabBar::tab:selected{background:#3a4a6a;color:white;}")
         h.addWidget(self.bar)
+        # cue trascinate dalla lista sopra un tab: rilasciate lì si spostano; tenute ferme, il tab si apre
+        self.bar.setAcceptDrops(True)
+        self.bar.installEventFilter(self)
+        from PySide6.QtCore import QTimer
+        self._spring = QTimer(self)
+        self._spring.setSingleShot(True)
+        self._spring.setInterval(700)
+        self._spring.timeout.connect(self._spring_open)
+        self._spring_i = -1
         self.add_btn = QToolButton()
         self.add_btn.setText(tr("+ PANEL"))
         self.add_btn.setToolTip(tr("Nuova lista di cue (PANEL)"))
@@ -92,6 +102,53 @@ class ListTabs(QWidget):
         if self.bar.currentIndex() != current:
             self.bar.setCurrentIndex(current)
         self._guard = False
+
+    def eventFilter(self, obj, ev):
+        from PySide6.QtCore import QEvent
+        from .ui_cuelist import CUES_MIME
+        if obj is self.bar:
+            t = ev.type()
+            if t in (QEvent.DragEnter, QEvent.DragMove):
+                if not ev.mimeData().hasFormat(CUES_MIME):
+                    return False
+                i = self.bar.tabAt(ev.position().toPoint())
+                if i >= 0 and i != self.bar.currentIndex():
+                    ev.acceptProposedAction()
+                    if i != self._spring_i:
+                        self._spring_i = i
+                        self._spring.start()
+                else:
+                    ev.accept() if t == QEvent.DragEnter else ev.ignore()
+                    self._spring_i = -1
+                    self._spring.stop()
+                return True
+            if t == QEvent.DragLeave:
+                self._spring_i = -1
+                self._spring.stop()
+                return False
+            if t == QEvent.Drop:
+                self._spring.stop()
+                self._spring_i = -1
+                md = ev.mimeData()
+                if not md.hasFormat(CUES_MIME):
+                    return False
+                import json
+                i = self.bar.tabAt(ev.position().toPoint())
+                if i >= 0 and i != self.bar.currentIndex():
+                    ids = json.loads(bytes(md.data(CUES_MIME)).decode()).get("ids") or []
+                    copy = ev.dropAction() == Qt.CopyAction or bool(ev.modifiers() & Qt.ControlModifier)
+                    ev.setDropAction(Qt.CopyAction if copy else Qt.MoveAction)
+                    ev.accept()
+                    self.cuesDropped.emit(i, list(ids), copy)
+                return True
+        return super().eventFilter(obj, ev)
+
+    def _spring_open(self):
+        """Cue tenute sopra un tab: si apre quella lista, per lasciarle in un punto preciso."""
+        i = self._spring_i
+        self._spring_i = -1
+        if 0 <= i < self.bar.count() and i != self.bar.currentIndex():
+            self.bar.setCurrentIndex(i)
 
     def _changed(self, i):
         if not self._guard and i >= 0:

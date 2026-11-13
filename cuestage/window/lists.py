@@ -272,6 +272,40 @@ class ListsMixin:
             self.status(pre + tr("«{0}» spostata in «{1}»", cue.label(), dest.name))
         return cue
 
+    def drop_cues(self, ids, dest_i, row=None, cell=None, group=None, copy=False):
+        """Cue trascinate (anche da un'altra lista) nella lista dest_i: alla riga «row» di una lista, nella
+        casella «cell» (o nelle prime libere) di un GRID, oppure dentro «group». Un gruppo si porta dietro le
+        sue cue; con copy=True si spostano delle copie."""
+        sh = self.show_data
+        if not (0 <= dest_i < len(sh.lists)):
+            return
+        cues = [c for c in (sh.by_id(i) for i in ids) if c is not None]
+        idset = {c.id for c in cues}
+        cues = [c for c in cues if not (c.group and c.group in idset)]   # i membri seguono il loro gruppo
+        dest = sh.lists[dest_i]
+        moved = []
+        for k, c in enumerate(cues):
+            if group is not None and c.type != "group":
+                m = self.move_cue_to(c, group=group, copy=copy)
+            else:
+                m = self.move_cue_to(c, dest_i, cell=cell if k == 0 else None, copy=copy)
+            if m:
+                moved.append(m)
+        if row is not None and not dest.is_grid and group is None and moved and dest is sh.current:
+            # dalla fine della lista alla riga di rilascio (dentro un gruppo le cue ne diventano membri)
+            from ..groups import block_end
+            r = int(row)
+            for m in moved:
+                i = dest.index_of(m.id)
+                if i < 0:
+                    continue
+                blk = list(range(i, block_end(dest.cues, i)))
+                self._rows_moved(blk, r)
+                r += len(blk)
+            self._select_rows([dest.index_of(m.id) for m in moved if dest.index_of(m.id) >= 0])
+        if len(moved) > 1:
+            self.status((tr("Copia: ") if copy else "") + tr("{0} cue spostate in «{1}»", len(moved), dest.name))
+
     def _new_cue_menu(self, menu):
         from ..model import CUE_TYPES, TYPE_ICONS, TYPE_LABELS
         for t in CUE_TYPES:

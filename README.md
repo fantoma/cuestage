@@ -141,6 +141,9 @@ walk-in music, effects on call, emergency cues).
   “With previous” and “After previous” apply within the same list.
 - **Moving cues** between lists: select the cues, then right-click › Move to (or Cue › Move the selected
   to), also into a new PANEL. A selected group takes all its cues with it.
+  You can also **drag** the selected rows onto the **tab** of another list or GRID (they go to the end, or to the
+  first free tiles); hold them on the tab for a moment and that list opens, so you can drop them on a precise
+  row, tile or group. Ctrl + drag copies. While dragging the pointer is a hand (with a “+” when copying).
 - Fade, Change preset and Command cues can target cues in any list (in the target menus PANEL cues are
   marked [PANEL name]). New numbers are unique across the whole show; “Renumber” in a PANEL uses P1.1,
   P1.2… so it does not overlap the MAIN.

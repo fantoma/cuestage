@@ -4,7 +4,7 @@ import json
 
 from PySide6.QtCore import QAbstractTableModel, QEvent, QMimeData, QModelIndex, QRectF, Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
-from PySide6.QtWidgets import QStyledItemDelegate, QStyle, QWidget
+from PySide6.QtWidgets import QStyledItemDelegate, QStyle, QTableView, QWidget
 
 from .media import fmt_time
 from .model import TRIGGER_SHORT, TYPE_ICONS, TYPE_LABELS
@@ -91,6 +91,34 @@ class PflDelegate(QStyledItemDelegate):
                 return True              # il clic sul pulsante non seleziona la riga né sposta il playhead
         return False
 ROW_MIME = "application/x-cuestage-rows"
+CUES_MIME = "application/x-cuestage-cues"      # {"list": id della lista di partenza, "ids": [id delle cue]}
+
+
+def hand_pixmap(copy=False):
+    """Manina chiusa (e un «+» per la copia) per il cursore durante il trascinamento delle cue."""
+    from PySide6.QtGui import QPainterPath, QPixmap
+    pm = QPixmap(32, 32)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    path = QPainterPath()
+    path.addRoundedRect(QRectF(7, 12, 15, 13), 5, 5)               # palmo
+    for i in range(4):                                             # dita piegate
+        path.addRoundedRect(QRectF(7 + i * 3.8, 8, 4.4, 8), 2.2, 2.2)
+    path.addRoundedRect(QRectF(3, 14, 7, 4.5), 2.2, 2.2)           # pollice
+    path = path.simplified()
+    p.setPen(QPen(QColor(0, 0, 0), 1.4))
+    p.setBrush(QColor(255, 255, 255))
+    p.drawPath(path)
+    if copy:
+        p.setPen(Qt.NoPen)
+        p.setBrush(QColor(40, 170, 80))
+        p.drawEllipse(QRectF(19, 19, 12, 12))
+        p.setPen(QPen(QColor(255, 255, 255), 2))
+        p.drawLine(25, 21.5, 25, 28.5)
+        p.drawLine(21.5, 25, 28.5, 25)
+    p.end()
+    return pm
 
 
 def cue_duration(cue, loader):
@@ -117,10 +145,60 @@ def cue_duration(cue, loader):
     return 0.0
 
 
+class CueTableView(QTableView):
+    """Tabella delle cue: durante il trascinamento il cursore è una manina (con «+» se Ctrl duplica)."""
+
+    def startDrag(self, actions):
+        from PySide6.QtGui import QDrag
+        idx = [i for i in self.selectedIndexes() if i.column() == 0] or self.selectedIndexes()
+        if not idx:
+            return
+        md = self.model().mimeData(idx)
+        drag = QDrag(self)
+        drag.setMimeData(md)
+        drag.setDragCursor(hand_pixmap(False), Qt.MoveAction)
+        drag.setDragCursor(hand_pixmap(True), Qt.CopyAction)
+        drag.exec(actions, Qt.MoveAction)
+
+    def _foreign(self, e):
+        """Id delle cue trascinate da un'altra lista (None se vengono da questa)."""
+        md = e.mimeData()
+        if not md.hasFormat(CUES_MIME):
+            return None
+        info = json.loads(bytes(md.data(CUES_MIME)).decode())
+        if info.get("list") == self.model().show.current.id:
+            return None
+        return list(info.get("ids") or [])
+
+    def dragMoveEvent(self, e):
+        # cue di un'altra lista: la vista le rifiuterebbe se cadono su righe selezionate («su sé stesse»)
+        if self._foreign(e) is not None:
+            e.acceptProposedAction()
+            return
+        super().dragMoveEvent(e)
+
+    def dropEvent(self, e):
+        ids = self._foreign(e)
+        if ids is None:
+            super().dropEvent(e)
+            return
+        pos = e.position().toPoint()
+        idx = self.indexAt(pos)
+        n = len(self.model().show.cues)
+        row = n
+        if idx.isValid():
+            row = idx.row() + (1 if pos.y() > self.visualRect(idx).center().y() else 0)
+        copy = e.dropAction() == Qt.CopyAction or bool(e.modifiers() & Qt.ControlModifier)
+        e.setDropAction(Qt.CopyAction if copy else Qt.MoveAction)
+        e.accept()
+        self.model().cuesDropped.emit(ids, int(row), copy)
+
+
 class CueTableModel(QAbstractTableModel):
     filesDropped = Signal(list, int)
     rowsMoved = Signal(list, int)
     rowsCopied = Signal(list, int)       # Ctrl + trascina: copie delle righe alla riga indicata
+    cuesDropped = Signal(list, int, bool)  # cue di un'altra lista rilasciate qui: id, riga, copia
     edited = Signal()
 
     def __init__(self, show, ctrl, loader):
@@ -397,18 +475,29 @@ class CueTableModel(QAbstractTableModel):
         return Qt.MoveAction | Qt.CopyAction
 
     def mimeTypes(self):
-        return [ROW_MIME, "text/uri-list"]
+        return [ROW_MIME, CUES_MIME, "text/uri-list"]
 
     def mimeData(self, indexes):
         rows = sorted({i.row() for i in indexes})
         md = QMimeData()
         md.setData(ROW_MIME, json.dumps(rows).encode())
+        cues = self.show.cues
+        md.setData(CUES_MIME, json.dumps({"list": self.show.current.id,
+                                          "ids": [cues[r].id for r in rows if 0 <= r < len(cues)]}).encode())
         return md
 
     def canDropMimeData(self, data, action, row, col, parent):
         return data.hasFormat(ROW_MIME) or data.hasUrls()
 
     def dropMimeData(self, data, action, row, col, parent):
+        if data.hasFormat(CUES_MIME):
+            info = json.loads(bytes(data.data(CUES_MIME)).decode())
+            if info.get("list") != self.show.current.id:
+                # cue trascinate da un'altra lista (il tab è stato aperto tenendole sopra)
+                if row < 0:
+                    row = parent.row() if parent.isValid() else len(self.show.cues)
+                self.cuesDropped.emit(list(info.get("ids") or []), int(row), action == Qt.CopyAction)
+                return False
         if row < 0:
             row = parent.row() if parent.isValid() else len(self.show.cues)
             cues = self.show.cues

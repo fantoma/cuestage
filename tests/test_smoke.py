@@ -2610,6 +2610,64 @@ def t_list_ctrl_copy(w):
     w.show_data.dirty = False
 
 
+def t_list_drop_other_lists(w):
+    """Lista: cue trascinate sui tab di altri PANEL / GRID (anche aperti tenendole sopra), manina durante il
+    trascinamento; Opzioni e BLIND non allargano il GRID."""
+    import json
+    from PySide6.QtCore import QMimeData, QModelIndex, Qt
+    from cuestage.ui_cuelist import CUES_MIME, hand_pixmap
+    assert not hand_pixmap().isNull() and not hand_pixmap(True).isNull()
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("memo", number="1", name="A")
+    g = Cue("group", number="2", name="G")
+    gm = Cue("memo", number="3", name="GM", group=g.id)
+    b = Cue("memo", number="4", name="B")
+    sh.cues = [a, g, gm, b]
+    w._set_show(sh)
+    run(0.1)
+    w.add_panel("grid")
+    w.add_panel("list")
+    run(0.1)
+    grid, pl = sh.lists[1], sh.lists[2]
+    pl.cues[:] = [Cue("memo", number="10", name="P1"), Cue("memo", number="11", name="P2")]
+    w.show_list(0)
+    run(0.1)
+    md = w.model.mimeData([w.model.index(1, 0)])
+    info = json.loads(bytes(md.data(CUES_MIME)).decode())
+    assert info["list"] == sh.lists[0].id and info["ids"] == [g.id]
+    w.list_tabs.cuesDropped.emit(1, [g.id], False)                     # gruppo sul tab del GRID
+    run(0.1)
+    assert g in grid.cues and gm in grid.cues and gm.group == g.id and g not in sh.lists[0].cues
+    assert len(g.grid_pos) == 3
+    w.list_tabs.cuesDropped.emit(2, [a.id], True)                      # Ctrl: copia sul tab del PANEL
+    run(0.1)
+    assert a in sh.lists[0].cues and [c.name for c in pl.cues] == ["P1", "P2", "A"]
+    # tenute sopra il tab: il PANEL si apre e la cue va alla riga di rilascio
+    w.show_list(2)
+    run(0.1)
+    md = QMimeData()
+    md.setData(CUES_MIME, json.dumps({"list": sh.lists[0].id, "ids": [b.id]}).encode())
+    w.model.dropMimeData(md, Qt.MoveAction, 1, 0, QModelIndex())
+    run(0.1)
+    assert [c.name for c in pl.cues] == ["P1", "B", "P2", "A"], [c.name for c in pl.cues]
+    assert b not in sh.lists[0].cues
+    # Opzioni e BLIND non cambiano la larghezza del GRID
+    w.show_list(1)
+    run(0.2)
+    gp = w.grid
+    w0 = gp.minimumSizeHint().width()
+    gp.set_editing(True)
+    run(0.1)
+    assert gp.minimumSizeHint().width() <= max(w0, 600), (w0, gp.minimumSizeHint().width())
+    gp.set_editing(False)
+    gp.blind.setChecked(True)
+    run(0.1)
+    assert gp.minimumSizeHint().width() <= w0 + 40, (w0, gp.minimumSizeHint().width())
+    gp.blind.setChecked(False)
+    w.show_data.dirty = False
+
+
 def t_memo_skip(w):
     """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
     sh = Show()
@@ -3414,6 +3472,7 @@ if __name__ == "__main__":
     check("cue «Schermo intero» (Apri / Chiudi)", lambda: t_fsclose(w))
     check("GRID: sposta cue e gruppi in altri PANEL e nei gruppi (menu e trascinamento)", lambda: t_grid_move_between(w))
     check("lista: Ctrl + trascina duplica", lambda: t_list_ctrl_copy(w))
+    check("lista: trascina su altri PANEL e GRID; Opzioni e BLIND non allargano il GRID", lambda: t_list_drop_other_lists(w))
     check("rotazione di video e immagini", lambda: t_rotation(w))
     check("GRID: pulsanti Pushbutton e Toggle, cue al rilascio", lambda: t_grid_push_toggle(w))
     check("le cue Memo non partono con il GO", lambda: t_memo_skip(w))

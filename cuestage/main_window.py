@@ -7,7 +7,7 @@ from PySide6.QtCore import QSettings, Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QKeySequence, QPainter, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QHBoxLayout, QHeaderView, QLabel,
-    QMainWindow, QMessageBox, QPushButton, QScrollArea, QSlider, QSplitter, QStackedWidget, QTableView,
+    QMainWindow, QMessageBox, QPushButton, QScrollArea, QSlider, QSplitter, QStackedWidget,
     QVBoxLayout, QWidget,
 )
 
@@ -390,8 +390,10 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.model.filesDropped.connect(self._files_dropped)
         self.model.rowsMoved.connect(self._rows_moved)
         self.model.rowsCopied.connect(self._rows_copied)
+        self.model.cuesDropped.connect(lambda ids, row, copy: self.drop_cues(ids, self.show_data.view, row=row, copy=copy))
         self.model.edited.connect(self._model_edited)
-        self.table = QTableView()
+        from .ui_cuelist import CueTableView
+        self.table = CueTableView()
         self.table.setModel(self.model)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.ExtendedSelection)
@@ -468,6 +470,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.list_tabs.moveRequested.connect(self.move_panel)
         self.list_tabs.addGridRequested.connect(lambda: self.add_panel("grid"))
         self.list_tabs.kindRequested.connect(self.set_panel_kind)
+        self.list_tabs.cuesDropped.connect(lambda i, ids, copy: self.drop_cues(ids, i, copy=copy))
         lv.addWidget(self.list_tabs)
         # GO locale del PANEL visualizzato (solo con «GO su: MAIN»)
         self.local_go = QWidget()

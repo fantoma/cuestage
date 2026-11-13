@@ -393,7 +393,8 @@ class GridCanvas(QWidget):
 
     # ---- file trascinati dal file manager
     def dragEnterEvent(self, e):
-        if e.mimeData().hasUrls():
+        from .ui_cuelist import CUES_MIME
+        if e.mimeData().hasUrls() or e.mimeData().hasFormat(CUES_MIME):
             e.acceptProposedAction()
 
     def dragMoveEvent(self, e):
@@ -410,6 +411,24 @@ class GridCanvas(QWidget):
     def dropEvent(self, e):
         cell = self.cell_at(e.position().toPoint())
         self.drag_over = None
+        from .ui_cuelist import CUES_MIME
+        md = e.mimeData()
+        if md.hasFormat(CUES_MIME) and cell is not None:
+            # cue trascinate da una lista (il tab di questo GRID è stato aperto tenendole sopra)
+            import json
+            ids = json.loads(bytes(md.data(CUES_MIME)).decode()).get("ids") or []
+            copy = e.dropAction() == Qt.CopyAction or bool(e.modifiers() & Qt.ControlModifier)
+            mw = self.panel.mw
+            g = self.panel.group_cue()
+            tcue = self.panel.cell_cue(cell)
+            if g is None and tcue is not None and tcue.type == "group":
+                g = tcue
+            mw.drop_cues(ids, mw.show_data.lists.index(self.panel.lst), cell=None if g is not None else cell,
+                         group=g, copy=copy)
+            e.setDropAction(Qt.CopyAction if copy else Qt.MoveAction)
+            e.accept()
+            self.update()
+            return
         paths = [u.toLocalFile() for u in e.mimeData().urls() if u.isLocalFile()]
         if paths and cell is not None:
             if self.panel.group_id:
@@ -445,6 +464,8 @@ class GridPanel(QWidget):
         gb.addWidget(back)
         self.group_label = QLabel()
         self.group_label.setStyleSheet("color:#e8e8ee;font-weight:bold;")
+        self.group_label.setWordWrap(True)
+        self.group_label.setMinimumWidth(50)
         gb.addWidget(self.group_label, 1)
         self.group_bar.setVisible(False)
         v.addWidget(self.group_bar)
@@ -475,6 +496,8 @@ class GridPanel(QWidget):
         self.click = QComboBox()
         for k, t in CLICK_MODES:
             self.click.addItem(t, k)
+        self.click.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.click.setMinimumContentsLength(12)           # non allarga la griglia (il testo intero è nel menu)
         sb.addWidget(self.click)
         sb.addWidget(QLabel(tr("Fade out")))
         self.fade = QDoubleSpinBox()
@@ -487,11 +510,11 @@ class GridPanel(QWidget):
         self.fade.setToolTip(tr("Sfumatura usata dagli stop del GRID: clic su una casella attiva, modalità Solo, "
                              "STOP del PANEL"))
         sb.addWidget(self.fade)
+        sb.addStretch(1)
         self.rows.valueChanged.connect(self._size_changed)
         self.cols.valueChanged.connect(self._size_changed)
         self.click.currentIndexChanged.connect(self._click_changed)
         self.fade.valueChanged.connect(self._fade_changed)
-        bar.addWidget(self.size_box)
         # Solo e BLIND sempre a portata di mano (anche con le Opzioni chiuse)
         self.solo = QCheckBox("SOLO")
         self.solo.setToolTip(tr("Quando parte una cue (audio, video, immagine, testo o gruppo) le altre attive di "
@@ -513,10 +536,15 @@ class GridPanel(QWidget):
         self.edit_btn.toggled.connect(self.set_editing)
         bar.addWidget(self.edit_btn)
         v.addLayout(bar)
+        v.addWidget(self.size_box)                 # opzioni su una riga propria: non allargano la griglia
         self.canvas = GridCanvas(self)
         v.addWidget(self.canvas, 1)
         self.hint = QLabel()
         self.hint.setStyleSheet("color:#888;font-size:11px;")
+        self.hint.setWordWrap(True)                # testo lungo: va a capo invece di allargare la griglia
+        self.hint.setMinimumWidth(50)
+        from PySide6.QtWidgets import QSizePolicy
+        self.hint.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         v.addWidget(self.hint)
         self.set_editing(False)
 
