@@ -8,19 +8,19 @@ import uuid
 from .system import local_path, portable_rel
 
 CUE_TYPES = ["audio", "video", "image", "text", "group", "groupexit", "fade", "preset", "control", "stoppanel",
-             "osc", "midiout", "projector", "mixer", "switcher", "fullscreen", "wait", "memo"]
+             "osc", "midiout", "projector", "mixer", "switcher", "buscontrol", "fullscreen", "wait", "memo"]
 TYPE_LABELS = {
     "audio": tr("Audio"), "video": tr("Video"), "image": tr("Immagine"), "fade": tr("Fade"),
     "preset": tr("Cambia preset"), "control": tr("Comando"), "osc": "OSC", "projector": tr("Proiettore"), "mixer": tr("Mixer"),
     "switcher": tr("Regia video"),
     "group": tr("Gruppo"), "groupexit": tr("Esci dal gruppo"), "text": tr("Testo"), "midiout": tr("MIDI out"),
     "wait": tr("Attesa"), "memo": tr("Memo"), "stoppanel": tr("Stop panel"),
-    "fullscreen": tr("Schermo intero"),
+    "fullscreen": tr("Schermo intero"), "buscontrol": tr("Controllo bus"),
 }
 TYPE_ICONS = {
     "audio": "♪", "video": "▶", "image": "▣", "fade": "◢", "preset": "⇢", "control": "⌘", "projector": "⌖",
     "osc": "⇄", "wait": "⧗", "memo": "✎", "mixer": "≣", "group": "◫", "groupexit": "⇥", "text": "T", "midiout": "♫",
-    "stoppanel": "⊠", "switcher": "◧", "fullscreen": "⛶",
+    "stoppanel": "⊠", "switcher": "◧", "fullscreen": "⛶", "buscontrol": "⇶",
 }
 
 # campi salvati nei preset (per tipo di preset)
@@ -29,7 +29,7 @@ PRESET_KINDS = {
     "visual": ["crop_l", "crop_t", "crop_r", "crop_b", "rotation", "off_x", "off_y", "scale", "scale_x", "scale_y", "warp",
                "opacity", "fit"],
     # bus effetti (vedi buses.py): rack, matrice d'uscita, volume e mute
-    "bus": ["fx", "matrix", "out_levels", "level_db", "mute"],
+    "bus": ["fx", "matrix", "out_levels", "level_db", "mute", "trims", "input"],
 }
 PRESET_LABELS = {"audio": tr("Preset audio"), "visual": tr("Preset crop / posizione"), "bus": tr("Preset del bus")}
 TRIGGERS = ["manual", "with_prev", "after_prev", "trigger"]
@@ -123,6 +123,8 @@ class Cue:
         # rack effetti della cue (gate, EQ, compressore: vedi dsp.py) e mandate ai bus effetti
         # [{"bus": id, "db": livello o None = spenta, "pre": prima del volume e dei fade}]
         "fx": [], "sends": [],
+        # cue «Controllo bus»: bus e cambiamenti {level_db, mute, input_on, input_trim, fx: {id: {on, param}}}
+        "bus_target": "", "bus_set": {},
         # preascolto: la cue (o tutte le cue del gruppo) va solo alla scheda/canali del preascolto
         "pfl": False,
         # video / immagine

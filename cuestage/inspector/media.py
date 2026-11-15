@@ -350,11 +350,19 @@ class MediaTabsMixin:
         w = QWidget()
         f = QFormLayout(w)
         # cambiando target, gli elenchi dei preset si ricaricano (sono quelli della cue target)
-        f.addRow(tr("Cue target (in esecuzione)"),
-                 self._target_combo(on_change=lambda: QTimer.singleShot(0, self.rebuild)))
-        target = self.show_fn().resolve_target(cue.target)
+        tcombo = self._target_combo(on_change=lambda: QTimer.singleShot(0, self.rebuild))
+        # anche i bus effetti, con i loro preset
+        from ..buses import BusView, bus_by_id, buses
+        for b in buses(self.show_fn()):
+            tcombo.addItem(tr("Bus: {0}", b.get("name") or tr("Bus")), "bus:" + b["id"])
+        if str(cue.target or "").startswith("bus:"):
+            tcombo.setCurrentIndex(max(0, tcombo.findData(cue.target)))
+        f.addRow(tr("Cue target (in esecuzione)"), tcombo)
+        bus = bus_by_id(self.show_fn(), cue.target[4:]) if str(cue.target or "").startswith("bus:") else None
+        target = BusView(bus) if bus is not None else self.show_fn().resolve_target(cue.target)
         from ..model import PRESET_KINDS_FOR
-        kinds = PRESET_KINDS_FOR.get(target.type, ()) if target is not None else ()
+        kinds = (("bus",) if bus is not None else
+                 PRESET_KINDS_FOR.get(target.type, ()) if target is not None else ())
         names = sorted({n for k in kinds for n in target.preset_dict(k)}, key=str.lower) if kinds else []
         cb = QComboBox()
         cb.addItem(tr("(nessuno)"), "")
@@ -379,6 +387,10 @@ class MediaTabsMixin:
                 return
             # il nome vale per ogni tipo di valori che il preset ha nella cue target
             has = lambda k: target is not None and k in kinds and n in target.preset_dict(k)
+            if bus is not None:                   # preset di un bus: il nome va in preset_audio
+                cue.preset_audio, cue.preset_visual = n, ""
+                self._emit()
+                return
             cue.preset_audio = n if has("audio") else ""
             cue.preset_visual = n if has("visual") else ""
             if n and not (cue.preset_audio or cue.preset_visual):

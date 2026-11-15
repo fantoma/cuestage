@@ -2904,6 +2904,100 @@ def t_fx_gui_diag(w):
     w.show_data.dirty = False
 
 
+def t_bus_sources_control(w):
+    """Bus: trim di ogni cue sorgente, ingresso fisico con trim, cue «Controllo bus» (sfuma volume e parametri),
+    Cambia preset con un bus come target, sorgenti nella finestra dei bus."""
+    import numpy as _np
+    from cuestage.buses import BusView, new_bus
+    from cuestage.i18n import tr
+    from cuestage.ui_cuelist import C_TARGET
+    from cuestage.ui_fx import BusDialog
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    c = Cue("audio", number="1", name="Src", file=tone("bsrc.wav", sec=4))
+    bc = Cue("buscontrol", number="2", name="BC")
+    pc = Cue("preset", number="3", name="PC")
+    sh.cues = [c, bc, pc]
+    w._set_show(sh)
+    run(0.2)
+    b = new_bus(sh, "Rev", ("reverb",))
+    c.sends = [{"bus": b["id"], "db": 0.0, "pre": False}]
+    sh.dirty = True
+    run(0.2)
+    w.ctrl.start_cue(c)
+    run(0.4)
+    g0 = float(w.ctrl.instances[c.id].voice.sends[0][1].max())
+    b["trims"][c.id] = -20.0                                             # trim della sorgente nel bus
+    run(0.3)
+    g1 = float(w.ctrl.instances[c.id].voice.sends[0][1].max())
+    assert abs(g1 / g0 - 0.1) < 1e-3, (g0, g1)
+    w.ctrl.stop_all(0)
+    run(0.2)
+    w.ctrl.stop_all(0)
+    run(0.3)
+    # ingresso fisico (simulato: i campioni arrivano con push)
+    b["input"] = {"on": True, "device": "", "ch": 1, "ch2": 0, "trim": -6.0}
+    sh.dirty = True
+    run(0.3)
+    rt = w.ctrl.audio.buses[b["id"]]
+    assert rt.live is not None and abs(rt.in_gain - 10 ** (-6 / 20)) < 1e-4
+    for _ in range(30):
+        rt.live.push(_np.full((512, 2), 0.5, _np.float32))
+        run(0.011)
+    assert max(w.ctrl.audio.bus_meter(b["id"])) > 0.05
+    pk, _err = w.ctrl.audio.bus_input_meter(b["id"])
+    assert pk is not None and max(pk) > 0.4
+    b["input"]["on"] = False
+    sh.dirty = True
+    run(0.3)
+    assert w.ctrl.audio.buses[b["id"]].live is None
+    # cue Controllo bus: volume e decadimento del riverbero sfumano nella durata
+    bc.bus_target = b["id"]
+    bc.bus_set = {"level_db": -20.0, "fx": {b["fx"][0]["id"]: {"decay": 5.0}}}
+    bc.fade_duration = 0.6
+    w.ctrl.start_cue(bc)
+    run(0.3)
+    mid = w.ctrl.bus_spec(b)
+    assert -20.0 < mid["level_db"] < 0.0 and 1.8 < mid["fx"][0]["decay"] < 5.0, mid["level_db"]
+    assert wait_until(lambda: bc.id not in w.ctrl.instances, 2)
+    run(0.1)
+    end = w.ctrl.bus_spec(b)
+    assert end["level_db"] == -20.0 and end["fx"][0]["decay"] == 5.0 and b["level_db"] == 0.0   # lo show non cambia
+    assert abs(w.ctrl.audio.buses[b["id"]].level - 0.1) < 1e-3
+    assert w.ctrl.audio.buses[b["id"]].rack.procs[b["fx"][0]["id"]].p["decay"] == 5.0
+    # Cambia preset con un bus come target
+    bv = BusView(b)
+    bv.preset_dict("bus")["Secco"] = dict(bv.preset_values("bus"), level_db=-6.0, mute=True)
+    pc.target, pc.preset_audio, pc.fade_duration = "bus:" + b["id"], "Secco", 0.0
+    w.ctrl.start_cue(pc)
+    run(0.2)
+    sp = w.ctrl.bus_spec(b)
+    assert sp["level_db"] == -6.0 and sp["mute"] is True and w.ctrl.audio.buses[b["id"]].level == 0.0
+    assert w.model.data(w.model.index(2, C_TARGET)) == tr("→ bus «{0}»", "Rev")
+    assert w.model.data(w.model.index(1, C_TARGET)) == tr("→ bus «{0}»", "Rev")
+    # finestra dei bus: sorgenti, «Ripristina»
+    d = w.bus_dialog()
+    run(0.3)
+    assert isinstance(d, BusDialog)
+    from PySide6.QtWidgets import QLabel, QPushButton
+    assert any(lab.text() == c.label() for lab in d.findChildren(QLabel))
+    rb = [x for x in d.findChildren(QPushButton) if x.text() == tr("Ripristina")]
+    assert rb
+    rb[0].click()
+    run(0.3)
+    assert b["id"] not in w.ctrl.bus_over and w.ctrl.audio.buses[b["id"]].level == 1.0
+    d.close()
+    # ispettore: scheda Controllo bus e bus tra i target di Cambia preset
+    ins = w.inspector
+    ins.set_cue(None)
+    ins.set_cue(bc)
+    run(0.2)
+    assert "Controllo bus" in ins._tab_keys
+    ins.set_cue(pc)
+    run(0.2)
+    w.show_data.dirty = False
+
+
 def t_memo_skip(w):
     """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
     sh = Show()
@@ -3719,6 +3813,7 @@ if __name__ == "__main__":
     check("effetti interni: EQ, gate, compressore, delay, riverbero", t_fx_dsp)
     check("rack effetti delle cue e bus effetti (mandate, code, preset, finestre)", lambda: t_fx_engine(w))
     check("EQ con punti trascinabili, curve e vumeter di gate e compressore, Diagnostica", lambda: t_fx_gui_diag(w))
+    check("bus: trim delle sorgenti, ingresso fisico, cue Controllo bus, Cambia preset sui bus", lambda: t_bus_sources_control(w))
     check("lista: trascina su altri PANEL e GRID; Opzioni e BLIND non allargano il GRID", lambda: t_list_drop_other_lists(w))
     check("rotazione di video e immagini", lambda: t_rotation(w))
     check("GRID: pulsanti Pushbutton e Toggle, cue al rilascio", lambda: t_grid_push_toggle(w))

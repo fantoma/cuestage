@@ -295,6 +295,11 @@ class CueTableModel(QAbstractTableModel):
             if col == C_TARGET:
                 if cue.is_media():
                     return cue.file.rsplit("/", 1)[-1] if cue.file else tr("— nessun file —")
+                if cue.type == "buscontrol" or (cue.type == "preset" and str(cue.target or "").startswith("bus:")):
+                    from .buses import bus_by_id
+                    bid = cue.bus_target if cue.type == "buscontrol" else cue.target[4:]
+                    b = bus_by_id(self.show, bid)
+                    return tr("→ bus «{0}»", b.get("name") or "") if b else tr("— nessun bus —")
                 if cue.type in ("fade", "control", "preset"):
                     if cue.type == "control" and cue.action == "stop_all":
                         return tr("tutte")

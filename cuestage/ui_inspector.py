@@ -337,6 +337,8 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
             add(self._tab_wait(), tr("Attesa"), key="Attesa")
         if t == "fullscreen":
             add(self._tab_fullscreen(), tr("Schermo intero"), key="Schermo intero")
+        if t == "buscontrol":
+            add(self._tab_buscontrol(), tr("Controllo bus"), key="Controllo bus")
         # resta sulla stessa scheda (per nome) passando da una cue all'altra; altrimenti la prima propria del tipo
         # l'ultima scheda scelta (anche dopo il riavvio); se questa cue non ce l'ha, la prima del suo tipo
         try:

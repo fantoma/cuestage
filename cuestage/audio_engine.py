@@ -272,6 +272,8 @@ class BusRuntime:
         self.meter = np.zeros(2, np.float32)
         self.silent = self.IDLE
         self._gcache = {}
+        self.live = None            # ingresso fisico (audio_input.LiveInput) o None
+        self.in_gain = 1.0
         self.update(spec, key)
 
     def update(self, spec, key):
@@ -282,6 +284,28 @@ class BusRuntime:
         self.level = db_lin(lvl) if lvl > -60.0 else 0.0
         self._gcache = {}
 
+    def sync_input(self):
+        """Ingresso fisico: si apre / chiude / riapre solo se cambiano accensione, scheda o canali (fuori dal
+        lock del mixer: aprire una scheda può richiedere un po')."""
+        spec = self.spec
+        inp = dict({"on": False, "device": "", "ch": 1, "ch2": 0, "trim": 0.0}, **(spec.get("input") or {}))
+        self.in_gain = db_lin(float(inp.get("trim", 0.0) or 0.0))
+        if not inp.get("on"):
+            if self.live is not None:
+                self.live.close()
+                self.live = None
+        elif self.live is None or not self.live.same(inp.get("device"), inp.get("ch"), inp.get("ch2")):
+            from .audio_input import LiveInput
+            if self.live is not None:
+                self.live.close()
+            self.live = LiveInput(inp.get("device"), inp.get("ch"), inp.get("ch2"))
+            self.live.open()
+
+    def close(self):
+        if self.live is not None:
+            self.live.close()
+            self.live = None
+
     def gains(self, C):
         g = self._gcache.get(C)
         if g is None:
@@ -291,6 +315,9 @@ class BusRuntime:
 
     def process(self, inp, frames, C):
         """Uscita del bus (frames × C) dall'entrata (frames × 2), o None se il bus è in silenzio."""
+        live = self.live.read(frames) if self.live is not None else None
+        if live is not None:
+            inp += live * self.in_gain
         if not inp.any():
             self.silent += frames
             if self.silent > self.IDLE:
@@ -647,25 +674,38 @@ class AudioEngine:
 
     # ------------------------------------------------------------ bus effetti
     def set_buses(self, specs):
-        """Bus effetti dello show: [{id, name, device, fx, matrix, out_levels, level_db, mute}]. Quelli che
-        restano conservano lo stato (code del riverbero in corso)."""
+        """Bus effetti dello show: [{id, name, device, fx, matrix, out_levels, level_db, mute, input}]. Quelli
+        che restano conservano lo stato (code del riverbero in corso)."""
         keys = {}
         for s in specs or []:
             if s.get("id"):
                 keys[s["id"]] = self.ensure_output(s.get("device") or None).key
         with self.lock:
+            old = dict(self.buses)
             new = {}
             for s in specs or []:
                 bid = s.get("id")
                 if not bid:
                     continue
-                b = self.buses.get(bid)
+                b = old.get(bid)
                 if b is None:
                     b = BusRuntime(s, keys[bid])
                 else:
                     b.update(s, keys[bid])
                 new[bid] = b
             self.buses = new
+        for b in new.values():                   # fuori dal lock: un ingresso può impiegare un po' ad aprirsi
+            b.sync_input()
+        for bid, b in old.items():
+            if bid not in new:
+                b.close()
+
+    def bus_input_meter(self, bid):
+        """Picchi dell'ingresso fisico del bus (L, R) e l'eventuale errore di apertura."""
+        b = self.buses.get(bid)
+        if b is None or b.live is None:
+            return None, ""
+        return [float(x) for x in b.live.meter], b.live.error
 
     def reset_buses(self):
         """Azzera le code dei bus (secondo STOP / panico)."""

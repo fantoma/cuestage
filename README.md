@@ -120,7 +120,8 @@ The web interface for phones and tablets and the start-up self-test messages are
 | **Audio** | WAV, MP3, FLAC, OGG, AIFF, M4A… IN/OUT, loop (region and number of repetitions, 0 = infinite), volume, automatic fade in/out, volume curve drawn on the waveform |
 | **Video** | MP4, MOV, MKV, WebM… same options as audio + layer, opacity, fit, **crop**, **position** and **size** |
 | **Image** | PNG, JPG, … duration (0 = until stopped), fade in/out, layer, opacity, crop, position and size |
-| **Change preset** | Takes a running cue to one of its presets (audio: volume, matrix, output volumes; video: crop, offset, size, perspective, opacity) over the chosen transition time. It only applies to that run: the saved cue does not change |
+| **Change preset** | Takes a running cue to one of its presets (audio: volume, matrix, output volumes, rack and sends; video: crop, offset, size, perspective, opacity) over the chosen transition time. It only applies to that run: the saved cue does not change. The target list also contains the **effect buses** (“Bus: name”) with their presets: numeric values (level, trims, effect parameters) fade, the rest changes at once |
+| **Bus control** | Changes an effect bus live: return level, mute, physical input on/off and its trim, and for each effect of the bus on/off and its parameters (only the items marked “change”). Numeric values fade over the transition time with the chosen shape. The values stay until another cue changes them, the show is reloaded or “Restore” is pressed in the buses window; the saved bus does not change |
 | **Fade** | Takes the volume and/or opacity of another cue to a value, with duration and shape (S, linear, dB). Presets “Fade OUT + stop” and “Fade IN” (starts the target from silence) |
 | **Command** | Play, Stop (with fade), Pause, Resume, **Exit loop** (the target finishes the lap in progress and goes on to OUT), Stop all, Move playhead |
 | **OSC** | Sends an OSC message (host, port, address, automatically typed arguments) |
@@ -771,8 +772,15 @@ release, make-up gain), **delay** (time, feedback with high-/low-pass filters, p
   **pre** = independent of the cue's volume and fades, otherwise it follows them). One reverb serves many cues and
   its **tail keeps ringing naturally** after a cue ends. **STOP with nothing playing** (a second Esc) also silences
   the bus tails. A bus that receives nothing and has finished its tail does not use the CPU.
+- **Bus sources**: the buses window lists the **cues that send to the bus**, each with a **trim** (dB) applied by
+  the bus on top of the cue's send level, and the bus can also take a **physical input** (microphone or line of a
+  sound card: device, channel L and R — R = 0 for mono — and its **trim**, with an input meter). Mind the latency of
+  a live input through the computer (tens of milliseconds, more with PipeWire or a large buffer): use it for the
+  effect only (e.g. a microphone into the reverb) and leave the dry signal to the mixing desk.
 - **Presets**: the cue's audio presets also save its **rack and sends** (and “Change preset” cues apply them);
-  each bus has its own **presets** (rack, matrix, level, mute) in its window.
+  each bus has its own **presets** (rack, matrix, level, mute, trims, physical input) in its window, and “Change
+  preset” and **Bus control** cues change buses during the show (see “Cue types”). When a cue has changed a bus
+  live, the buses window says so and “Restore” goes back to the saved values.
 - Buses are part of the show settings: they are saved with the show, follow undo/redo and go to secondary instances
   that copy the settings. A bus plays on the card chosen for it; cues send to it only from the same card.
 - Requires the `scipy` library (included in the AppImage and in the installers; `pip install scipy` otherwise):

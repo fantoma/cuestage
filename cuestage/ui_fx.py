@@ -924,6 +924,7 @@ class BusDialog(QDialog):
         w = QWidget()
         self.scroll.setWidget(w)
         self.meter_lab = None
+        self.in_meter = None
         if b is None:
             v = QVBoxLayout(w)
             lab = QLabel(tr("Nessun bus. Crea un bus (riverbero, delay…), poi nella scheda «Effetti» delle cue "
@@ -988,6 +989,23 @@ class BusDialog(QDialog):
         lv.addStretch(1)
         f.addRow(tr("Volume del ritorno"), lv)
         v.addLayout(f)
+        if bid_live := (b["id"] if b["id"] in self.mw.ctrl.bus_over else None):
+            ov = QHBoxLayout()
+            note = QLabel(tr("⚡ Il bus sta usando valori impostati dal vivo da una cue (Controllo bus o Cambia "
+                             "preset): le modifiche qui valgono dopo «Ripristina»."))
+            note.setWordWrap(True)
+            note.setStyleSheet("color:#ffaa28;")
+            ov.addWidget(note, 1)
+            rb = QPushButton(tr("Ripristina"))
+
+            def restore(_=False, bid_live=bid_live):
+                self.mw.ctrl.bus_over.pop(bid_live, None)
+                self.mw.ctrl.sync_buses(force=True)
+                QTimer.singleShot(0, self._build)
+            rb.clicked.connect(restore)
+            ov.addWidget(rb)
+            v.addLayout(ov)
+        v.addWidget(self._sources_box(b))
         box = QGroupBox(tr("Rack del bus (dall'alto in basso)"))
         bv = QVBoxLayout(box)
         bid = b["id"]
@@ -1018,6 +1036,93 @@ class BusDialog(QDialog):
         v.addWidget(mbox)
         v.addStretch(1)
 
+    def _sources_box(self, b):
+        """Sorgenti del bus: le cue che vi mandano (con il trim di ciascuna) e l'ingresso fisico con il suo trim."""
+        from .buses import bus_input, sources
+        from .ducking import list_input_devices
+        box = QGroupBox(tr("Sorgenti del bus"))
+        g = QGridLayout(box)
+        sh = self.show_data()
+        trims = b.get("trims")
+        if not isinstance(trims, dict):
+            trims = b["trims"] = {}
+
+        def trim_spin(val, setter):
+            sp = QDoubleSpinBox()
+            sp.setRange(-60.0, 24.0)
+            sp.setDecimals(1)
+            sp.setSingleStep(0.5)
+            sp.setSuffix(" dB")
+            sp.setPrefix(tr("trim "))
+            sp.setKeyboardTracking(False)
+            sp.setValue(float(val or 0.0))
+            sp.valueChanged.connect(setter)
+            return sp
+        r = 0
+        src = sources(sh, b["id"])
+        for c, snd in src:
+            g.addWidget(QLabel(c.label()), r, 0)
+            db = snd.get("db")
+            g.addWidget(QLabel((tr("mandata {0}", "−∞" if db is None else f"{float(db):+.1f} dB"))
+                               + (tr(" · pre") if snd.get("pre") else "")), r, 1)
+
+            def set_trim(val, cid=c.id):
+                if abs(val) < 1e-6:
+                    trims.pop(cid, None)
+                else:
+                    trims[cid] = float(val)
+                self._dirty()
+            g.addWidget(trim_spin(trims.get(c.id, 0.0), set_trim), r, 2)
+            r += 1
+        if not src:
+            lab = QLabel(tr("Nessuna cue manda a questo bus (scheda «Effetti» delle cue)."))
+            lab.setStyleSheet("color:#888;")
+            g.addWidget(lab, r, 0, 1, 3)
+            r += 1
+        # ingresso fisico
+        inp = bus_input(b)
+
+        def set_inp(key, val):
+            d = bus_input(b)
+            d[key] = val
+            b["input"] = d
+            self._dirty()
+        on = QCheckBox(tr("Ingresso fisico"))
+        on.setChecked(bool(inp["on"]))
+        on.setToolTip(tr("Microfono o linea della scheda audio nel bus (es. un microfono nel riverbero). "
+                         "Latenza: usa il buffer «Bassa latenza» e manda al bus solo l'effetto."))
+        on.toggled.connect(lambda val: set_inp("on", bool(val)))
+        g.addWidget(on, r, 0)
+        dev = QComboBox()
+        dev.addItem(tr("Predefinito di sistema"), "")
+        for d in list_input_devices():
+            dev.addItem(f"{d['name']}  [{d['hostapi']}] — {d['max_ch']} " + tr("canali"), d["id"])
+        i = dev.findData(inp["device"] or "")
+        if i < 0:
+            dev.addItem(tr("{0} (non collegata)", (inp["device"] or "").split('|', 1)[-1]), inp["device"])
+            i = dev.count() - 1
+        dev.setCurrentIndex(i)
+        dev.currentIndexChanged.connect(lambda _i: set_inp("device", dev.currentData() or ""))
+        g.addWidget(dev, r, 1)
+        g.addWidget(trim_spin(inp["trim"], lambda val: set_inp("trim", float(val))), r, 2)
+        r += 1
+        chs = QHBoxLayout()
+        for key, label, lo in (("ch", tr("Canale (L)"), 1), ("ch2", tr("Canale R (0 = mono)"), 0)):
+            chs.addWidget(QLabel(label))
+            sp = QDoubleSpinBox()
+            sp.setDecimals(0)
+            sp.setRange(lo, 64)
+            sp.setValue(float(inp[key] or lo))
+            sp.valueChanged.connect(lambda val, key=key: set_inp(key, int(val)))
+            chs.addWidget(sp)
+        self.in_meter = QLabel()
+        self.in_meter.setMinimumWidth(160)
+        chs.addWidget(self.in_meter)
+        chs.addStretch(1)
+        g.addLayout(chs, r, 0, 1, 3)
+        g.setColumnStretch(1, 1)
+        return box
+
     def bus_by(self, bid):
         from .buses import bus_by_id
         return bus_by_id(self.show_data(), bid)
@@ -1036,3 +1141,18 @@ class BusDialog(QDialog):
         pk = self.mw.ctrl.audio.bus_meter(bid)
         db = 20 * math.log10(max(max(pk), 1e-6))
         self.meter_lab.setText(tr("Ritorno {0}", "-∞" if db < -59 else f"{db:+.0f} dB"))
+        lab = getattr(self, "in_meter", None)
+        if lab is not None:
+            try:
+                ipk, err = self.mw.ctrl.audio.bus_input_meter(bid)
+                if ipk is None:
+                    lab.setText("")
+                elif err:
+                    lab.setText("⚠ " + err)
+                    lab.setStyleSheet("color:#e0b040;")
+                else:
+                    idb = 20 * math.log10(max(max(ipk), 1e-6))
+                    lab.setText(tr("Ingresso {0}", "-∞" if idb < -59 else f"{idb:+.0f} dB"))
+                    lab.setStyleSheet("color:#e05050;" if idb > -3 else "")
+            except RuntimeError:
+                self.in_meter = None

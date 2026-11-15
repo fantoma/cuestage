@@ -490,15 +490,22 @@ class RoutedVoice:
             return ov[1]
         return getattr(self.cue, "sends", None) or []
 
+    def _trims(self):
+        """Trim (dB) che ogni bus applica a questa cue, per i bus a cui manda."""
+        from .buses import trim_db
+        sh = self.ctrl.show
+        return {s.get("bus"): trim_db(sh, s.get("bus"), self.cue.id) for s in self._sends_spec() if s.get("bus")}
+
     def _send_list(self, n_src):
-        """Mandate ai bus effetti per il mixer: [(id bus, matrice n_src × 2, pre)]."""
+        """Mandate ai bus effetti per il mixer: [(id bus, matrice n_src × 2, pre)] (livello + trim del bus)."""
         out = []
+        trims = self._trims()
         for s in self._sends_spec():
             db = s.get("db")
             bid = s.get("bus")
             if not bid or db is None or float(db) <= -60.0:
                 continue
-            m2 = build_gains(None, None, n_src, 2) * db_to_lin(float(db))
+            m2 = build_gains(None, None, n_src, 2) * db_to_lin(float(db) + trims.get(bid, 0.0))
             out.append((bid, m2.astype(np.float32), bool(s.get("pre"))))
         return out
 
@@ -506,7 +513,7 @@ class RoutedVoice:
         """Rack della cue e mandate ai bus sulla voce (all'avvio e quando cambiano dal vivo)."""
         from .dsp import CUE_FX, Rack
         spec = self._fx_spec()
-        sig = (repr(spec), repr(self._sends_spec()))
+        sig = (repr(spec), repr(self._sends_spec()), repr(sorted(self._trims().items())))
         if sig == self._fx_sig:
             return
         self._fx_sig = sig
@@ -1239,6 +1246,22 @@ class PresetInstance(Instance):
     def start(self, silent=False):
         c = self.cue
         ctrl = self.ctrl
+        if str(c.target or "").startswith("bus:"):          # preset di un bus effetti
+            from .buses import BusView, bus_by_id
+            b = bus_by_id(ctrl.show, c.target[4:])
+            pb = BusView(b).preset_dict("bus").get(c.preset_audio) if b is not None else None
+            if b is None or pb is None:
+                ctrl.message.emit(tr("Cambia preset '{0}': bus o preset non trovato", c.label()))
+                self.finish()
+                return
+            import copy as _copy
+            to = _copy.deepcopy(ctrl.bus_spec(b))
+            for k, v in pb.items():
+                to[k] = _copy.deepcopy(v)
+            self._bus_fade = BusFade(ctrl, b["id"], to, float(c.fade_duration or 0), c.fade_shape)
+            if self._bus_fade.done:
+                self.finish()
+            return
         target = ctrl.show.resolve_target(c.target)
         if target is None:
             ctrl.message.emit(tr("Cambia preset '{0}': cue target '{1}' non trovata", c.label(), c.target))
@@ -1264,8 +1287,69 @@ class PresetInstance(Instance):
 
     def tick(self, now, dt):
         super().tick(now, dt)
+        bf = getattr(self, "_bus_fade", None)
+        if bf is not None:
+            bf.step(self.elapsed)
         if self.elapsed >= self.total():
+            if bf is not None:
+                bf.step(self.total() + 1.0)
             self.finish()
+
+    def total(self):
+        return float(self.cue.fade_duration or 0)
+
+
+class BusFade:
+    """Porta lo stato dal vivo di un bus verso «to» nel tempo indicato: numeri (volume, trim, parametri degli
+    effetti) sfumano con la forma scelta, il resto (acceso/spento, mute, matrice) cambia subito."""
+
+    def __init__(self, ctrl, bid, to, dur, shape):
+        import copy as _copy
+        from .buses import bus_by_id
+        self.ctrl, self.bid, self.to = ctrl, bid, to
+        b = bus_by_id(ctrl.show, bid)
+        self.frm = _copy.deepcopy(ctrl.bus_spec(b)) if b is not None else _copy.deepcopy(to)
+        self.dur = max(0.0, float(dur or 0))
+        self.shape = "linear" if shape == "db" else (shape or "scurve")
+        self.done = False
+        self.step(0.0 if self.dur > 0 else 1.0)
+
+    def step(self, t):
+        from .buses import lerp_spec
+        from .media import fade_shape
+        if self.done:
+            return
+        f = 1.0 if self.dur <= 0 else min(1.0, max(0.0, t / self.dur))
+        k = float(fade_shape(f, self.shape))
+        self.ctrl.bus_over[self.bid] = self.to if k >= 1.0 else lerp_spec(self.frm, self.to, k)
+        if f >= 1.0:
+            self.done = True
+
+
+class BusControlInstance(Instance):
+    """Cue «Controllo bus»: cambia volume, mute, ingresso fisico e parametri degli effetti di un bus
+    (sfumando i valori numerici nella durata della cue)."""
+
+    def start(self, silent=False):
+        from .buses import apply_control, bus_by_id
+        c = self.cue
+        b = bus_by_id(self.ctrl.show, c.bus_target)
+        if b is None:
+            self.ctrl.message.emit(tr("Controllo bus '{0}': bus non trovato", c.label()))
+            self.finish()
+            return
+        to = apply_control(self.ctrl.bus_spec(b), c.bus_set or {})
+        self.fade = BusFade(self.ctrl, b["id"], to, float(c.fade_duration or 0), c.fade_shape)
+        if self.fade.done:
+            self.finish()
+
+    def tick(self, now, dt):
+        super().tick(now, dt)
+        f = getattr(self, "fade", None)
+        if f is not None:
+            f.step(self.elapsed)
+            if f.done:
+                self.finish()
 
     def total(self):
         return float(self.cue.fade_duration or 0)
@@ -1936,7 +2020,7 @@ INSTANCE_CLASSES = {
     "audio": AudioInstance, "video": VideoInstance, "image": ImageInstance,
     "wait": WaitInstance, "fade": FadeInstance, "preset": PresetInstance, "control": ControlInstance,
     "osc": OscInstance, "projector": ProjectorInstance, "mixer": MixerInstance, "switcher": SwitcherInstance,
-    "memo": MemoInstance, "fullscreen": FullscreenInstance,
+    "memo": MemoInstance, "buscontrol": BusControlInstance, "fullscreen": FullscreenInstance,
     "group": GroupInstance, "groupexit": GroupExitInstance, "stoppanel": StopPanelInstance, "text": TextInstance, "midiout": MidiOutInstance,
 }
 
@@ -1954,6 +2038,7 @@ class Controller(QObject):
         super().__init__()
         import collections
         self.log = collections.deque(maxlen=300)        # messaggi ed errori (ora, testo): finestra Diagnostica
+        self.bus_over = {}                               # id bus -> stato dal vivo (cue Controllo bus / preset)
         self.message.connect(lambda m: self.log.append((time.time(), str(m))))
         self.show = show
         self.audio = audio
@@ -2003,6 +2088,7 @@ class Controller(QObject):
 
     def set_show(self, show):
         self.stop_all(0)
+        self.bus_over = {}
         self.show = show
         self.playheads = {}
         self._images.clear()
@@ -2513,9 +2599,14 @@ class Controller(QObject):
         return [(p[1], max(0.0, p[0] - self.clock)) for p in self.pending]
 
     # ---------------------------------------------------- clock
+    def bus_spec(self, b):
+        """Stato in uso di un bus: quello dello show, o quello impostato dal vivo da una cue Controllo bus o da un
+        Cambia preset (vale finché non si ricarica lo show o si ripristina dalla finestra dei bus)."""
+        return self.bus_over.get(b.get("id")) or b
+
     def sync_buses(self, force=False):
         """Bus effetti dello show → motore audio (quando cambiano: modifiche, annulla, preset, istanze)."""
-        specs = self.show.settings.get("buses") or [] if self.show is not None else []
+        specs = [self.bus_spec(b) for b in (self.show.settings.get("buses") or [])] if self.show is not None else []
         import json as _json
         sig = _json.dumps(specs, sort_keys=True, default=str)
         if force or sig != getattr(self, "_bus_sig", None):

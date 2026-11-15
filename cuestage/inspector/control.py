@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFontDatabase
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout,
-    QSpinBox,
+    QGroupBox, QSpinBox,
     QWidget,
 )
 
@@ -579,6 +579,124 @@ class ControlTabsMixin:
         b = QPushButton(tr("Invia ora"))
         b.clicked.connect(lambda: self.oscSend.emit(self.cue.id))
         f.addRow(b)
+        return w
+
+    def _tab_buscontrol(self):
+        """Cue «Controllo bus»: bus, durata e forma della transizione, cosa cambiare (volume, mute, ingresso
+        fisico, effetti acceso/spento e loro parametri)."""
+        from ..buses import buses, bus_by_id, bus_input, control_params
+        from .. import dsp
+        from ..model import FADE_SHAPES, FADE_SHAPE_LABELS
+        from ..ui_fx import _ParamRow
+        cue = self.cue
+        sh = self.show_fn()
+        w = QWidget()
+        v = QVBoxLayout(w)
+        f = QFormLayout()
+        bc = QComboBox()
+        bc.addItem(tr("— scegli un bus —"), "")
+        for b in buses(sh):
+            bc.addItem(b.get("name") or tr("Bus"), b["id"])
+        bc.setCurrentIndex(max(0, bc.findData(cue.bus_target or "")))
+
+        def bus_changed(_i):
+            cue.bus_target = bc.currentData() or ""
+            cue.bus_set = {}
+            self._emit()
+            QTimer.singleShot(0, self.rebuild)
+        bc.currentIndexChanged.connect(bus_changed)
+        f.addRow(tr("Bus"), bc)
+        f.addRow(tr("Durata transizione"), self._dspin("fade_duration", 0, 3600, 0.1, 2))
+        f.addRow(tr("Forma"), self._combo("fade_shape", FADE_SHAPES, FADE_SHAPE_LABELS))
+        v.addLayout(f)
+        b = bus_by_id(sh, cue.bus_target)
+        if b is None:
+            lab = QLabel(tr("Scegli il bus da controllare (i bus si creano in Impostazioni › Bus effetti)."))
+            lab.setWordWrap(True)
+            lab.setStyleSheet("color:#e0b040;")
+            v.addWidget(lab)
+            v.addStretch(1)
+            return w
+        if not isinstance(cue.bus_set, dict):
+            cue.bus_set = {}
+        bs = cue.bus_set
+
+        def set_key(path, val):
+            """path = ("level_db",) oppure ("fx", id, parametro); val None = non cambiare."""
+            d = bs
+            for k in path[:-1]:
+                d = d.setdefault(k, {})
+            if val is None:
+                d.pop(path[-1], None)
+            else:
+                d[path[-1]] = val
+            if path[0] == "fx":
+                fxd = bs.get("fx") or {}
+                for k in [k for k, x in fxd.items() if not x]:
+                    del fxd[k]
+            self._emit()
+
+        def get_key(path):
+            d = bs
+            for k in path[:-1]:
+                d = d.get(k) or {}
+            return d.get(path[-1])
+
+        def num_row(path, lo, hi, step, dec, unit, log, cur):
+            row = QWidget()
+            h = QHBoxLayout(row)
+            h.setContentsMargins(0, 0, 0, 0)
+            chk = QCheckBox(tr("cambia"))
+            val = get_key(path)
+            chk.setChecked(val is not None)
+            pr = _ParamRow(lo, hi, step, dec, unit, log, cur if val is None else val)
+            pr.setEnabled(val is not None)
+            chk.toggled.connect(lambda on: (pr.setEnabled(on), set_key(path, float(pr.sp.value()) if on else None)))
+            pr.changed.connect(lambda x: set_key(path, float(x)) if chk.isChecked() else None)
+            h.addWidget(chk)
+            h.addWidget(pr, 1)
+            return row
+
+        def tri_combo(path, on_text, off_text):
+            cb = QComboBox()
+            cb.addItem(tr("non cambiare"), None)
+            cb.addItem(on_text, True)
+            cb.addItem(off_text, False)
+            cur = get_key(path)
+            cb.setCurrentIndex(0 if cur is None else (1 if cur else 2))
+            cb.currentIndexChanged.connect(lambda _i: set_key(path, cb.currentData()))
+            return cb
+        live = self.ctrl.bus_spec(b) if hasattr(self.ctrl, "bus_spec") else b
+        g = QGroupBox(tr("Bus «{0}»", b.get("name") or ""))
+        gf = QFormLayout(g)
+        gf.addRow(tr("Volume del ritorno"), num_row(("level_db",), -60, 12, 0.5, 1, " dB", False,
+                                                    float(live.get("level_db", 0.0) or 0.0)))
+        gf.addRow(tr("Mute"), tri_combo(("mute",), tr("mute"), tr("attivo (senza mute)")))
+        gf.addRow(tr("Ingresso fisico"), tri_combo(("input_on",), tr("acceso"), tr("spento")))
+        gf.addRow(tr("Trim dell'ingresso"), num_row(("input_trim",), -60, 24, 0.5, 1, " dB", False,
+                                                    float(bus_input(live).get("trim", 0.0))))
+        v.addWidget(g)
+        live_fx = {fx.get("id"): fx for fx in live.get("fx") or []}
+        for fx in b.get("fx") or []:
+            fid = fx.get("id")
+            cur = dsp.params(live_fx.get(fid, fx))
+            fg = QGroupBox(f"{dsp.FX_LABELS.get(fx.get('type'), fx.get('type'))}")
+            ff = QFormLayout(fg)
+            ff.addRow(tr("Acceso"), tri_combo(("fx", fid, "on"), tr("acceso"), tr("spento")))
+            for key, label, lo, hi, step, dec, unit, log in control_params(fx.get("type")):
+                if key.startswith("band"):
+                    cv = cur["bands"][int(key[4:-2]) - 1]["g"]
+                else:
+                    cv = cur.get(key, lo)
+                ff.addRow(label, num_row(("fx", fid, key), lo, hi, step, dec, unit, log, float(cv)))
+            v.addWidget(fg)
+        hint = QLabel(tr("Solo le voci con «cambia» (o diverse da «non cambiare») vengono modificate: i valori numerici "
+                         "sfumano nella durata della transizione, gli altri cambiano subito. I valori restano finché "
+                         "un'altra cue li cambia, si ricarica lo show o si sceglie «Ripristina» nella finestra dei bus."))
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color:#888; font-size:10px;")
+        v.addWidget(hint)
+        v.addStretch(1)
         return w
 
     def _tab_fullscreen(self):
