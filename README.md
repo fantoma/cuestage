@@ -747,7 +747,10 @@ milliseconds, latency reported by the card), the **time needed to compute each b
 percentage of the block's duration: near 100 % the audio starts to drop out) and the **underruns**; the active voices
 and effect buses; the **video output** (size, frames per second, average and maximum drawing time, visible layers,
 preloaded videos); and the **log** of errors and messages of the audio and video engines. The **State** tab also shows the loaded audio files (how many,
-megabytes in memory and read from the disk cache) and the **video engine** in use (with its graphics API). “Reset maxima” and
+megabytes in memory and read from the disk cache) and the **video engine** in use (with its graphics API). The **GPU** row says whether the
+graphics card is used and which model it is: *in use* (GPU engine: video and frame conversion; classic OpenGL engine:
+only to display the image), *not used* (raster engine, with the model of the card that is present), or *no real GPU*
+when OpenGL is emulated by the processor (e.g. Mesa llvmpipe in a virtual machine or without drivers), shown in red. “Reset maxima” and
 “Copy to clipboard” (useful to send a report).
 
 The **Performance** tab runs a short built-in benchmark on this computer (about 5 seconds; better with the show open

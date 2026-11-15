@@ -377,7 +377,12 @@ if QOpenGLWidget is not None:
             super().__init__(None, Qt.Window)
             self._init_output(comp)
 
+        def gpu_used(self):
+            return self.__dict__.get("_gpu")
+
         def paintGL(self):
+            if "_gpu" not in self.__dict__:
+                self._gpu = gpu_record(gl_strings(self.context()))
             p = QPainter(self)
             self._paint(p)
             p.end()
@@ -399,6 +404,73 @@ def opengl_available():
         return bool(ok)
     except Exception:
         return False
+
+
+SOFTWARE_GL = ("llvmpipe", "softpipe", "swiftshader", "swrast", "basic render", "gdi generic", "software rasterizer")
+
+
+def gl_strings(ctx):
+    """(produttore, modello, versione) del contesto OpenGL corrente, o None."""
+    try:
+        f = ctx.functions()
+        return tuple((f.glGetString(x) or "").strip() for x in (0x1F00, 0x1F01, 0x1F02))
+    except Exception:
+        return None
+
+
+def gpu_record(strings, api="OpenGL"):
+    """Descrizione della scheda video da (produttore, modello, versione): software = OpenGL emulato dal processore."""
+    if not strings or not strings[1]:
+        return None
+    vendor, renderer, version = strings
+    low = renderer.lower()
+    return {"vendor": vendor, "renderer": renderer, "version": version, "api": api,
+            "software": any(k in low for k in SOFTWARE_GL)}
+
+
+_GPU = []
+
+
+def gpu_info():
+    """Scheda video vista da OpenGL (una volta per sessione), anche se l'uscita non la usa; None se non c'è OpenGL."""
+    if not _GPU:
+        rec = None
+        try:
+            from PySide6.QtGui import QOffscreenSurface, QOpenGLContext
+            ctx = QOpenGLContext()
+            if ctx.create():
+                surf = QOffscreenSurface()
+                surf.create()
+                if ctx.makeCurrent(surf):
+                    rec = gpu_record(gl_strings(ctx))
+                    ctx.doneCurrent()
+        except Exception:
+            rec = None
+        _GPU.append(rec)
+    return _GPU[0]
+
+
+def gpu_status(out):
+    """(testo, livello) per la diagnostica: GPU usata o no dall'uscita video e quale modello.
+    livello: 0 = GPU in uso, 1 = non usata o emulata dal processore, 2 = nessuna GPU."""
+    from .i18n import tr
+    eng = getattr(out, "engine_name", "") if out is not None else ""
+    used = out.gpu_used() if out is not None and hasattr(out, "gpu_used") else None
+    info = used or gpu_info()
+    if info is None:
+        if eng == "quick":
+            api = out.api_name() if hasattr(out, "api_name") else ""
+            return tr("in uso ({0}), modello non rilevato", api), 0
+        return tr("nessuna GPU disponibile (OpenGL non funziona): tutto sul processore"), 2
+    name = info["renderer"] + (f" — {info['vendor']}" if info.get("vendor") else "")
+    if info["software"]:
+        return tr("nessuna GPU reale: OpenGL emulato dal processore ({0})", name), 2
+    if eng in ("quick", "gl"):
+        how = tr("video e conversione dei fotogrammi") if eng == "quick" else tr("solo per mostrare l'immagine")
+        return tr("in uso ({0}): {1}", how, name), 0
+    if out is None:
+        return tr("presente: {0}", name), 1
+    return tr("non usata (motore raster) · presente: {0}", name), 1
 
 
 ENGINES = ("auto", "quick", "gl", "raster")

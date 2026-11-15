@@ -238,6 +238,13 @@ class DiagnosticsDialog(QDialog):
             api = out.api_name() if hasattr(out, "api_name") else ""
             row(tr("Motore video"), label + (f" · {api}" if api else "") + " · " + tr("scelto: {0}",
                 engine_labels().get(mw.video_engine_setting(), "")))
+        try:
+            from .video_output import gpu_status
+            import html as _html
+            gtxt, glev = gpu_status(out)
+            row(tr("GPU"), _html.escape(gtxt) if html else gtxt, _color((0.3, 0.75, 1.0)[glev]))
+        except Exception:
+            pass
         if out is None or not out.isVisible():
             row(tr("Finestra di uscita"), tr("chiusa"))
         else:

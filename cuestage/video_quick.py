@@ -121,6 +121,15 @@ if QQuickWidget is not None:
         def _t_start(self):
             import time as _t
             self._t0 = _t.perf_counter()
+            if "_gpu" not in self.__dict__:          # thread di rendering: il contesto OpenGL della scena è corrente
+                from PySide6.QtGui import QOpenGLContext
+                from .video_output import gl_strings, gpu_record
+                ctx = QOpenGLContext.currentContext()
+                self._gpu = gpu_record(gl_strings(ctx), self.api_name()) if ctx is not None else None
+
+        def gpu_used(self):
+            """Scheda video della scena (None con Vulkan / Metal / Direct3D: si usa quella vista da OpenGL)."""
+            return self.__dict__.get("_gpu")
 
         def _t_end(self):
             import time as _t

@@ -3042,6 +3042,17 @@ def t_video_engines(w):
     assert vo.resolve_engine("raster") == "raster"
     out = vo.make_output(w.comp, "raster")
     assert out.engine_name == "raster"
+    txt, lev = vo.gpu_status(out)
+    info = vo.gpu_info()
+    assert lev == (2 if info is None or info["software"] else 1) and txt, (txt, lev)
+    if info is not None:
+        assert info["renderer"] in txt
+    assert vo.gpu_record(("NVIDIA Corporation", "NVIDIA GeForce RTX 3060/PCIe/SSE2", "4.6"))["software"] is False
+    assert vo.gpu_record(("Mesa", "llvmpipe (LLVM 20.1.2, 256 bits)", "4.5"))["software"] is True
+    d = w.diagnostics_dialog()
+    from cuestage.i18n import tr
+    assert tr("GPU") + ":" in d.text()
+    d.close()
     out.detach()
     assert out.update not in w.comp.listeners
     out.close()

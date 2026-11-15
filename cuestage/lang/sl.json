@@ -2164,6 +2164,15 @@
   "Web ← {0}": "Splet ← {0}",
   "Angoli (web): {0}": "Koti (splet): {0}",
   "{0} (web · {1})": "{0} (splet · {1})",
-  " (questa regia)": " (ta režija)"
+  " (questa regia)": " (ta režija)",
+  "GPU": "GPU",
+  "in uso ({0}), modello non rilevato": "v uporabi ({0}), model ni zaznan",
+  "nessuna GPU disponibile (OpenGL non funziona): tutto sul processore": "GPU ni na voljo (OpenGL ne deluje): vse na procesorju",
+  "nessuna GPU reale: OpenGL emulato dal processore ({0})": "ni prave GPU: OpenGL posnema procesor ({0})",
+  "video e conversione dei fotogrammi": "video in pretvorba sličic",
+  "solo per mostrare l'immagine": "samo za prikaz slike",
+  "in uso ({0}): {1}": "v uporabi ({0}): {1}",
+  "presente: {0}": "prisotna: {0}",
+  "non usata (motore raster) · presente: {0}": "ni v uporabi (pogon raster) · prisotna: {0}"
  }
 }
