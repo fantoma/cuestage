@@ -2178,6 +2178,8 @@
   "Latenza molto bassa (256 · ~25 ms) — computer veloce e scarico": "Latenza molto bassa (256 · ~25 ms) — computer veloce e scarico",
   "Picco reale del mixer finora: {0:.1f} ms (se è dovuto all'apertura dello show, premi «Azzera massimi», fai suonare qualche cue e ripeti la valutazione)": "Picco reale del mixer finora: {0:.1f} ms (se è dovuto all'apertura dello show, premi «Azzera massimi», fai suonare qualche cue e ripeti la valutazione)",
   "In Impostazioni › Audio › Buffer audio: «{0}»": "In Impostazioni › Audio › Buffer audio: «{0}»",
-  "ridotta a icona": "ridotta a icona"
+  "ridotta a icona": "ridotta a icona",
+  "Azzera XRUN": "Azzera XRUN",
+  "Riporta a zero i buchi audio (underrun) di tutte le schede e toglie l'avviso dalla barra di stato: utile dopo aver cambiato buffer o scheda": "Riporta a zero i buchi audio (underrun) di tutte le schede e toglie l'avviso dalla barra di stato: utile dopo aver cambiato buffer o scheda"
  }
 }

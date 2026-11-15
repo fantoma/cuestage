@@ -572,6 +572,11 @@ class AudioEngine:
         for o in self.outputs.values():
             o.cb_max = 0.0
 
+    def reset_underruns(self):
+        """Azzera i contatori dei buchi audio (XRUN) di tutte le schede."""
+        for o in self.outputs.values():
+            o.underruns = 0
+
     def underruns(self):
         return sum(o.underruns for o in {id(o): o for o in self.outputs.values()}.values())
 

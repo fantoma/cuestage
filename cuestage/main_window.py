@@ -858,6 +858,12 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         txt = tr("-∞ dB") if db <= MIN_DB else f"{db:+.1f} dB"
         self.master_label.setText(tr("Volume master  {0}", txt))
 
+    def reset_underruns(self):
+        """Contatori dei buchi audio a zero (Diagnostica › Azzera XRUN), anche l'avviso nella barra di stato."""
+        self.audio.reset_underruns()
+        self._xrun_hist = []
+        self._update_engine_label()
+
     def _underrun_note(self):
         """Buchi audio negli ultimi 10 s (il contatore delle schede cresce a ogni underrun)."""
         now = time.monotonic()

@@ -750,7 +750,9 @@ average and peak memory where available); for every **sound card** the audio buf
 milliseconds, latency reported by the card), the **time needed to compute each block** (average and maximum, also as a
 percentage of the block's duration: near 100 % the audio starts to drop out) and the **underruns**; the active voices
 and effect buses; the **video output** (size, frames per second, average and maximum drawing time, visible layers,
-preloaded videos); and the **log** of errors and messages of the audio and video engines. The **State** tab also shows the loaded audio files (how many,
+preloaded videos); and the **log** of errors and messages of the audio and video engines. **Reset XRUNs** sets the
+underrun counters of all cards back to zero (and clears the warning in the status bar), e.g. after changing buffer or
+card. The **State** tab also shows the loaded audio files (how many,
 megabytes in memory and read from the disk cache) and the **video engine** in use (with its graphics API). The **GPU** row says whether the
 graphics card is used and which model it is: *in use* (GPU engine: video and frame conversion; classic OpenGL engine:
 only to display the image), *not used* (raster engine, with the model of the card that is present), or *no real GPU*

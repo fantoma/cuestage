@@ -3103,6 +3103,13 @@ def t_perf_eval(w):
     txt = "\n".join(perf.summary(r))
     assert str(n) in txt
     d = w.diagnostics_dialog()
+    outs = list(w.ctrl.audio.outputs.values())
+    assert outs
+    if outs:                                   # «Azzera XRUN»: contatori e avviso nella barra di stato a zero
+        outs[0].underruns = 5
+        w._update_engine_label()
+        d.xrun_btn.click()
+        assert w.ctrl.audio.underruns() == 0 and not w._underrun_note()
     d.run_perf()
     assert wait_until(lambda: d.perf_btn.isEnabled(), 30)
     assert "perf_result" in d.__dict__ and "mixer" in d.perf_result

@@ -2178,6 +2178,8 @@
   "Latenza molto bassa (256 · ~25 ms) — computer veloce e scarico": "Zelo nizka zakasnitev (256 · ~25 ms) — hiter, neobremenjen računalnik",
   "Picco reale del mixer finora: {0:.1f} ms (se è dovuto all'apertura dello show, premi «Azzera massimi», fai suonare qualche cue e ripeti la valutazione)": "Dejanski vrh mešalnika doslej: {0:.1f} ms (če ga je povzročilo odpiranje predstave, pritisni »Ponastavi maksimume«, predvajaj nekaj iztočnic in ponovi oceno)",
   "In Impostazioni › Audio › Buffer audio: «{0}»": "V Nastavitve › Zvok › Zvočni medpomnilnik: »{0}«",
-  "ridotta a icona": "pomanjšano"
+  "ridotta a icona": "pomanjšano",
+  "Azzera XRUN": "Ponastavi XRUN",
+  "Riporta a zero i buchi audio (underrun) di tutte le schede e toglie l'avviso dalla barra di stato: utile dopo aver cambiato buffer o scheda": "Ponastavi zvočne prekinitve (underrun) vseh kartic na nič in odstrani opozorilo iz vrstice stanja: koristno po menjavi medpomnilnika ali kartice"
  }
 }

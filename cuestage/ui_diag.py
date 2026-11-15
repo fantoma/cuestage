@@ -58,12 +58,16 @@ class DiagnosticsDialog(QDialog):
         self.log.setReadOnly(True)
         v.addWidget(self.log, 1)
         h = QHBoxLayout()
-        for text, fn in ((tr("Azzera i massimi"), self.reset), (tr("Copia negli appunti"), self.copy),
-                         (tr("Chiudi"), self.close)):
+        for text, fn in ((tr("Azzera i massimi"), self.reset), (tr("Azzera XRUN"), self.reset_xrun),
+                         (tr("Copia negli appunti"), self.copy), (tr("Chiudi"), self.close)):
             b = QPushButton(text)
             b.clicked.connect(fn)
             h.addWidget(b)
-        h.insertStretch(2, 1)
+            if fn == self.reset_xrun:
+                b.setToolTip(tr("Riporta a zero i buchi audio (underrun) di tutte le schede e toglie l'avviso dalla "
+                                "barra di stato: utile dopo aver cambiato buffer o scheda"))
+                self.xrun_btn = b
+        h.insertStretch(3, 1)
         outer.addLayout(h)
         self._cpu0 = (time.process_time(), time.monotonic())
         self._sys0 = _proc_stat()
@@ -161,6 +165,13 @@ class DiagnosticsDialog(QDialog):
         st = getattr(out, "_diag", None) if out is not None else None
         if st:
             st["max"] = 0.0
+        self.refresh()
+
+    def reset_xrun(self):
+        if hasattr(self.mw, "reset_underruns"):
+            self.mw.reset_underruns()
+        else:
+            self.mw.ctrl.audio.reset_underruns()
         self.refresh()
 
     def _sample_cpu(self):
