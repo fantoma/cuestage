@@ -17,12 +17,20 @@ from .media import SR
 
 try:
     from scipy.signal import lfilter, sosfilt
-except Exception:                     # scipy mancante: gli effetti restano spenti (il suono passa così com'è)
+    IMPORT_ERROR = ""
+except Exception as _e:               # scipy mancante: gli effetti restano spenti (il suono passa così com'è)
     lfilter = sosfilt = None
+    IMPORT_ERROR = f"{type(_e).__name__}: {_e}"
 
 
 def available():
     return sosfilt is not None
+
+
+def unavailable_reason():
+    """Perché gli effetti non sono disponibili: errore dell'import e Python in uso (per l'avviso)."""
+    import sys
+    return tr("errore: {0} · Python in uso: {1}", IMPORT_ERROR or "?", sys.executable)
 
 
 FX_TYPES = ["gate", "eq", "comp", "delay", "reverb"]

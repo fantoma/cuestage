@@ -26,6 +26,10 @@ echo "==> Ambiente Python isolato"
 python3 -m venv "$DEST/.venv"
 "$DEST/.venv/bin/pip" install --upgrade pip wheel
 "$DEST/.venv/bin/pip" install "PySide6>=6.6,<6.12" numpy scipy sounddevice python-osc mido
+if ! "$DEST/.venv/bin/python" -c "import scipy.signal" 2>/dev/null; then
+  echo "!! scipy non utilizzabile nel venv: riprovo l'installazione"
+  "$DEST/.venv/bin/pip" install --force-reinstall scipy || echo "!! scipy non installato: gli effetti audio saranno disattivati."
+fi
 if ! "$DEST/.venv/bin/pip" install python-rtmidi; then
   echo "!! python-rtmidi non installato: l'ingresso MIDI sarà disattivato (il resto funziona)."
 fi

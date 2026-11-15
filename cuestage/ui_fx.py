@@ -372,7 +372,8 @@ class RackEditor(QWidget):
         v.setContentsMargins(0, 0, 0, 0)
         if not dsp.available():
             warn = QLabel(tr("⚠ Effetti non disponibili: manca la libreria scipy (pip install scipy). "
-                             "Il suono passa senza effetti."))
+                             "Il suono passa senza effetti.") + "\n" + dsp.unavailable_reason())
+            warn.setTextInteractionFlags(Qt.TextSelectableByMouse)
             warn.setWordWrap(True)
             warn.setStyleSheet("color:#e0b040;")
             v.addWidget(warn)
