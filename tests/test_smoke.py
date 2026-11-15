@@ -507,7 +507,7 @@ def t_inspector_layout(w):
     tabs = lambda: [ins.tabs.tabText(i) for i in range(ins.tabs.count())]
     ins.set_cue(v)
     run(0.3)
-    assert tabs() == [tr("Base"), tr("Trigger"), tr("Tempi e loop"), tr("Audio"), tr("Video / Immagine")], tabs()
+    assert tabs() == [tr("Base"), tr("Trigger"), tr("Tempi e loop"), tr("Audio"), tr("Effetti"), tr("Video / Immagine")], tabs()
     assert isinstance(ins.tabs.cornerWidget(Qt.TopRightCorner), CuePresetBar)
     ins.set_cue(b)
     assert tabs() == [tr("Base"), tr("Trigger")] and ins.tabs.cornerWidget(Qt.TopRightCorner) is None
@@ -556,7 +556,7 @@ def t_inspector_layout(w):
     assert v.preset_points[0]["preset"] == "scena 2"
     # dimensione nel tab Video / Immagine
     from PySide6.QtWidgets import QSlider
-    ins.tabs.setCurrentIndex(4)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Video / Immagine"))
     run(0.3)
     sl = [x for x in ins.findChildren(QSlider) if x.isVisible() and x.maximum() == 400][0]
     sl.setValue(200)
@@ -2678,6 +2678,153 @@ def t_list_drop_other_lists(w):
     w.show_data.dirty = False
 
 
+def t_fx_dsp():
+    """Effetti interni: EQ (banda, passa-alto 24 dB/oct, curva), compressore, gate, delay, riverbero; il rack
+    conserva lo stato quando cambiano i parametri e rispetta ordine e bypass."""
+    import numpy as _np
+    from cuestage import dsp
+    SR = dsp.SR
+
+    def sine(f, db, sec=1.0):
+        t = _np.arange(int(SR * sec)) / SR
+        s = (10 ** (db / 20) * _np.sin(2 * _np.pi * f * t)).astype(_np.float32)
+        return _np.repeat(s[:, None], 2, axis=1)
+
+    def run_rack(r, x, blk=512):
+        return _np.concatenate([r.process(x[i:i + blk]) for i in range(0, len(x), blk)])
+
+    def rms(y):
+        y = y[len(y) // 2:]
+        return 20 * _np.log10(_np.sqrt((y ** 2).mean()) + 1e-12)
+    assert dsp.available()
+    eq = dsp.new_fx("eq")
+    eq["bands"][2]["g"] = 6.0
+    x = sine(1000, -20)
+    assert abs(rms(run_rack(dsp.Rack([eq], 2), x)) - rms(x) - 6.0) < 0.2
+    eq = dsp.new_fx("eq")
+    eq.update(hpf_on=True, hpf_slope=24, hpf_f=200)
+    x = sine(50, -20)
+    assert rms(run_rack(dsp.Rack([eq], 2), x)) - rms(x) < -40
+    resp = dsp.eq_response(dsp.params(eq), [200, 2000])
+    assert abs(resp[0] + 3.0) < 0.2 and abs(resp[1]) < 0.2, resp
+    comp = dsp.new_fx("comp")
+    comp.update(thr=-20, ratio=4, knee=0)
+    r = dsp.Rack([comp], 2)
+    x = sine(1000, -8)
+    y = run_rack(r, x)
+    assert abs((rms(x) - rms(y)) - 9.0) < 0.5 and abs(r.meter(comp["id"])["gr"] + 9.0) < 0.5
+    gate = dsp.new_fx("gate")
+    gate.update(thr=-40, range=-60)
+    r = dsp.Rack([gate], 2)
+    assert rms(run_rack(r, sine(1000, -60))) < -110 and not r.meter(gate["id"])["open"]
+    x = sine(1000, -20)
+    assert abs(rms(run_rack(r, x)) - rms(x)) < 0.1 and r.meter(gate["id"])["open"]
+    dl = dsp.new_fx("delay")
+    dl.update(time=100, feedback=50, lp=20000, hp=10)
+    x = _np.zeros((SR, 2), _np.float32)
+    x[0] = 1.0
+    y = run_rack(dsp.Rack([dl], 2), x)
+    pk = sorted(_np.argsort(-_np.abs(y[:, 0]))[:3])
+    assert pk == [4800, 9600, 14400], pk
+    rv = dsp.new_fx("reverb")
+    rv.update(decay=1.5, predelay=0)
+    x = _np.zeros((SR * 3, 2), _np.float32)
+    x[:480] = _np.random.default_rng(1).standard_normal((480, 2)) * 0.5
+    y = run_rack(dsp.Rack([rv], 2), x)
+    lv = [20 * _np.log10(_np.sqrt((y[int(t * SR):int(t * SR) + 2400] ** 2).mean()) + 1e-12) for t in (0.1, 1.0, 2.0)]
+    assert lv[0] > -40 and lv[0] > lv[1] > lv[2] and lv[0] - lv[2] > 50, lv
+    # rack: stato conservato, ordine e bypass, tipi non ammessi ignorati
+    r = dsp.Rack([gate, comp, rv], 2, dsp.CUE_FX)
+    assert [f for f, _on in r.order] == [gate["id"], comp["id"]]
+    p_comp = r.procs[comp["id"]]
+    comp2 = dict(comp, thr=-10.0)
+    r.update([dict(comp2, on=False), gate])
+    assert r.procs[comp["id"]] is p_comp and p_comp.p["thr"] == -10.0
+    assert [o for o in r.order] == [(comp["id"], False), (gate["id"], True)]
+
+
+def t_fx_engine(w):
+    """Rack della cue e bus effetti nel motore: mandata al bus con riverbero, coda che continua dopo la fine
+    della cue, secondo STOP che spegne le code, preset audio con rack e mandate, preset del bus, scheda
+    Effetti e finestre dei parametri."""
+    from cuestage import dsp
+    from cuestage.buses import BusView, new_bus
+    from cuestage.ui_fx import _WINDOWS, BusDialog, RackEditor
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    c = Cue("audio", number="1", name="FX", file=tone("fx.wav", sec=1.0))
+    sh.cues = [c]
+    w._set_show(sh)
+    run(0.2)
+    b = new_bus(sh, "Rev", ("reverb",))
+    b["fx"][0]["decay"] = 3.0
+    c.fx = [dsp.new_fx("comp")]
+    c.fx[0]["thr"] = -30.0
+    c.sends = [{"bus": b["id"], "db": 0.0, "pre": False}]
+    sh.dirty = True
+    run(0.2)
+    assert b["id"] in w.ctrl.audio.buses
+    w.ctrl.start_cue(c)
+    run(0.5)
+    inst = w.ctrl.instances[c.id]
+    assert inst.voice.fx is not None and inst.voice.sends and inst.voice.sends[0][0] == b["id"]
+    assert inst.voice.fx.meter(c.fx[0]["id"])["gr"] < -3.0            # il compressore lavora
+    assert max(w.ctrl.audio.bus_meter(b["id"])) > 0.01                   # il bus riceve la mandata
+    # parametri cambiati mentre suona: valgono subito, senza ricreare il rack
+    rk = inst.voice.fx
+    c.fx[0]["thr"] = -6.0
+    run(0.3)
+    assert inst.voice.fx is rk and rk.procs[c.fx[0]["id"]].p["thr"] == -6.0
+    assert wait_until(lambda: c.id not in w.ctrl.instances, 3)
+    run(0.2)
+    rt = w.ctrl.audio.buses[b["id"]]
+    assert rt.silent < rt.IDLE and max(w.ctrl.audio.bus_meter(b["id"])) > 0.003   # la coda del riverbero continua
+    w.ctrl.stop_all(0)                                                    # STOP senza cue: si spengono le code
+    assert wait_until(lambda: max(w.ctrl.audio.bus_meter(b["id"])) < 0.003, 4)
+    # preset audio della cue: rack e mandate
+    c.preset_dict("audio")["Secco"] = c.preset_values("audio")
+    c.preset_dict("audio")["Secco"]["fx"] = []
+    c.preset_dict("audio")["Secco"]["sends"] = []
+    assert c.apply_preset("audio", "Secco") and c.fx == [] and c.sends == []
+    # preset del bus
+    bv = BusView(b)
+    bv.preset_dict("bus")["Lungo"] = bv.preset_values("bus")
+    b["fx"][0]["decay"] = 0.5
+    b["level_db"] = -6.0
+    assert bv.apply_preset("bus", "Lungo") and b["fx"][0]["decay"] == 3.0 and b["level_db"] == 0.0
+    # interfaccia: scheda Effetti, rack, finestra in sovrimpressione, finestra dei bus
+    ins = w.inspector
+    ins.set_cue(None)
+    ins.set_cue(c)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Effetti"))
+    run(0.2)
+    rack = [x for x in ins.findChildren(RackEditor) if x.isVisible()][-1]
+    rack.add("gate")
+    run(0.1)
+    assert [f["type"] for f in c.fx] == ["gate"]
+    win = _WINDOWS.get((("cue", c.id), c.fx[0]["id"]))
+    assert win is not None and win.isVisible()
+    win._set("thr", -33.0)
+    assert c.fx[0]["thr"] == -33.0
+    win.close()
+    run(0.1)
+    d = w.bus_dialog()
+    run(0.2)
+    assert isinstance(d, BusDialog) and d.list.count() == 1
+    d.add(("delay",), "Delay")
+    run(0.1)
+    assert len(sh.settings["buses"]) == 2 and sh.settings["buses"][1]["fx"][0]["type"] == "delay"
+    run(0.3)
+    assert sh.settings["buses"][1]["id"] in w.ctrl.audio.buses
+    d.close()
+    # salvato e riaperto
+    path = os.path.join(TMP, "fx.cueshow")
+    sh.save(path)
+    sh2 = Show.load(path)
+    assert len(sh2.settings["buses"]) == 2 and sh2.cues[0].fx[0]["type"] == "gate"
+    w.show_data.dirty = False
+
+
 def t_memo_skip(w):
     """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
     sh = Show()
@@ -3490,6 +3637,8 @@ if __name__ == "__main__":
     check("cue «Schermo intero» (Apri / Chiudi)", lambda: t_fsclose(w))
     check("GRID: sposta cue e gruppi in altri PANEL e nei gruppi (menu e trascinamento)", lambda: t_grid_move_between(w))
     check("lista: Ctrl + trascina duplica", lambda: t_list_ctrl_copy(w))
+    check("effetti interni: EQ, gate, compressore, delay, riverbero", t_fx_dsp)
+    check("rack effetti delle cue e bus effetti (mandate, code, preset, finestre)", lambda: t_fx_engine(w))
     check("lista: trascina su altri PANEL e GRID; Opzioni e BLIND non allargano il GRID", lambda: t_list_drop_other_lists(w))
     check("rotazione di video e immagini", lambda: t_rotation(w))
     check("GRID: pulsanti Pushbutton e Toggle, cue al rilascio", lambda: t_grid_push_toggle(w))

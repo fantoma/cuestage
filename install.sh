@@ -25,7 +25,7 @@ chmod +x "$DEST/run.sh"
 echo "==> Ambiente Python isolato"
 python3 -m venv "$DEST/.venv"
 "$DEST/.venv/bin/pip" install --upgrade pip wheel
-"$DEST/.venv/bin/pip" install "PySide6>=6.6,<6.12" numpy sounddevice python-osc mido
+"$DEST/.venv/bin/pip" install "PySide6>=6.6,<6.12" numpy scipy sounddevice python-osc mido
 if ! "$DEST/.venv/bin/pip" install python-rtmidi; then
   echo "!! python-rtmidi non installato: l'ingresso MIDI sarà disattivato (il resto funziona)."
 fi

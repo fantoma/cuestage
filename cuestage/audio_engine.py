@@ -251,9 +251,68 @@ class Output:
         self.underruns = 0
 
 
+class BusRuntime:
+    """Bus effetti interno: riceve le mandate delle cue (stereo), passa nel suo rack (riverbero, delay…) e
+    va alle uscite della sua scheda con la sua matrice (2 canali × uscite), il suo volume e il mute.
+    Gira anche quando nessuna cue manda: le code di riverbero e delay si spengono da sole."""
+    IDLE = int(3 * SR)          # dopo 3 s di silenzio (entrata e coda) il bus non calcola più nulla
+
+    def __init__(self, spec, key):
+        from .dsp import BUS_FX, Rack
+        self.id = spec.get("id")
+        self.key = key
+        self.rack = Rack(spec.get("fx") or [], 2, BUS_FX)
+        self.g_prev = None
+        self.meter = np.zeros(2, np.float32)
+        self.silent = self.IDLE
+        self._gcache = {}
+        self.update(spec, key)
+
+    def update(self, spec, key):
+        self.key = key
+        self.rack.update(spec.get("fx") or [])
+        self.spec = spec
+        lvl = -120.0 if spec.get("mute") else float(spec.get("level_db", 0.0) or 0.0)
+        self.level = db_lin(lvl) if lvl > -60.0 else 0.0
+        self._gcache = {}
+
+    def gains(self, C):
+        g = self._gcache.get(C)
+        if g is None:
+            g = build_gains(self.spec.get("matrix"), self.spec.get("out_levels"), 2, C)
+            self._gcache[C] = g
+        return g
+
+    def process(self, inp, frames, C):
+        """Uscita del bus (frames × C) dall'entrata (frames × 2), o None se il bus è in silenzio."""
+        if not inp.any():
+            self.silent += frames
+            if self.silent > self.IDLE:
+                self.meter = self.meter * 0.85
+                self.g_prev = self.level
+                return None
+        else:
+            self.silent = 0
+        y = self.rack.process(inp) if self.rack.order else inp
+        if y.shape[1] != 2:
+            y = np.repeat(y[:, :1], 2, axis=1)
+        g0 = self.level if self.g_prev is None else self.g_prev
+        if abs(g0 - self.level) > 1e-6:
+            y = y * np.linspace(g0, self.level, frames, dtype=np.float32)[:, None]
+        else:
+            y = y * self.level
+        self.g_prev = self.level
+        pk = np.abs(y).max(axis=0) if frames else np.zeros(2, np.float32)
+        if float(pk.max()) > 1e-5:
+            self.silent = 0
+        self.meter = np.maximum(pk.astype(np.float32), self.meter * 0.85)
+        return y @ self.gains(C)
+
+
 class AudioEngine:
     def __init__(self):
         self.voices = {}
+        self.buses = {}              # id -> BusRuntime (bus effetti interni)
         self.buffer = "normale"
         self.lock = threading.Lock()
         self.master = 1.0
@@ -304,6 +363,8 @@ class AudioEngine:
             o = self.ensure_output(v.out_req)
             v.out_key = o.key
             v.fit_matrix(o.channels)
+        if self.buses:                           # i bus riaprono la loro scheda
+            self.set_buses([b.spec for b in list(self.buses.values())])
         if self.duck.wanted():
             self.duck.open()
             if self.duck.error:
@@ -554,6 +615,39 @@ class AudioEngine:
         for vid in list(self.voices):
             self.stop_voice(vid, fade)
 
+    # ------------------------------------------------------------ bus effetti
+    def set_buses(self, specs):
+        """Bus effetti dello show: [{id, name, device, fx, matrix, out_levels, level_db, mute}]. Quelli che
+        restano conservano lo stato (code del riverbero in corso)."""
+        keys = {}
+        for s in specs or []:
+            if s.get("id"):
+                keys[s["id"]] = self.ensure_output(s.get("device") or None).key
+        with self.lock:
+            new = {}
+            for s in specs or []:
+                bid = s.get("id")
+                if not bid:
+                    continue
+                b = self.buses.get(bid)
+                if b is None:
+                    b = BusRuntime(s, keys[bid])
+                else:
+                    b.update(s, keys[bid])
+                new[bid] = b
+            self.buses = new
+
+    def reset_buses(self):
+        """Azzera le code dei bus (secondo STOP / panico)."""
+        with self.lock:
+            for b in self.buses.values():
+                b.rack.reset()
+                b.silent = b.IDLE
+
+    def bus_meter(self, bid):
+        b = self.buses.get(bid)
+        return [float(x) for x in b.meter] if b is not None else [0.0, 0.0]
+
     @staticmethod
     def _env_now(v):
         if not v.ramp:
@@ -569,6 +663,8 @@ class AudioEngine:
         if not self.paused_all:
             with self.lock:
                 voices = [v for v in self.voices.values() if v.out_key == o.key]
+                buses = [b for b in self.buses.values() if b.key == o.key]
+            bus_in = {b.id: np.zeros((frames, 2), np.float32) for b in buses}
             for v in voices:
                 if v.paused or v.done:
                     continue
@@ -578,9 +674,16 @@ class AudioEngine:
                             pout = np.zeros((frames, C), np.float32)
                         self._mix_voice(v, pout, frames, C)
                     else:
-                        self._mix_voice(v, out, frames, C)
+                        self._mix_voice(v, out, frames, C, bus_in)
                 except Exception:
                     v.done = True
+            for b in buses:                      # bus effetti: mandate delle cue → rack → uscite
+                try:
+                    y = b.process(bus_in[b.id], frames, C)
+                    if y is not None:
+                        out += y
+                except Exception:
+                    pass
         # ingresso del ducking dopo il gate, nella cuffia del preascolto
         if self.preview.get("enabled") and o.key == self._key(self.preview.get("device") or None):
             mic = self.duck.read_preview(frames)
@@ -612,7 +715,7 @@ class AudioEngine:
             o.meter = np.maximum(pk, o.meter * 0.85)
         outdata[:] = out
 
-    def _mix_voice(self, v, out, frames, C):
+    def _mix_voice(self, v, out, frames, C, bus_in=None):
         idx = np.empty(frames, np.int64)
         idx2 = None                      # crossfade del loop: posizione all'inizio del loop e peso (0→1)
         filled = 0
@@ -692,16 +795,29 @@ class AudioEngine:
             v.duck_g = d1
         src = v.data[idx]
         if src.dtype == np.int16:
-            src = src.astype(np.float32)
-            g *= I16
+            src = src.astype(np.float32) * I16
         if idx2 is not None:                 # crossfade del loop a potenza costante: coda ↘, inizio ↗
             k = idx2[:filled] >= 0
             if k.any():
                 head = v.data[idx2[:filled][k]].astype(np.float32)
+                if v.data.dtype == np.int16:
+                    head *= I16
                 wk = wgt[:filled][k][:, None] * (np.pi / 2)
                 src = src.astype(np.float32, copy=False)
                 src[k] = src[k] * np.cos(wk) + head * np.sin(wk)
+        if src.ndim == 1:
+            src = src[:, None]
+        fx = v.fx
+        if fx is not None and fx.order:      # rack della cue (gate, EQ, compressore): prima del volume e dei fade
+            src = fx.process(src)
+        sends = v.sends if (bus_in and not getattr(v, "blind", False)) else ()
+        pre = src.copy() if any(s[2] for s in sends) else None
+        src = src.astype(np.float32, copy=False)
         src *= g[:, None]
+        for bid, m2, is_pre in sends:        # mandate ai bus effetti (pre o post volume/fade)
+            dst = bus_in.get(bid)
+            if dst is not None and m2.shape[0] == src.shape[1]:
+                dst[:filled] += (pre if is_pre else src) @ m2
         m = v.mtx
         prev = v.mtx_prev
         if m.shape[1] != C:
@@ -763,6 +879,8 @@ class Voice:
         self.duck_db = 0.0     # riduzione (dB) quando il ducking interviene; la imposta l'istanza
         self.duck_g = 1.0      # guadagno di ducking del blocco precedente
         self.pfl = False       # preascolto: va solo alla cuffia, fuori dal master
+        self.fx = None         # rack della cue (dsp.Rack) o None
+        self.sends = []        # mandate ai bus: [(id bus, matrice n_src × 2 lineare, pre)]
         # routing
         self.gains_fn = gains_fn or (lambda n_out: build_gains(None, None, self.n_src, n_out))
         self.out_req = ""

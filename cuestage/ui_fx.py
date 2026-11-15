@@ -1,0 +1,763 @@
+"""Interfaccia degli effetti interni: rack (elenco riordinabile), finestre di regolazione in sovrimpressione
+per ogni effetto, curva dell'EQ, mandate delle cue ai bus e finestra dei bus effetti."""
+import math
+
+from PySide6.QtCore import QPointF, Qt, QTimer, Signal
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import (
+    QAbstractItemView, QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFormLayout, QGridLayout, QGroupBox,
+    QHBoxLayout, QInputDialog, QLabel, QLineEdit, QListWidget, QListWidgetItem, QMenu, QMessageBox, QPushButton,
+    QScrollArea, QSlider, QVBoxLayout, QWidget,
+)
+
+from . import dsp
+from .i18n import tr
+
+# parametri regolabili: (chiave, etichetta, minimo, massimo, passo, decimali, unità, scala logaritmica)
+PARAMS = {
+    "gate": [("thr", tr("Soglia"), -90, 0, 1, 1, " dB", False),
+             ("range", tr("Riduzione da chiuso"), -90, 0, 1, 1, " dB", False),
+             ("attack", tr("Attacco"), 0.1, 100, 0.1, 1, " ms", True),
+             ("hold", tr("Hold"), 0, 2000, 5, 0, " ms", False),
+             ("release", tr("Rilascio"), 5, 3000, 5, 0, " ms", True)],
+    "comp": [("thr", tr("Soglia"), -60, 0, 0.5, 1, " dB", False),
+             ("ratio", tr("Rapporto"), 1, 20, 0.1, 1, ":1", True),
+             ("knee", tr("Ginocchio"), 0, 24, 0.5, 1, " dB", False),
+             ("attack", tr("Attacco"), 0.1, 300, 0.1, 1, " ms", True),
+             ("release", tr("Rilascio"), 5, 3000, 5, 0, " ms", True),
+             ("makeup", tr("Guadagno di compensazione"), 0, 24, 0.5, 1, " dB", False)],
+    "delay": [("time", tr("Tempo"), 10, 2500, 1, 0, " ms", True),
+              ("feedback", tr("Feedback"), 0, 95, 1, 0, " %", False),
+              ("hp", tr("Passa-alto nel feedback"), 10, 2000, 1, 0, " Hz", True),
+              ("lp", tr("Passa-basso nel feedback"), 500, 20000, 10, 0, " Hz", True),
+              ("mix", tr("Effetto (dry/wet)"), 0, 100, 1, 0, " %", False),
+              ("level", tr("Livello effetto"), -60, 12, 0.5, 1, " dB", False)],
+    "reverb": [("decay", tr("Decadimento (T60)"), 0.1, 15, 0.1, 1, " s", True),
+               ("predelay", tr("Pre-delay"), 0, 250, 1, 0, " ms", False),
+               ("size", tr("Dimensione"), 0, 100, 1, 0, " %", False),
+               ("damp", tr("Smorzamento acuti"), 500, 20000, 10, 0, " Hz", True),
+               ("width", tr("Larghezza stereo"), 0, 100, 1, 0, " %", False),
+               ("mix", tr("Effetto (dry/wet)"), 0, 100, 1, 0, " %", False),
+               ("level", tr("Livello effetto"), -60, 12, 0.5, 1, " dB", False)],
+}
+_WINDOWS = {}        # (chiave proprietario, id effetto) -> finestra aperta
+
+
+def fx_summary(fx):
+    p = dsp.params(fx)
+    k = fx.get("type")
+    if k == "gate":
+        return tr("soglia {0:.0f} dB", p["thr"])
+    if k == "comp":
+        return tr("{0:.0f} dB · {1:.1f}:1", p["thr"], p["ratio"])
+    if k == "eq":
+        n = sum(1 for b in p["bands"] if b.get("on", True) and abs(float(b.get("g", 0))) > 0.01)
+        parts = [tr("{0} bande", n)]
+        if p.get("hpf_on"):
+            parts.append(tr("HPF {0:.0f} Hz", p["hpf_f"]))
+        if p.get("lpf_on"):
+            parts.append(tr("LPF {0:.0f} Hz", p["lpf_f"]))
+        return " · ".join(parts)
+    if k == "delay":
+        return tr("{0:.0f} ms · fb {1:.0f} %", p["time"], p["feedback"])
+    if k == "reverb":
+        return tr("{0:.1f} s · pre {1:.0f} ms", p["decay"], p["predelay"])
+    return ""
+
+
+class _ParamRow(QWidget):
+    """Cursore + casella numerica per un parametro (scala logaritmica dove serve)."""
+    changed = Signal(float)
+
+    def __init__(self, lo, hi, step, dec, unit, log, value, parent=None):
+        super().__init__(parent)
+        self.lo, self.hi, self.log = float(lo), float(hi), bool(log) and lo > 0
+        h = QHBoxLayout(self)
+        h.setContentsMargins(0, 0, 0, 0)
+        self.sl = QSlider(Qt.Horizontal)
+        self.sl.setRange(0, 1000)
+        self.sp = QDoubleSpinBox()
+        self.sp.setRange(lo, hi)
+        self.sp.setSingleStep(step)
+        self.sp.setDecimals(dec)
+        self.sp.setSuffix(unit)
+        self.sp.setKeyboardTracking(False)
+        self.sp.setMinimumWidth(96)
+        h.addWidget(self.sl, 1)
+        h.addWidget(self.sp)
+        self.set(value)
+        self.sl.valueChanged.connect(self._from_slider)
+        self.sp.valueChanged.connect(self._from_spin)
+
+    def _to_pos(self, v):
+        if self.log:
+            return int(round(1000 * math.log(v / self.lo) / math.log(self.hi / self.lo)))
+        return int(round(1000 * (v - self.lo) / (self.hi - self.lo)))
+
+    def _to_val(self, pos):
+        f = pos / 1000.0
+        if self.log:
+            return self.lo * (self.hi / self.lo) ** f
+        return self.lo + (self.hi - self.lo) * f
+
+    def set(self, v):
+        v = max(self.lo, min(self.hi, float(v)))
+        self.sp.blockSignals(True)
+        self.sl.blockSignals(True)
+        self.sp.setValue(v)
+        self.sl.setValue(self._to_pos(v))
+        self.sp.blockSignals(False)
+        self.sl.blockSignals(False)
+
+    def _from_slider(self, pos):
+        v = self._to_val(pos)
+        self.sp.blockSignals(True)
+        self.sp.setValue(v)
+        self.sp.blockSignals(False)
+        self.changed.emit(self.sp.value())
+
+    def _from_spin(self, v):
+        self.sl.blockSignals(True)
+        self.sl.setValue(self._to_pos(v))
+        self.sl.blockSignals(False)
+        self.changed.emit(v)
+
+
+class EqCurve(QWidget):
+    """Curva di risposta dell'EQ (20 Hz – 20 kHz, ±18 dB) con i punti delle bande."""
+
+    def __init__(self, get_fx, parent=None):
+        super().__init__(parent)
+        self.get_fx = get_fx
+        self.setMinimumSize(420, 170)
+
+    def _x(self, f):
+        return 30 + (self.width() - 40) * math.log10(f / 20.0) / 3.0
+
+    def _y(self, db):
+        h = self.height() - 20
+        return 10 + h * (0.5 - max(-18.0, min(18.0, db)) / 36.0)
+
+    def paintEvent(self, _e):
+        fx = self.get_fx()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.fillRect(self.rect(), QColor("#16181d"))
+        small = QFont()
+        small.setPointSizeF(max(6.5, small.pointSizeF() * 0.75))
+        p.setFont(small)
+        for f in (20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000):
+            x = self._x(f)
+            p.setPen(QPen(QColor("#2a2e36"), 1))
+            p.drawLine(QPointF(x, 10), QPointF(x, self.height() - 10))
+            p.setPen(QColor("#777"))
+            p.drawText(QPointF(x + 2, self.height() - 2), f"{f // 1000}k" if f >= 1000 else str(f))
+        for db in (-12, -6, 0, 6, 12):
+            y = self._y(db)
+            p.setPen(QPen(QColor("#3a3f4a" if db == 0 else "#2a2e36"), 1))
+            p.drawLine(QPointF(30, y), QPointF(self.width() - 10, y))
+            p.setPen(QColor("#777"))
+            p.drawText(QPointF(2, y + 4), f"{db:+d}")
+        if fx is None:
+            return
+        prm = dsp.params(fx)
+        freqs = [20.0 * 10 ** (3.0 * i / 300) for i in range(301)]
+        try:
+            resp = dsp.eq_response(prm, freqs)
+        except Exception:
+            return
+        path = QPainterPath()
+        for i, (f, db) in enumerate(zip(freqs, resp)):
+            pt = QPointF(self._x(f), self._y(float(db)))
+            path.moveTo(pt) if i == 0 else path.lineTo(pt)
+        p.setPen(QPen(QColor("#50c8ff") if fx.get("on", True) else QColor("#666"), 2))
+        p.drawPath(path)
+        for i, b in enumerate(prm["bands"]):
+            if not b.get("on", True):
+                continue
+            pt = QPointF(self._x(float(b["f"])), self._y(float(b["g"])))
+            p.setPen(QPen(QColor("#fff"), 1))
+            p.setBrush(QColor("#ffaa28"))
+            p.drawEllipse(pt, 5, 5)
+            p.drawText(pt + QPointF(6, -6), str(i + 1))
+
+
+class FxWindow(QDialog):
+    """Finestra in sovrimpressione con i parametri di un effetto del rack: resta aperta sopra CueStage e le
+    modifiche valgono subito (anche mentre la cue o il bus suona)."""
+
+    def __init__(self, owner_key, fid, title, get_list, on_change, meter_fn=None, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.Tool | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint | Qt.WindowTitleHint)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.owner_key, self.fid = owner_key, fid
+        self.get_list, self.on_change, self.meter_fn = get_list, on_change, meter_fn
+        fx = self.fx()
+        self.kind = fx.get("type") if fx else ""
+        self.setWindowTitle(f"{dsp.FX_LABELS.get(self.kind, self.kind)} — {title}")
+        v = QVBoxLayout(self)
+        top = QHBoxLayout()
+        self.on_cb = QCheckBox(tr("Acceso"))
+        self.on_cb.setChecked(bool(fx.get("on", True)) if fx else False)
+        self.on_cb.toggled.connect(lambda on: self._set("on", bool(on)))
+        top.addWidget(self.on_cb)
+        top.addStretch(1)
+        self.meter = QLabel()
+        self.meter.setStyleSheet("font-weight:bold;color:#ffaa28;")
+        top.addWidget(self.meter)
+        reset = QPushButton(tr("Valori predefiniti"))
+        reset.clicked.connect(self._defaults)
+        top.addWidget(reset)
+        v.addLayout(top)
+        self.body = QWidget()
+        v.addWidget(self.body)
+        self._build()
+        self.timer = QTimer(self)
+        self.timer.setInterval(120)
+        self.timer.timeout.connect(self._poll)
+        self.timer.start()
+        _WINDOWS[(owner_key, fid)] = self
+
+    def done(self, r):
+        _WINDOWS.pop((self.owner_key, self.fid), None)
+        super().done(r)
+
+    def closeEvent(self, e):
+        _WINDOWS.pop((self.owner_key, self.fid), None)
+        super().closeEvent(e)
+
+    def fx(self):
+        for f in self.get_list() or []:
+            if f.get("id") == self.fid:
+                return f
+        return None
+
+    def _set(self, key, val, band=None):
+        fx = self.fx()
+        if fx is None:
+            return
+        if band is not None:
+            bands = dsp.params(fx)["bands"]
+            bands[band][key] = val
+            fx["bands"] = bands
+        else:
+            fx[key] = val
+        self.on_change()
+        if self.kind == "eq":
+            self.curve.update()
+
+    def _defaults(self):
+        fx = self.fx()
+        if fx is None:
+            return
+        import copy
+        for k, val in copy.deepcopy(dsp.DEFAULTS[self.kind]).items():
+            fx[k] = val
+        self.on_change()
+        self._build()
+
+    def _build(self):
+        old = self.body
+        self.body = QWidget()
+        self.layout().replaceWidget(old, self.body)
+        old.deleteLater()
+        fx = self.fx()
+        if fx is None:
+            return
+        p = dsp.params(fx)
+        if self.kind == "eq":
+            self._build_eq(p)
+            return
+        f = QFormLayout(self.body)
+        for key, label, lo, hi, step, dec, unit, log in PARAMS.get(self.kind, []):
+            row = _ParamRow(lo, hi, step, dec, unit, log, p.get(key, lo))
+            row.changed.connect(lambda val, key=key: self._set(key, float(val)))
+            f.addRow(label, row)
+        if self.kind == "delay":
+            cb = QCheckBox(tr("Ping-pong (l'eco rimbalza tra sinistra e destra)"))
+            cb.setChecked(bool(p.get("pingpong")))
+            cb.toggled.connect(lambda on: self._set("pingpong", bool(on)))
+            f.addRow(cb)
+        self.adjustSize()
+
+    def _build_eq(self, p):
+        v = QVBoxLayout(self.body)
+        v.setContentsMargins(0, 0, 0, 0)
+        self.curve = EqCurve(self.fx)
+        v.addWidget(self.curve)
+        g = QGridLayout()
+        for col, text in enumerate((tr("Banda"), tr("Tipo"), tr("Frequenza"), tr("Guadagno"), tr("Q"))):
+            lab = QLabel(text)
+            lab.setStyleSheet("color:#999;")
+            g.addWidget(lab, 0, col)
+        for i, b in enumerate(p["bands"]):
+            on = QCheckBox(str(i + 1))
+            on.setChecked(bool(b.get("on", True)))
+            on.toggled.connect(lambda val, i=i: self._set("on", bool(val), band=i))
+            g.addWidget(on, i + 1, 0)
+            ty = QComboBox()
+            for k in dsp.BAND_TYPES:
+                ty.addItem(dsp.BAND_LABELS[k], k)
+            ty.setCurrentIndex(max(0, ty.findData(b.get("type", "peak"))))
+            ty.currentIndexChanged.connect(lambda _j, ty=ty, i=i: self._set("type", ty.currentData(), band=i))
+            g.addWidget(ty, i + 1, 1)
+            for col, (key, lo, hi, step, dec, unit, log) in enumerate(
+                    (("f", 20, 20000, 1, 0, " Hz", True), ("g", -18, 18, 0.5, 1, " dB", False),
+                     ("q", 0.1, 10, 0.05, 2, "", True)), start=2):
+                row = _ParamRow(lo, hi, step, dec, unit, log, b.get(key, lo))
+                row.changed.connect(lambda val, key=key, i=i: self._set(key, float(val), band=i))
+                g.addWidget(row, i + 1, col)
+        v.addLayout(g)
+        f = QFormLayout()
+        for pre, label in (("hpf", tr("Passa-alto")), ("lpf", tr("Passa-basso"))):
+            h = QHBoxLayout()
+            cb = QCheckBox(tr("Acceso"))
+            cb.setChecked(bool(p.get(f"{pre}_on")))
+            cb.toggled.connect(lambda val, pre=pre: self._set(f"{pre}_on", bool(val)))
+            h.addWidget(cb)
+            row = _ParamRow(20, 20000, 1, 0, " Hz", True, p.get(f"{pre}_f", 100))
+            row.changed.connect(lambda val, pre=pre: self._set(f"{pre}_f", float(val)))
+            h.addWidget(row, 1)
+            sl = QComboBox()
+            sl.addItem("12 dB/oct", 12)
+            sl.addItem("24 dB/oct", 24)
+            sl.setCurrentIndex(max(0, sl.findData(int(p.get(f"{pre}_slope", 12)))))
+            sl.currentIndexChanged.connect(lambda _j, sl=sl, pre=pre: self._set(f"{pre}_slope", int(sl.currentData())))
+            h.addWidget(sl)
+            f.addRow(label, h)
+        out = _ParamRow(-18, 18, 0.5, 1, " dB", False, p.get("gain", 0.0))
+        out.changed.connect(lambda val: self._set("gain", float(val)))
+        f.addRow(tr("Guadagno d'uscita"), out)
+        v.addLayout(f)
+        self.adjustSize()
+
+    def _poll(self):
+        fx = self.fx()
+        if fx is None:            # effetto tolto (o cue / bus eliminati): la finestra si chiude
+            self.close()
+            return
+        if self.on_cb.isChecked() != bool(fx.get("on", True)):
+            self.on_cb.blockSignals(True)
+            self.on_cb.setChecked(bool(fx.get("on", True)))
+            self.on_cb.blockSignals(False)
+        m = self.meter_fn(self.fid) if self.meter_fn else None
+        if not m:
+            self.meter.setText("")
+        elif self.kind == "gate":
+            self.meter.setText((tr("● aperto") if m.get("open") else tr("○ chiuso")) + f"  {m.get('gr', 0):.1f} dB")
+        elif "gr" in m:
+            self.meter.setText(tr("Riduzione {0:.1f} dB", m["gr"]))
+
+
+def open_fx_window(owner_key, fid, title, get_list, on_change, meter_fn=None, parent=None):
+    w = _WINDOWS.get((owner_key, fid))
+    if w is None:
+        w = FxWindow(owner_key, fid, title, get_list, on_change, meter_fn, parent)
+    w.show()
+    w.raise_()
+    w.activateWindow()
+    return w
+
+
+class RackEditor(QWidget):
+    """Rack: effetti nell'ordine di elaborazione (dall'alto in basso). Trascina per riordinare, spunta per
+    accendere o spegnere, doppio clic (o «Regola…») per la finestra dei parametri."""
+    changed = Signal()
+
+    def __init__(self, owner_key, title, get_list, set_list, allowed, meter_fn=None, parent=None):
+        super().__init__(parent)
+        self.owner_key, self.title = owner_key, title
+        self.get_list, self.set_list, self.allowed, self.meter_fn = get_list, set_list, allowed, meter_fn
+        v = QVBoxLayout(self)
+        v.setContentsMargins(0, 0, 0, 0)
+        if not dsp.available():
+            warn = QLabel(tr("⚠ Effetti non disponibili: manca la libreria scipy (pip install scipy). "
+                             "Il suono passa senza effetti."))
+            warn.setWordWrap(True)
+            warn.setStyleSheet("color:#e0b040;")
+            v.addWidget(warn)
+        self.list = QListWidget()
+        self.list.setDragDropMode(QAbstractItemView.InternalMove)
+        self.list.setDefaultDropAction(Qt.MoveAction)
+        self.list.setMinimumHeight(110)
+        self.list.itemDoubleClicked.connect(lambda it: self.open(it.data(Qt.UserRole)))
+        self.list.itemChanged.connect(self._item_changed)
+        self.list.model().rowsMoved.connect(lambda *a: QTimer.singleShot(0, self._reordered))
+        v.addWidget(self.list)
+        h = QHBoxLayout()
+        add = QPushButton(tr("+ Effetto"))
+        m = QMenu(add)
+        for k in allowed:
+            m.addAction(dsp.FX_LABELS[k], lambda k=k: self.add(k))
+        add.setMenu(m)
+        h.addWidget(add)
+        for text, fn in ((tr("Regola…"), lambda: self.open(self._sel())), (tr("↑"), lambda: self.move(-1)),
+                         (tr("↓"), lambda: self.move(1)), (tr("Rimuovi"), self.remove)):
+            b = QPushButton(text)
+            b.clicked.connect(fn)
+            h.addWidget(b)
+        h.addStretch(1)
+        v.addLayout(h)
+        self.reload()
+
+    def _items(self):
+        lst = self.get_list()
+        return lst if isinstance(lst, list) else []
+
+    def reload(self):
+        sel = self._sel()
+        self.list.blockSignals(True)
+        self.list.clear()
+        for fx in self._items():
+            if fx.get("type") not in self.allowed:
+                continue
+            it = QListWidgetItem(f"{dsp.FX_LABELS.get(fx['type'], fx['type'])}   —   {fx_summary(fx)}")
+            it.setData(Qt.UserRole, fx.get("id"))
+            it.setFlags(it.flags() | Qt.ItemIsUserCheckable | Qt.ItemIsDragEnabled)
+            it.setCheckState(Qt.Checked if fx.get("on", True) else Qt.Unchecked)
+            self.list.addItem(it)
+            if fx.get("id") == sel:
+                self.list.setCurrentItem(it)
+        self.list.blockSignals(False)
+
+    def _sel(self):
+        it = self.list.currentItem()
+        return it.data(Qt.UserRole) if it is not None else None
+
+    def _commit(self, new):
+        self.set_list(new)
+        self.changed.emit()
+        self.reload()
+
+    def add(self, kind):
+        fx = dsp.new_fx(kind)
+        self._commit(list(self._items()) + [fx])
+        self.open(fx["id"])
+
+    def remove(self):
+        fid = self._sel()
+        if fid is None:
+            return
+        w = _WINDOWS.get((self.owner_key, fid))
+        if w is not None:
+            w.close()
+        self._commit([f for f in self._items() if f.get("id") != fid])
+
+    def move(self, d):
+        fid = self._sel()
+        items = list(self._items())
+        i = next((k for k, f in enumerate(items) if f.get("id") == fid), -1)
+        j = i + d
+        if i < 0 or not (0 <= j < len(items)):
+            return
+        items[i], items[j] = items[j], items[i]
+        self._commit(items)
+
+    def _reordered(self):
+        ids = [self.list.item(r).data(Qt.UserRole) for r in range(self.list.count())]
+        by = {f.get("id"): f for f in self._items()}
+        new = [by[i] for i in ids if i in by] + [f for f in self._items() if f.get("id") not in ids]
+        if [f.get("id") for f in new] != [f.get("id") for f in self._items()]:
+            self._commit(new)
+
+    def _item_changed(self, it):
+        fid = it.data(Qt.UserRole)
+        for f in self._items():
+            if f.get("id") == fid:
+                on = it.checkState() == Qt.Checked
+                if bool(f.get("on", True)) != on:
+                    f["on"] = on
+                    self.changed.emit()
+
+    def open(self, fid):
+        if fid is None:
+            return None
+
+        def changed():
+            self.changed.emit()
+            QTimer.singleShot(0, self._refresh_text)
+        return open_fx_window(self.owner_key, fid, self.title, self._items, changed, self.meter_fn, self.window())
+
+    def _refresh_text(self):
+        by = {f.get("id"): f for f in self._items()}
+        for r in range(self.list.count()):
+            it = self.list.item(r)
+            fx = by.get(it.data(Qt.UserRole))
+            if fx is not None:
+                self.list.blockSignals(True)
+                it.setText(f"{dsp.FX_LABELS.get(fx['type'], fx['type'])}   —   {fx_summary(fx)}")
+                it.setCheckState(Qt.Checked if fx.get("on", True) else Qt.Unchecked)
+                self.list.blockSignals(False)
+
+
+class SendsEditor(QWidget):
+    """Mandate di una cue ai bus effetti: livello (spenta = −∞) e «pre» (prima di volume e fade)."""
+    changed = Signal()
+
+    def __init__(self, cue, show_fn, parent=None):
+        super().__init__(parent)
+        from .buses import buses
+        self.cue = cue
+        g = QGridLayout(self)
+        g.setContentsMargins(0, 0, 0, 0)
+        bl = buses(show_fn())
+        if not bl:
+            lab = QLabel(tr("Nessun bus effetti: creane uno con «Bus effetti…» (es. un riverbero) e manda qui "
+                            "una parte del suono di questa cue."))
+            lab.setWordWrap(True)
+            lab.setStyleSheet("color:#888;")
+            g.addWidget(lab, 0, 0)
+            return
+        cur = {s.get("bus"): s for s in (cue.sends or []) if isinstance(s, dict)}
+        for r, b in enumerate(bl):
+            s = cur.get(b["id"], {})
+            g.addWidget(QLabel(b.get("name") or tr("Bus")), r, 0)
+            sp = QDoubleSpinBox()
+            sp.setRange(-60.0, 12.0)
+            sp.setDecimals(1)
+            sp.setSingleStep(1.0)
+            sp.setSuffix(" dB")
+            sp.setSpecialValueText(tr("spenta"))
+            sp.setKeyboardTracking(False)
+            db = s.get("db")
+            sp.setValue(-60.0 if db is None else float(db))
+            pre = QCheckBox(tr("pre"))
+            pre.setToolTip(tr("Pre: la mandata non segue il volume e i fade della cue (post: li segue)"))
+            pre.setChecked(bool(s.get("pre")))
+            sp.valueChanged.connect(lambda _v, b=b, sp=sp, pre=pre: self._set(b["id"], sp, pre))
+            pre.toggled.connect(lambda _v, b=b, sp=sp, pre=pre: self._set(b["id"], sp, pre))
+            g.addWidget(sp, r, 1)
+            g.addWidget(pre, r, 2)
+        g.setColumnStretch(3, 1)
+
+    def _set(self, bid, sp, pre):
+        db = None if sp.value() <= -60.0 else float(sp.value())
+        sends = [s for s in (self.cue.sends or []) if isinstance(s, dict) and s.get("bus") != bid]
+        if db is not None or pre.isChecked():
+            sends.append({"bus": bid, "db": db, "pre": bool(pre.isChecked())})
+        self.cue.sends = sends
+        self.changed.emit()
+
+
+class BusDialog(QDialog):
+    """Bus effetti: elenco dei bus e, per quello scelto, nome, scheda, volume, mute, rack (gate, EQ,
+    compressore, delay, riverbero), matrice d'uscita e preset."""
+
+    def __init__(self, mw, parent=None):
+        super().__init__(parent or mw)
+        self.mw = mw
+        self.setWindowTitle(tr("Bus effetti"))
+        self.setWindowFlags(Qt.Tool | Qt.WindowCloseButtonHint | Qt.WindowTitleHint)
+        self.resize(940, 680)
+        h = QHBoxLayout(self)
+        left = QVBoxLayout()
+        self.list = QListWidget()
+        self.list.setMaximumWidth(220)
+        self.list.currentRowChanged.connect(lambda _r: self._build())
+        left.addWidget(self.list, 1)
+        for text, fn in ((tr("+ Riverbero"), lambda: self.add(("reverb",), tr("Riverbero"))),
+                         (tr("+ Delay"), lambda: self.add(("delay",), tr("Delay"))),
+                         (tr("+ Bus vuoto"), lambda: self.add((), None)),
+                         (tr("Rinomina…"), self.rename), (tr("Elimina…"), self.delete)):
+            b = QPushButton(text)
+            b.clicked.connect(fn)
+            left.addWidget(b)
+        h.addLayout(left)
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        h.addWidget(self.scroll, 1)
+        self.meter_timer = QTimer(self)
+        self.meter_timer.setInterval(100)
+        self.meter_timer.timeout.connect(self._meter)
+        self.meter_timer.start()
+        self.reload()
+
+    def show_data(self):
+        return self.mw.show_data
+
+    def _buses(self):
+        from .buses import buses
+        return buses(self.show_data())
+
+    def _dirty(self):
+        self.show_data().dirty = True
+
+    def reload(self, select=None):
+        cur = select or self._bus_id()
+        self.list.blockSignals(True)
+        self.list.clear()
+        for b in self._buses():
+            it = QListWidgetItem(b.get("name") or tr("Bus"))
+            it.setData(Qt.UserRole, b["id"])
+            self.list.addItem(it)
+            if b["id"] == cur:
+                self.list.setCurrentItem(it)
+        if self.list.currentRow() < 0 and self.list.count():
+            self.list.setCurrentRow(0)
+        self.list.blockSignals(False)
+        self._build()
+
+    def _bus_id(self):
+        it = self.list.currentItem() if hasattr(self, "list") else None
+        return it.data(Qt.UserRole) if it is not None else None
+
+    def bus(self):
+        from .buses import bus_by_id
+        bid = self._bus_id()
+        return bus_by_id(self.show_data(), bid) if bid else None
+
+    def add(self, fx, name):
+        from .buses import new_bus
+        b = new_bus(self.show_data(), name, fx)
+        if name:
+            n = sum(1 for x in self._buses() if (x.get("name") or "").startswith(name))
+            if n > 1:
+                b["name"] = f"{name} {n}"
+        self._dirty()
+        self.reload(b["id"])
+
+    def rename(self):
+        b = self.bus()
+        if b is None:
+            return
+        n, ok = QInputDialog.getText(self, tr("Rinomina bus"), tr("Nome:"), text=b.get("name") or "")
+        if ok and n.strip():
+            b["name"] = n.strip()
+            self._dirty()
+            self.reload(b["id"])
+
+    def delete(self):
+        b = self.bus()
+        if b is None:
+            return
+        if QMessageBox.question(self, tr("Elimina bus"), tr("Eliminare il bus «{0}»? Le mandate delle cue verso "
+                                "questo bus vengono tolte.", b.get("name") or "")) != QMessageBox.Yes:
+            return
+        sh = self.show_data()
+        sh.settings["buses"] = [x for x in self._buses() if x is not b]
+        for c in sh.every_cue():
+            if getattr(c, "sends", None):
+                c.sends = [s for s in c.sends if s.get("bus") != b["id"]]
+        self._dirty()
+        self.reload()
+
+    def _build(self):
+        from .buses import BusView
+        from .inspector.presets import PresetBar
+        from .ui_matrix import MatrixEditor
+        b = self.bus()
+        w = QWidget()
+        self.scroll.setWidget(w)
+        self.meter_lab = None
+        if b is None:
+            v = QVBoxLayout(w)
+            lab = QLabel(tr("Nessun bus. Crea un bus (riverbero, delay…), poi nella scheda «Effetti» delle cue "
+                            "manda al bus una parte del loro suono."))
+            lab.setWordWrap(True)
+            v.addWidget(lab)
+            v.addStretch(1)
+            return
+        view = BusView(b)
+        v = QVBoxLayout(w)
+        pb = PresetBar("bus", self.show_data, view)
+        lab = pb.findChild(QLabel)
+        if lab is not None:
+            lab.setText(tr("Preset del bus:"))
+
+        def applied():
+            self._dirty()
+            QTimer.singleShot(0, self._build)
+        pb.applied.connect(applied)
+        v.addWidget(pb)
+        f = QFormLayout()
+        name = QLineEdit(b.get("name") or "")
+        name.editingFinished.connect(lambda: (b.__setitem__("name", name.text().strip() or b.get("name")),
+                                              self._dirty(), self.reload(b["id"])))
+        f.addRow(tr("Nome"), name)
+        eng = self.mw.ctrl.audio
+        from .audio_engine import device_label, list_devices
+        dev = QComboBox()
+        dname, dch, _ = eng.resolve(None)
+        dev.addItem(tr("Predefinita del progetto — {0} ({1} canali)", dname, dch), "")
+        for d in list_devices():
+            dev.addItem(tr("{0} — {1} canali", device_label(d), eng.channels_for(d)), d["id"])
+        i = dev.findData(b.get("device") or "")
+        if i < 0:
+            dev.addItem(tr("{0} (non collegata)", (b.get("device") or "").split('|', 1)[-1]), b.get("device"))
+            i = dev.count() - 1
+        dev.setCurrentIndex(i)
+
+        def dev_changed(_i):
+            b["device"] = dev.currentData() or ""
+            self._dirty()
+            QTimer.singleShot(0, self._build)
+        dev.currentIndexChanged.connect(dev_changed)
+        f.addRow(tr("Scheda audio"), dev)
+        lv = QHBoxLayout()
+        level = QDoubleSpinBox()
+        level.setRange(-60.0, 12.0)
+        level.setDecimals(1)
+        level.setSuffix(" dB")
+        level.setSpecialValueText("-∞")
+        level.setKeyboardTracking(False)
+        level.setValue(float(b.get("level_db", 0.0) or 0.0))
+        level.valueChanged.connect(lambda val: (b.__setitem__("level_db", float(val)), self._dirty()))
+        lv.addWidget(level)
+        mute = QCheckBox(tr("Mute"))
+        mute.setChecked(bool(b.get("mute")))
+        mute.toggled.connect(lambda on: (b.__setitem__("mute", bool(on)), self._dirty()))
+        lv.addWidget(mute)
+        self.meter_lab = QLabel()
+        self.meter_lab.setMinimumWidth(140)
+        lv.addWidget(self.meter_lab)
+        lv.addStretch(1)
+        f.addRow(tr("Volume del ritorno"), lv)
+        v.addLayout(f)
+        box = QGroupBox(tr("Rack del bus (dall'alto in basso)"))
+        bv = QVBoxLayout(box)
+        bid = b["id"]
+
+        def get_list():
+            bb = self.bus_by(bid)
+            return bb.get("fx") if bb is not None and isinstance(bb.get("fx"), list) else []
+
+        def set_list(new):
+            bb = self.bus_by(bid)
+            if bb is not None:
+                bb["fx"] = new
+                self._dirty()
+
+        def meter(fid):
+            rt = eng.buses.get(bid)
+            return rt.rack.meter(fid) if rt is not None else {}
+        rack = RackEditor(("bus", bid), b.get("name") or tr("Bus"), get_list, set_list, dsp.BUS_FX, meter)
+        rack.changed.connect(self._dirty)
+        bv.addWidget(rack)
+        v.addWidget(box)
+        mbox = QGroupBox(tr("Uscite del bus: matrice (bus stereo L/R × uscite della scheda)"))
+        mv = QVBoxLayout(mbox)
+        _n, n_out, _found = eng.resolve(b.get("device") or None)
+        me = MatrixEditor(view, 2, ["L", "R"], n_out)
+        me.changed.connect(self._dirty)
+        mv.addWidget(me, 0, Qt.AlignLeft)
+        v.addWidget(mbox)
+        v.addStretch(1)
+
+    def bus_by(self, bid):
+        from .buses import bus_by_id
+        return bus_by_id(self.show_data(), bid)
+
+    def _meter(self):
+        if self.meter_lab is None:
+            return
+        try:
+            self.meter_lab.text()
+        except RuntimeError:
+            self.meter_lab = None
+            return
+        bid = self._bus_id()
+        if not bid:
+            return
+        pk = self.mw.ctrl.audio.bus_meter(bid)
+        db = 20 * math.log10(max(max(pk), 1e-6))
+        self.meter_lab.setText(tr("Ritorno {0}", "-∞" if db < -59 else f"{db:+.0f} dB"))

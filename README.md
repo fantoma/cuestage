@@ -376,6 +376,8 @@ Under the list, the inspector of the selected cue has these tabs (each cue type 
 - **Times and loop** (audio, video): waveform with IN/OUT, loop, volume, fades and curve, keyframe timeline;
   **Times** for images (duration, fade in/out).
 - **Audio** (audio, video): sound card, ducking, audio of the video, channel matrix.
+- **Effects** (audio, video): the cue's rack (gate, EQ, compressor) and its sends to the effect buses (see
+  “Effects: cue racks and effect buses”).
 - **Video / Image** (video, image): size, layer, opacity, fit, crop, position, perspective and the visual editor.
 
 On the right of the tab row there is the cue's **preset** bar (see “Presets”). The inspector remembers the **last tab
@@ -735,6 +737,33 @@ second after GO. If there were gaps in the last 10 seconds, the status bar shows
 The “ALSA lib … underrun occurred” messages are no longer written to the terminal (CueStage counts them); to see
 them again: `CUESTAGE_ALSA_MESSAGES=1 cuestage`. With PipeWire it is better to use the “pipewire” or “default”
 card instead of direct access (hw:), which is more sensitive to delays.
+
+### Effects: cue racks and effect buses
+
+CueStage has its own built-in audio effects (written in numpy + scipy, identical on Linux, Windows and macOS; no
+external plugins): **gate**, **parametric EQ** (5 bands — bell, low shelf, high shelf — plus Butterworth high-pass
+and low-pass at 12 or 24 dB/octave, with the response curve), **compressor** (threshold, ratio, soft knee, attack,
+release, make-up gain), **delay** (time, feedback with high-/low-pass filters, ping-pong, dry/wet) and **reverb**
+(feedback-delay network: decay time T60, pre-delay, size, high damping, stereo width, dry/wet).
+
+- **Cue rack** (inspector › **Effects** tab, audio and video cues): gate, EQ and compressor in the order you choose
+  (drag to reorder, tick to switch on/off, “+ Effect”, “Remove”). They work **before** the cue's volume, curve and
+  fades. Every effect is adjusted in its own **floating window** (double-click, or “Adjust…”) that stays above
+  CueStage; changes apply at once, also while the cue is playing, and the window shows the gain reduction or
+  whether the gate is open.
+- **Effect buses** (Settings › **Effect buses (reverb, delay…)…**, or “Effect buses…” in the Effects tab): each bus
+  has a name, a sound card, a return level and mute, its own **rack** (gate, EQ, compressor, **delay** and
+  **reverb**) and an **output matrix** like the cues' (stereo bus L/R × card outputs).
+- **Sends**: in the Effects tab each cue sends part of its sound to the buses (level, *spenta/off* = no send;
+  **pre** = independent of the cue's volume and fades, otherwise it follows them). One reverb serves many cues and
+  its **tail keeps ringing naturally** after a cue ends. **STOP with nothing playing** (a second Esc) also silences
+  the bus tails. A bus that receives nothing and has finished its tail does not use the CPU.
+- **Presets**: the cue's audio presets also save its **rack and sends** (and “Change preset” cues apply them);
+  each bus has its own **presets** (rack, matrix, level, mute) in its window.
+- Buses are part of the show settings: they are saved with the show, follow undo/redo and go to secondary instances
+  that copy the settings. A bus plays on the card chosen for it; cues send to it only from the same card.
+- Requires the `scipy` library (included in the AppImage and in the installers; `pip install scipy` otherwise):
+  without it the effects are shown with a warning and the sound passes through unchanged.
 
 ## Markers
 

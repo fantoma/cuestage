@@ -520,6 +520,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
 
         self.inspector = Inspector(lambda: self.show_data, self.ctrl, self.loader)
         self.inspector.duck_dialog_fn = lambda: self.ducking_dialog()
+        self.inspector.bus_dialog_fn = lambda: self.bus_dialog()
         self.inspector.edited.connect(self._inspector_edited)
         self.inspector.size_fn = self._visual_size
         self.inspector.out_size_fn = lambda: self.comp.out_size
@@ -641,6 +642,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
 
         m = mb.addMenu(tr("&Impostazioni"))
         add(m, tr("Audio, OSC e MIDI…"), self.settings_dialog, "Ctrl+,")
+        add(m, tr("Bus effetti (riverbero, delay…)…"), self.bus_dialog)
         add(m, tr("Ducking…"), self.ducking_dialog)
         add(m, tr("Proiettori…"), self.projectors_dialog)
         add(m, tr("Pannello proiettori"), self.toggle_projector_panel, "F9")
@@ -1018,6 +1020,18 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         d.show()
         d.raise_()
         d.activateWindow()
+
+    def bus_dialog(self):
+        """Finestra dei bus effetti (riverbero, delay…): rack, matrice d'uscita, volume e preset."""
+        from .ui_fx import BusDialog
+        d = getattr(self, "_bus_dlg", None)
+        if d is None or d.mw is not self:
+            d = self._bus_dlg = BusDialog(self)
+        d.reload()
+        d.show()
+        d.raise_()
+        d.activateWindow()
+        return d
 
     def set_ducking(self, cfg):
         """Nuove impostazioni del ducking (dalla finestra o dal tasto Duck)."""

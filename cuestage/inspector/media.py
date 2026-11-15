@@ -717,6 +717,51 @@ class MediaTabsMixin:
         v.addStretch(1)
         return w
 
+    def _tab_effects(self):
+        """Rack effetti della cue (gate, EQ, compressore: prima del volume e dei fade) e mandate ai bus effetti."""
+        from .. import dsp
+        from ..ui_fx import RackEditor, SendsEditor
+        cue = self.cue
+        w = QWidget()
+        v = QVBoxLayout(w)
+        box = QGroupBox(tr("Rack della cue (dall'alto in basso, prima del volume e dei fade)"))
+        bv = QVBoxLayout(box)
+
+        def get_list():
+            return cue.fx if isinstance(cue.fx, list) else []
+
+        def set_list(new):
+            cue.fx = new
+
+        def meter(fid):
+            inst = self.ctrl.instances.get(cue.id)
+            v_ = getattr(inst, "voice", None)
+            rk = getattr(v_, "fx", None)
+            return rk.meter(fid) if rk is not None else {}
+        rack = RackEditor(("cue", cue.id), cue.label(), get_list, set_list, dsp.CUE_FX, meter)
+        rack.changed.connect(self._emit)
+        bv.addWidget(rack)
+        v.addWidget(box)
+        sbox = QGroupBox(tr("Mandate ai bus effetti (riverbero, delay…)"))
+        sv = QVBoxLayout(sbox)
+        sends = SendsEditor(cue, self.show_fn)
+        sends.changed.connect(self._emit)
+        sv.addWidget(sends)
+        b = QPushButton(tr("Bus effetti…"))
+        b.clicked.connect(lambda: self.bus_dialog_fn() if self.bus_dialog_fn else None)
+        sv.addWidget(b, 0, Qt.AlignLeft)
+        if self.bus_dialog_fn is None:
+            b.hide()
+        v.addWidget(sbox)
+        if cue.type == "video" and (cue.video_audio or "engine") == "system":
+            lab = QLabel(tr("Con il lettore di sistema l'audio del video non passa dagli effetti: scegli "
+                            "«Motore CueStage» nella scheda Audio."))
+            lab.setWordWrap(True)
+            lab.setStyleSheet("color:#e0b040;")
+            v.addWidget(lab)
+        v.addStretch(1)
+        return w
+
     def _tab_image_time(self):
         w = QWidget()
         f = QFormLayout(w)

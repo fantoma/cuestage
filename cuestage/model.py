@@ -25,11 +25,13 @@ TYPE_ICONS = {
 
 # campi salvati nei preset (per tipo di preset)
 PRESET_KINDS = {
-    "audio": ["level_db", "fade_in", "fade_out", "matrix", "out_levels", "curve"],
+    "audio": ["level_db", "fade_in", "fade_out", "matrix", "out_levels", "curve", "fx", "sends"],
     "visual": ["crop_l", "crop_t", "crop_r", "crop_b", "rotation", "off_x", "off_y", "scale", "scale_x", "scale_y", "warp",
                "opacity", "fit"],
+    # bus effetti (vedi buses.py): rack, matrice d'uscita, volume e mute
+    "bus": ["fx", "matrix", "out_levels", "level_db", "mute"],
 }
-PRESET_LABELS = {"audio": tr("Preset audio"), "visual": tr("Preset crop / posizione")}
+PRESET_LABELS = {"audio": tr("Preset audio"), "visual": tr("Preset crop / posizione"), "bus": tr("Preset del bus")}
 TRIGGERS = ["manual", "with_prev", "after_prev", "trigger"]
 TRIGGER_LABELS = {
     "manual": tr("Manuale (GO)"),
@@ -118,6 +120,9 @@ class Cue:
         # ducking: riduzione in dB (positiva, 0 = spento) quando l'ingresso del ducking supera la soglia;
         # su un gruppo vale per tutte le sue cue (che non ne hanno uno proprio)
         "duck_db": 0.0,
+        # rack effetti della cue (gate, EQ, compressore: vedi dsp.py) e mandate ai bus effetti
+        # [{"bus": id, "db": livello o None = spenta, "pre": prima del volume e dei fade}]
+        "fx": [], "sends": [],
         # preascolto: la cue (o tutte le cue del gruppo) va solo alla scheda/canali del preascolto
         "pfl": False,
         # video / immagine
@@ -288,7 +293,9 @@ DEFAULT_SETTINGS = {
     "stop_fade": 0.3,
     "audio_buffer": "normale",
     "ducking": {},
-    "preview": {},             # preascolto: {enabled, device, ch_l, ch_r, db} (vedi audio_engine.preview_settings)             # ingresso, canale, soglia, attacco, rilascio, Master ducking (vedi ducking.py)
+    "preview": {},
+    # bus effetti interni: [{id, name, device, fx, matrix, out_levels, level_db, mute, presets}] (buses.py)
+    "buses": [],             # preascolto: {enabled, device, ch_l, ch_r, db} (vedi audio_engine.preview_settings)             # ingresso, canale, soglia, attacco, rilascio, Master ducking (vedi ducking.py)
     # istanze secondarie: questa istanza accetta slave / ridondanze sulla porta TCP indicata
     "cluster_enabled": False, "cluster_port": 53900, "cluster_name": "", "cluster_slave_edit": False,
     "osc_in_enabled": True,

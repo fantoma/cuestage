@@ -49,6 +49,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         self.set_hotkey_fn = None  # (cue, tasto) -> imposta/toglie la scorciatoia
         self.color_fn = None      # (cue, "#rrggbb" o "") -> colore della cue
         self.duck_dialog_fn = None  # apre Impostazioni › Ducking
+        self.bus_dialog_fn = None   # apre la finestra dei bus effetti
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         self.header = QLabel(tr("Nessuna cue selezionata"))
@@ -298,6 +299,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         if t in ("audio", "video"):
             add(self._tab_media_time(), tr("Tempi e loop"), key="Tempi e loop")
             add(self._tab_audio(), tr("Audio"), key="Audio")
+            add(self._tab_effects(), tr("Effetti"), key="Effetti")
         if t == "image":
             add(self._tab_image_time(), tr("Tempi"), key="Tempi e loop")
         if visual is not None:

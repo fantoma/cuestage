@@ -116,6 +116,9 @@ class HistoryMixin:
             self._after_replace(sel_ids, insp)
             if settings_changed:
                 self._apply_settings(old=old)
+                d = getattr(self, "_bus_dlg", None)
+                if d is not None and d.isVisible():
+                    d.reload()
         finally:
             self._hist_restoring = False
         sh._dirty = self.history.index != self.history.saved

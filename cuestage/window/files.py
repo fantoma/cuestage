@@ -135,6 +135,10 @@ class FilesMixin:
         self._update_standby()
         self._history_reset()
         self._update_title()
+        self.ctrl.sync_buses(force=True)
+        d = getattr(self, "_bus_dlg", None)
+        if d is not None and d.isVisible():
+            d.reload()
 
     def open_dialog(self):
         if not self._confirm_discard():

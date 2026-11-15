@@ -2,6 +2,7 @@
 from .i18n import tr
 import math
 import time
+import numpy as np
 
 from PySide6.QtCore import QObject, QTimer, Qt, Signal
 from PySide6.QtGui import QImage
@@ -228,6 +229,11 @@ def start_preset(inst, target, vis_name, aud_name, dur, shape):
     interessata smette di seguire i keyframe e parte dal valore che ha in quel momento."""
     voice = getattr(inst, "voice", None)
     if aud_name:
+        pa = target.preset_dict("audio").get(aud_name) or {}
+        if "fx" in pa or "sends" in pa:          # rack e mandate del preset: subito (gli effetti non hanno scalini)
+            import copy as _copy
+            inst._fx_override = (_copy.deepcopy(pa["fx"]) if "fx" in pa else None,
+                                 _copy.deepcopy(pa["sends"]) if "sends" in pa else None)
         if voice is not None and voice.n_out():
             n_out = voice.n_out()
             cur = inst._aud_override(n_out) if inst._aud_override else \
@@ -469,6 +475,51 @@ class RoutedVoice:
     i «Cambia preset» sostituiscono livello/matrice/volumi uscite tramite _aud_override."""
     voice = None
     _aud_override = None     # funzione(n_out) -> (livello dB, matrice dB, volumi uscite dB) oppure None
+    _fx_override = None      # (rack, mandate) di un «Cambia preset» in corso, o None = quelli della cue
+    _fx_sig = None
+
+    def _fx_spec(self):
+        ov = self._fx_override
+        if ov is not None and ov[0] is not None:
+            return ov[0]
+        return getattr(self.cue, "fx", None) or []
+
+    def _sends_spec(self):
+        ov = self._fx_override
+        if ov is not None and ov[1] is not None:
+            return ov[1]
+        return getattr(self.cue, "sends", None) or []
+
+    def _send_list(self, n_src):
+        """Mandate ai bus effetti per il mixer: [(id bus, matrice n_src × 2, pre)]."""
+        out = []
+        for s in self._sends_spec():
+            db = s.get("db")
+            bid = s.get("bus")
+            if not bid or db is None or float(db) <= -60.0:
+                continue
+            m2 = build_gains(None, None, n_src, 2) * db_to_lin(float(db))
+            out.append((bid, m2.astype(np.float32), bool(s.get("pre"))))
+        return out
+
+    def _apply_fx(self, v):
+        """Rack della cue e mandate ai bus sulla voce (all'avvio e quando cambiano dal vivo)."""
+        from .dsp import CUE_FX, Rack
+        spec = self._fx_spec()
+        sig = (repr(spec), repr(self._sends_spec()))
+        if sig == self._fx_sig:
+            return
+        self._fx_sig = sig
+        sends = self._send_list(v.n_src)
+        with self.ctrl.audio.lock:
+            if spec:
+                if v.fx is None:
+                    v.fx = Rack(spec, v.n_src, CUE_FX)
+                else:
+                    v.fx.update(spec)
+            else:
+                v.fx = None
+            v.sends = sends
 
     def _loop_xf(self):
         """Crossfade del loop dell'audio in campioni (anche per l'audio dei video)."""
@@ -555,6 +606,8 @@ class RoutedVoice:
         v.stop_after_loop = bool(getattr(c, "loop_stop", False))
         self._calc_total()
         self._route_sig = self._route_key()
+        self._fx_sig = None
+        self._apply_fx(v)
         self.ctrl.audio.play(self.key, v, self._out_dev())
         return v
 
@@ -571,6 +624,7 @@ class RoutedVoice:
     def _update_route(self):
         if self.voice is not None:
             self.voice.duck_db = self.duck_db
+            self._apply_fx(self.voice)
         k = self._route_key()
         if k != self._route_sig:
             self._route_sig = k
@@ -2395,6 +2449,8 @@ class Controller(QObject):
         if self.paused_all:
             self.resume_all()
             fade = 0.0
+        if not self.instances and exclude is None:
+            self.audio.reset_buses()             # STOP con niente in riproduzione: si spengono anche le code dei bus
         for inst in list(self.instances.values()):
             if inst.key != exclude:
                 inst.stop(fade)
@@ -2454,9 +2510,22 @@ class Controller(QObject):
         return [(p[1], max(0.0, p[0] - self.clock)) for p in self.pending]
 
     # ---------------------------------------------------- clock
+    def sync_buses(self, force=False):
+        """Bus effetti dello show → motore audio (quando cambiano: modifiche, annulla, preset, istanze)."""
+        specs = self.show.settings.get("buses") or [] if self.show is not None else []
+        import json as _json
+        sig = _json.dumps(specs, sort_keys=True, default=str)
+        if force or sig != getattr(self, "_bus_sig", None):
+            self._bus_sig = sig
+            self.audio.set_buses(specs)
+
     def _tick(self):
         while self.audio.messages:
             self.message.emit(self.audio.messages.pop(0))
+        try:
+            self.sync_buses()
+        except Exception as e:
+            self.message.emit(tr("Bus effetti: {0}", e))
         t = time.monotonic()
         dt = t - self._last
         self._last = t
