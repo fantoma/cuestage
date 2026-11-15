@@ -746,8 +746,17 @@ average and peak memory where available); for every **sound card** the audio buf
 milliseconds, latency reported by the card), the **time needed to compute each block** (average and maximum, also as a
 percentage of the block's duration: near 100 % the audio starts to drop out) and the **underruns**; the active voices
 and effect buses; the **video output** (size, frames per second, average and maximum drawing time, visible layers,
-preloaded videos); and the **log** of errors and messages of the audio and video engines. “Reset maxima” and
+preloaded videos); and the **log** of errors and messages of the audio and video engines. The **State** tab also shows the loaded audio files (how many,
+megabytes in memory and read from the disk cache) and the **video engine** in use (with its graphics API). “Reset maxima” and
 “Copy to clipboard” (useful to send a report).
+
+The **Performance** tab runs a short built-in benchmark on this computer (about 5 seconds; better with the show open
+and no cue playing): **timing accuracy** of the system (a thread woken every 2 ms: median, 99th percentile, worst
+case), the **cost of the audio mixer** (one voice, one voice with gate + EQ + compressor, one bus with reverb, measured
+with the real engine), the **video** cost with the classic engine (conversion of a Full HD frame and QPainter
+drawing: on the GPU these steps don't use the processor) and the **disk read speed** of the audio cache. At the end
+it suggests the **audio buffer** (the smallest one that leaves at least twice the needed time) and estimates how many
+voices with an effect rack can play together. The last result is kept and included in “Copy to clipboard”.
 
 ### Effects: cue racks and effect buses
 
@@ -866,6 +875,23 @@ control the projector while it is off, network standby must be enabled in its me
 numeric values and keyboard nudge (1–4 = corner, arrows, Shift ×10). The correction is a perspective
 transformation applied to all layers, saved in the show.
 
+### Video engine (GPU or classic)
+
+**Video output › Video engine** chooses how the output is drawn:
+
+- **Automatic (GPU, raster fallback)** — default. Uses the **GPU engine (Qt Quick)** when a graphics card is
+  available: decoded frames go straight to the GPU (no conversion to RGB on the processor, no QPainter), and crop,
+  position, scale, rotation, perspective and 4-corner correction become one matrix per layer. Images and text are
+  uploaded once as textures. The result is the same as the classic engine.
+- **Classic with OpenGL (QPainter)** — the previous engine: every frame is converted and drawn by the processor,
+  then shown through OpenGL.
+- **Raster (CPU only)** — everything on the processor, for computers without working graphics drivers.
+
+If the GPU is not available (no OpenGL, a virtual or remote screen, Qt Quick on the software renderer) CueStage
+**falls back automatically** to the classic engine and writes a line in the diagnostics log; the show is not
+interrupted. `CUESTAGE_VIDEO_ENGINE=quick|gl|raster` forces an engine from the command line. The engine in use and
+its graphics API (OpenGL, Vulkan, Metal, Direct3D) are shown in **Help › Diagnostics**.
+
 ### Preloaded videos (immediate start and loops without waiting)
 
 Opening a big video (and jumping to the IN point) can take from a few tenths of a second to a few seconds. With
@@ -880,7 +906,8 @@ advance**: file open and paused on the first frame to show. On GO it starts imme
   loops of at least 1 second.
 - Each ready video takes a decoder and some memory: with many 4K videos turn “Preload” off for those that do not
   need it, or turn it all off from **Video output › Preload videos**.
-- The video's audio (CueStage engine) is already decoded in memory when the show is opened.
+- The video's audio (CueStage engine) is already decoded when the show is opened (in the audio disk cache, see the
+  technical notes).
 
 ## Digital mixers
 
@@ -1275,7 +1302,15 @@ cues can be reordered with the mouse.
   as an external program.
 - The show is a `.cueshow` JSON file; paths are also saved relative to the show, so the folder can be moved to
   another computer.
-- Audio (video audio too) is decoded into memory in advance, at 16 bit with the original channels (instant start,
-  gapless loops, sample-accurate fades and curves): about 11 MB per minute for a stereo file.
+- Audio (video audio too) is decoded in advance with the original channels (instant start, gapless loops,
+  sample-accurate fades and curves) into a **disk cache** of 32-bit float files (`audio_cache` in the data folder,
+  about 22 MB per minute for a stereo file): the engine reads them as memory-mapped files, so only the parts being
+  played stay in RAM and the operating system frees the rest when needed. 24-bit files keep their full resolution.
+  The decoding is done once per file (the cache is reused while the file doesn't change, also between sessions) and
+  a background thread pre-reads each file into the system cache so that GO starts instantly. The cache is trimmed to 20 GB,
+  removing the files unused for the longest time. If the cache can't be written, audio is decoded into memory at
+  16 bit as before.
 - Video loops without “Preload” use FFmpeg seeking: there may be a small discontinuity at the loop point.
-- If OpenGL is not available the output automatically switches to software rendering.
+- Video output: GPU engine with Qt Quick (`video_quick.py`, `qml/`) or classic engine with QPainter (`video_output.py`);
+  if the GPU or OpenGL is not available the output automatically switches to the classic or software rendering.
+- `perf.py` is the built-in benchmark of the Performance tab in Help › Diagnostics.

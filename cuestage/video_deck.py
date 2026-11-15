@@ -50,7 +50,10 @@ class VideoDeck(QObject):
     def _frame(self, frame):
         if not frame.isValid():
             return
-        img = frame.toImage()
+        # niente conversione qui: il fotogramma resta quello del decoder (anche in memoria video); chi lo
+        # disegna con QPainter lo converte una volta sola (FrameRef.qimage), l'uscita su GPU lo usa così com'è
+        from .video_output import FrameRef
+        img = FrameRef(frame)
         if img.isNull():
             return
         self.image = img

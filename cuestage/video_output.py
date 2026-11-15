@@ -1,4 +1,5 @@
 """Uscita video: composizione dei layer e correzione geometrica a 4 angoli (corner pin)."""
+import os
 from .i18n import tr
 from PySide6.QtCore import QPointF, QRectF, Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF, QTransform, QBrush
@@ -8,6 +9,42 @@ try:
     from PySide6.QtOpenGLWidgets import QOpenGLWidget
 except Exception:  # pragma: no cover
     QOpenGLWidget = None
+
+
+class FrameRef:
+    """Fotogramma video come arriva dal decoder (QVideoFrame), con le dimensioni di un QImage. La conversione
+    in QImage (costosa: YUV → RGB sul processore) si fa solo se qualcuno lo disegna con QPainter, una volta
+    sola per fotogramma; l'uscita su GPU (Qt Quick) usa direttamente il fotogramma."""
+    __slots__ = ("frame", "_img", "_w", "_h")
+
+    def __init__(self, frame):
+        self.frame = frame
+        self._img = None
+        s = frame.size()
+        self._w, self._h = s.width(), s.height()
+
+    def width(self):
+        return self._w
+
+    def height(self):
+        return self._h
+
+    def isNull(self):
+        return self._w <= 0 or self._h <= 0
+
+    def size(self):
+        from PySide6.QtCore import QSize
+        return QSize(self._w, self._h)
+
+    def qimage(self):
+        if self._img is None:
+            self._img = self.frame.toImage()
+        return self._img
+
+
+def as_qimage(img):
+    """QImage da disegnare (converte i fotogrammi del decoder la prima volta che servono)."""
+    return img.qimage() if isinstance(img, FrameRef) else img
 
 
 class Layer:
@@ -47,8 +84,12 @@ class Compositor:
         self.changed()
 
     def changed(self):
-        for fn in self.listeners:
-            fn()
+        for fn in list(self.listeners):
+            try:
+                fn()
+            except RuntimeError:              # finestra d'uscita già distrutta da Qt: non la si avvisa più
+                if fn in self.listeners:
+                    self.listeners.remove(fn)
 
     def sorted_layers(self):
         return sorted(self.layers.values(), key=lambda l: (l.z, l.order))
@@ -135,6 +176,9 @@ def layer_quad(lay, dst, W, H, out_size=None):
 
 def draw_layer(p, lay, img, W, H, out_size):
     """Disegna un layer (crop, posizione, scala, prospettiva) nel sistema di coordinate corrente."""
+    img = as_qimage(img)
+    if img is None or img.isNull():
+        return
     src, dst = layer_geometry(lay, img, W, H, out_size)
     if has_warp(lay.cue) or layer_rotation(lay.cue):
         rect_poly = QPolygonF([dst.topLeft(), dst.topRight(), dst.bottomRight(), dst.bottomLeft()])
@@ -237,6 +281,12 @@ class _OutputMixin:
         self.setPalette(pal)
         self.setAutoFillBackground(True)
         comp.listeners.append(self.update)
+
+    def detach(self):
+        """Smette di ricevere gli aggiornamenti della composizione (prima di chiudere e distruggere la finestra)."""
+        for fn in (self.update, getattr(self, "sync", None)):
+            if fn in self.comp.listeners:
+                self.comp.listeners.remove(fn)
 
     def _paint(self, p):
         import time as _t
@@ -351,13 +401,58 @@ def opengl_available():
         return False
 
 
-def make_output(comp, opengl=True):
-    if opengl and GLOutput is not None and opengl_available():
+ENGINES = ("auto", "quick", "gl", "raster")
+
+
+def engine_labels():
+    from .i18n import tr
+    return {"auto": tr("Automatico (GPU, con ripiego raster)"), "quick": tr("GPU (Qt Quick)"),
+            "gl": tr("Classico con OpenGL (QPainter)"), "raster": tr("Raster (solo processore)")}
+
+
+def resolve_engine(engine):
+    """Motore video da usare davvero: «auto» = GPU se possibile, altrimenti classico (OpenGL o raster)."""
+    env = os.environ.get("CUESTAGE_VIDEO_ENGINE", "").strip().lower()
+    if env in ENGINES:
+        engine = env
+    if engine not in ENGINES:
+        engine = "auto"
+    if engine in ("auto", "quick"):
+        from .video_quick import quick_possible
+        if quick_possible() and opengl_available():
+            return "quick"
+        engine = "gl"
+    if engine == "gl" and not (GLOutput is not None and opengl_available()):
+        return "raster"
+    return engine
+
+
+def make_output(comp, engine="auto"):
+    """Finestra di uscita del motore scelto (vedi resolve_engine). Compatibile con il vecchio argomento booleano
+    (True = OpenGL se c'è, False = raster)."""
+    if engine is True:
+        engine = "auto"
+    elif engine is False:
+        engine = "raster"
+    eng = resolve_engine(engine)
+    if eng == "quick":
         try:
-            return GLOutput(comp)
+            from .video_quick import QuickOutput
+            out = QuickOutput(comp)
+            out.engine_name = "quick"
+            return out
+        except Exception:
+            eng = "gl" if (GLOutput is not None and opengl_available()) else "raster"
+    if eng == "gl":
+        try:
+            out = GLOutput(comp)
+            out.engine_name = "gl"
+            return out
         except Exception:
             pass
-    return RasterOutput(comp)
+    out = RasterOutput(comp)
+    out.engine_name = "raster"
+    return out
 
 
 class _Size:

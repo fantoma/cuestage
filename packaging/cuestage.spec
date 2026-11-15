@@ -34,7 +34,8 @@ for path in glob.glob(os.path.join(PKG, "**", "*"), recursive=True):
         datas.append((path, os.path.dirname(rel)))
 
 # ---- moduli importati dai plugin (PyInstaller non li vede perché si caricano da file)
-hidden = set(collect_submodules("cuestage")) | {"mido.backends.rtmidi", "rtmidi"}
+hidden = set(collect_submodules("cuestage")) | {"mido.backends.rtmidi", "rtmidi", "PySide6.QtQml", "PySide6.QtQuick",
+                                                  "PySide6.QtQuickWidgets"}
 for path in glob.glob(os.path.join(PKG, "mixer_plugins", "*.py")) + glob.glob(os.path.join(PKG, "plugins", "*.py")):
     for node in ast.walk(ast.parse(open(path, encoding="utf-8").read())):
         if isinstance(node, ast.Import):
@@ -60,7 +61,7 @@ a = Analysis(
     hiddenimports=sorted(hidden),
     excludes=["tkinter", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets", "PySide6.QtQuick3D",
               "PySide6.Qt3DCore", "PySide6.QtCharts", "PySide6.QtDataVisualization", "PySide6.QtPdf",
-              "PySide6.QtDesigner", "PySide6.QtQml", "PySide6.QtQuick", "matplotlib", "IPython"],
+              "PySide6.QtDesigner", "matplotlib", "IPython"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

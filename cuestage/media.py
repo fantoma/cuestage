@@ -162,6 +162,127 @@ def decode_audio(path, sr=SR, channels=None):
     return np.ascontiguousarray(a)
 
 
+# ---------------------------------------------------------------- audio da disco (cache in float32)
+# I file audio si decodificano una volta in una cache su disco (float32, nessuna perdita oltre i 16 bit) e si
+# leggono con numpy.memmap: in memoria resta solo ciò che il sistema operativo tiene in cache, l'apertura è
+# immediata dalla seconda volta e un'ora di audio non occupa più centinaia di MB di RAM.
+AUDIO_CACHE_LIMIT = 20 * 1024 ** 3        # oltre questa dimensione si tolgono i file usati meno di recente
+
+
+def audio_cache_dir():
+    from .system import data_dir
+    d = data_dir("audio_cache")
+    os.makedirs(d, exist_ok=True)
+    return d
+
+
+def _cache_key(path, sr, ch):
+    import hashlib
+    st = os.stat(path)
+    raw = f"{os.path.abspath(path)}|{st.st_size}|{st.st_mtime_ns}|{sr}|{ch}"
+    return hashlib.sha1(raw.encode("utf-8", "surrogatepass")).hexdigest()
+
+
+def _warm(path):
+    """Legge il file in sottofondo: dopo, le pagine sono nella cache del sistema e il mixer non aspetta il disco."""
+    def job():
+        try:
+            fd = os.open(path, os.O_RDONLY | getattr(os, "O_BINARY", 0))
+            try:
+                if hasattr(os, "posix_fadvise"):
+                    os.posix_fadvise(fd, 0, 0, os.POSIX_FADV_WILLNEED)
+                while os.read(fd, 4 * 1024 * 1024):
+                    pass
+            finally:
+                os.close(fd)
+        except OSError:
+            pass
+    threading.Thread(target=job, daemon=True, name="audio-warm").start()
+
+
+def _trim_cache(keep=()):
+    """Tiene la cache sotto AUDIO_CACHE_LIMIT togliendo i file usati meno di recente (non quelli in uso)."""
+    try:
+        d = audio_cache_dir()
+        files = []
+        for n in os.listdir(d):
+            if n.endswith(".f32"):
+                p = os.path.join(d, n)
+                st = os.stat(p)
+                files.append((st.st_mtime, st.st_size, p))
+        total = sum(f[1] for f in files)
+        for _mt, size, p in sorted(files):
+            if total <= AUDIO_CACHE_LIMIT:
+                break
+            if p in keep:
+                continue
+            try:
+                os.remove(p)
+                os.remove(p[:-4] + ".json")
+                total -= size
+            except OSError:
+                pass                       # in uso (Windows): resta
+    except OSError:
+        pass
+
+
+def decode_audio_cached(path, sr=SR, channels=None):
+    """Audio del file come array (frames, canali) float32 letto dal disco (memmap). Se la cache non si può
+    usare (niente ffmpeg, disco pieno…) si torna alla decodifica in memoria (decode_audio)."""
+    if not FFMPEG or not path or not os.path.isfile(path):
+        return decode_audio(path, sr, channels)
+    if channels is None:
+        info = probe(path)
+        if not info["has_audio"]:
+            return np.zeros((0, 2), np.int16)
+        channels = info["channels"]
+    ch = int(channels or 0)
+    if not (1 <= ch <= MAX_SRC_CHANNELS):
+        ch = 2
+    try:
+        key = _cache_key(path, sr, ch)
+        d = audio_cache_dir()
+        raw, meta = os.path.join(d, key + ".f32"), os.path.join(d, key + ".json")
+        if not (os.path.isfile(raw) and os.path.isfile(meta)):
+            tmp = raw + f".{os.getpid()}.tmp"
+            args = [FFMPEG, "-v", "error", "-nostdin", "-y", "-i", path, "-vn", "-ac", str(ch), "-ar", str(sr),
+                    "-f", "f32le", tmp]
+            p = subprocess.run(args, capture_output=True, check=False, **subprocess_flags())
+            if p.returncode != 0 or not os.path.isfile(tmp) or os.path.getsize(tmp) < 4 * ch:
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+                return decode_audio(path, sr, channels)
+            os.replace(tmp, raw)
+            with open(meta, "w", encoding="utf-8") as f:
+                json.dump({"channels": ch, "sr": sr, "source": os.path.abspath(path)}, f)
+            _trim_cache(keep=(raw,))
+        frames = os.path.getsize(raw) // (4 * ch)
+        if frames <= 0:
+            return np.zeros((0, ch), np.float32)
+        try:
+            os.utime(raw)                  # usato adesso: ultimo a essere tolto dalla cache
+        except OSError:
+            pass
+        a = np.memmap(raw, dtype=np.float32, mode="r", shape=(frames, ch))
+        _warm(raw)
+        return a
+    except Exception:
+        return decode_audio(path, sr, channels)
+
+
+def audio_memory(arrays):
+    """(MB in RAM, MB letti dal disco) degli array audio caricati."""
+    ram = disk = 0
+    for a in arrays:
+        if isinstance(a, np.memmap):
+            disk += a.nbytes
+        elif a is not None:
+            ram += a.nbytes
+    return ram / 1e6, disk / 1e6
+
+
 def compute_peaks(path):
     """Picchi min/max mono a PEAK_RATE colonne/secondo (per disegnare la forma d'onda)."""
     if not FFMPEG:
@@ -468,10 +589,10 @@ class MediaLoader(QObject):
             self.info[path] = info
         a = np.zeros((0, 2), np.int16)
         if info["has_audio"]:
-            a = decode_audio(path, channels=info["channels"])
+            a = decode_audio_cached(path, channels=info["channels"])
             if not len(a):
                 time.sleep(0.2)
-                a = decode_audio(path, channels=info["channels"])
+                a = decode_audio_cached(path, channels=info["channels"])
         with self.lock:
             self.audio[path] = a
         return a

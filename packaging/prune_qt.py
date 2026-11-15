@@ -1,4 +1,5 @@
-"""Toglie da PySide6 le parti che CueStage non usa (WebEngine, Qt Quick, 3D, Designer…).
+"""Toglie da PySide6 le parti che CueStage non usa (WebEngine, 3D, Designer, Controls di Qt Quick…).
+Di Qt Quick tiene solo il necessario per l'uscita video su GPU (QtQuick di base e QtMultimedia).
 
     python prune_qt.py <cartella del Python portabile>
 
@@ -13,7 +14,9 @@ import subprocess
 import sys
 
 KEEP = {"QtCore", "QtGui", "QtWidgets", "QtMultimedia", "QtMultimediaWidgets", "QtNetwork",
-        "QtOpenGL", "QtOpenGLWidgets", "QtSvg", "QtSvgWidgets", "QtDBus"}
+        "QtOpenGL", "QtOpenGLWidgets", "QtSvg", "QtSvgWidgets", "QtDBus", "QtQml", "QtQuick", "QtQuickWidgets"}
+# moduli QML per l'uscita video su GPU (video_quick.py): di QtQuick solo la cartella principale, senza sottomoduli
+KEEP_QML = {"QtQml": True, "QtMultimedia": True, "QtQuick": False}
 KEEP_PLUGINS = {"platforms", "platformthemes", "platforminputcontexts", "xcbglintegrations", "egldeviceintegrations",
                 "wayland-decoration-client", "wayland-graphics-integration-client", "wayland-shell-integration",
                 "imageformats", "iconengines", "multimedia", "tls", "networkinformation", "generic"}
@@ -69,8 +72,22 @@ def main(pyroot):
                  "assistant", "designer", "linguist", "lupdate", "lrelease", "qmlformat", "qmllint", "qmlls",
                  "balsam", "balsamui", "Designer.app", "qmltyperegistrar", "uic", "rcc", "qsb", "svgtoqml"):
         rm(os.path.join(ps, name))
-    for name in ("qml", "libexec", "resources", "metatypes", "modules", "translations/qtwebengine_locales"):
+    for name in ("libexec", "resources", "metatypes", "modules", "translations/qtwebengine_locales"):
         rm(os.path.join(qt, name))
+    qml = os.path.join(qt, "qml")
+    if os.path.isdir(qml):
+        for name in os.listdir(qml):
+            p = os.path.join(qml, name)
+            if name not in KEEP_QML:
+                if os.path.isdir(p):
+                    rm(p)
+            elif not KEEP_QML[name]:
+                for sub in os.listdir(p):
+                    if os.path.isdir(os.path.join(p, sub)):
+                        rm(os.path.join(p, sub))
+        roots_qml = glob.glob(os.path.join(qml, "**", "*.so"), recursive=True)
+    else:
+        roots_qml = []
     for f in glob.glob(os.path.join(qt, "translations", "*")):
         b = os.path.basename(f)
         if not re.match(r"qt(base)?_(it|en)\.qm$", b) and os.path.isfile(f):
@@ -84,7 +101,7 @@ def main(pyroot):
     # librerie Qt: solo quelle raggiunte dai moduli e dai plugin rimasti
     libdir = os.path.join(qt, "lib")
     roots = glob.glob(os.path.join(ps, "*.so*")) + glob.glob(os.path.join(plugdir, "**", "*.so"), recursive=True)
-    roots += glob.glob(os.path.join(site, "shiboken6", "*.so*"))
+    roots += glob.glob(os.path.join(site, "shiboken6", "*.so*")) + roots_qml
     keep = needed(roots, libdir)
     for f in glob.glob(os.path.join(libdir, "*")):
         if os.path.isfile(f) and os.path.realpath(f) not in keep:

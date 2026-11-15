@@ -6,7 +6,8 @@ import time
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QGuiApplication
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QPlainTextEdit, QProgressBar, QPushButton, QTabWidget,
+                               QVBoxLayout, QWidget)
 
 from .i18n import tr
 
@@ -40,8 +41,14 @@ class DiagnosticsDialog(QDialog):
         super().__init__(mw)
         self.mw = mw
         self.setWindowTitle(tr("Diagnostica"))
-        self.resize(760, 640)
-        v = QVBoxLayout(self)
+        self.resize(780, 680)
+        outer = QVBoxLayout(self)
+        self.tabs = QTabWidget()
+        outer.addWidget(self.tabs)
+        page = QWidget()
+        self.tabs.addTab(page, tr("Stato"))
+        self.tabs.addTab(self._perf_page(), tr("Prestazioni"))
+        v = QVBoxLayout(page)
         self.info = QLabel()
         self.info.setTextFormat(Qt.RichText)
         self.info.setWordWrap(True)
@@ -57,7 +64,7 @@ class DiagnosticsDialog(QDialog):
             b.clicked.connect(fn)
             h.addWidget(b)
         h.insertStretch(2, 1)
-        v.addLayout(h)
+        outer.addLayout(h)
         self._cpu0 = (time.process_time(), time.monotonic())
         self._sys0 = _proc_stat()
         self._cpu = 0.0
@@ -68,6 +75,79 @@ class DiagnosticsDialog(QDialog):
         self.timer.timeout.connect(self.refresh)
         self.timer.start()
         self.refresh()
+
+    # ---------------------------------------------------------------- valutazione delle prestazioni
+    def _perf_page(self):
+        from PySide6.QtCore import QSettings
+        w = QWidget()
+        v = QVBoxLayout(w)
+        lab = QLabel(tr("Prove brevi su questo computer: puntualità del sistema, costo del mixer audio e degli "
+                        "effetti, video con il motore classico, lettura dal disco. Alla fine c'è il buffer audio "
+                        "consigliato. Meglio farla con lo show aperto e senza cue in riproduzione."))
+        lab.setWordWrap(True)
+        v.addWidget(lab)
+        h = QHBoxLayout()
+        self.perf_btn = QPushButton(tr("Esegui la valutazione"))
+        self.perf_btn.clicked.connect(self.run_perf)
+        h.addWidget(self.perf_btn)
+        self.perf_bar = QProgressBar()
+        self.perf_bar.setVisible(False)
+        h.addWidget(self.perf_bar, 1)
+        v.addLayout(h)
+        self.perf_out = QPlainTextEdit()
+        self.perf_out.setReadOnly(True)
+        v.addWidget(self.perf_out, 1)
+        last = QSettings("CueStage", "CueStage").value("perf/last", "")
+        if last:
+            self.perf_out.setPlainText(tr("Ultima valutazione:") + "\n" + str(last))
+        return w
+
+    def run_perf(self):
+        from .perf import steps
+        self._perf_steps = steps()
+        self._perf_res = {}
+        self._perf_i = 0
+        self.perf_btn.setEnabled(False)
+        self.perf_bar.setVisible(True)
+        self.perf_bar.setRange(0, len(self._perf_steps))
+        self.perf_bar.setValue(0)
+        self.perf_out.setPlainText("")
+        QTimer.singleShot(50, self._perf_next)
+
+    def _perf_next(self):
+        r = self._perf_res
+        wait = r.get("_wait")
+        if wait is not None:                      # passo in corso in un thread: si aspetta senza bloccare
+            if not wait.done():
+                QTimer.singleShot(100, self._perf_next)
+                return
+            r.pop("_wait")
+            after = r.pop("_after", None)
+            if after:
+                after()
+        if self._perf_i >= len(self._perf_steps):
+            self._perf_done()
+            return
+        desc, fn = self._perf_steps[self._perf_i]
+        self.perf_out.appendPlainText(desc)
+        self._perf_i += 1
+        self.perf_bar.setValue(self._perf_i)
+        try:
+            fn(r)
+        except Exception as e:
+            self.perf_out.appendPlainText(tr("  errore: {0}", e))
+        QTimer.singleShot(30, self._perf_next)
+
+    def _perf_done(self):
+        from PySide6.QtCore import QSettings
+        from .perf import summary
+        self.perf_btn.setEnabled(True)
+        self.perf_bar.setVisible(False)
+        lines = summary(self._perf_res)
+        text = time.strftime("%Y-%m-%d %H:%M") + "\n" + "\n".join(lines)
+        self.perf_out.setPlainText(text)
+        QSettings("CueStage", "CueStage").setValue("perf/last", text)
+        self.perf_result = self._perf_res
 
     def reset(self):
         self.mw.ctrl.audio.reset_diagnostics()
@@ -90,7 +170,9 @@ class DiagnosticsDialog(QDialog):
 
     def text(self):
         """Riepilogo in testo semplice (per «Copia negli appunti»)."""
-        return self._summary(html=False) + "\n\n" + self.log.toPlainText()
+        perf = self.perf_out.toPlainText().strip()
+        return self._summary(html=False) + "\n\n" + (("== " + tr("Prestazioni") + "\n" + perf + "\n\n")
+                                                     if perf else "") + self.log.toPlainText()
 
     def _summary(self, html=True):
         from .audio_engine import BUFFER_LABELS
@@ -137,8 +219,25 @@ class DiagnosticsDialog(QDialog):
                    d["max_ms"], d["peak_load"] * 100), _color(d["peak_load"]))
             row("&nbsp;&nbsp;&nbsp;&nbsp;" + tr("Buchi audio (underrun)") if html else "    " + tr("Buchi audio (underrun)"),
                 str(d["underruns"]), "#e05050" if d["underruns"] else None)
+        try:
+            from .media import audio_memory
+            with mw.loader.lock:
+                arrays = list(mw.loader.audio.values())
+            ram, disk = audio_memory(arrays)
+            row(tr("File audio caricati"), tr("{0} · in memoria {1:.0f} MB · letti dal disco (cache) {2:.0f} MB",
+                                               len(arrays), ram, disk))
+        except Exception:
+            pass
         head(tr("Video"))
         out = getattr(mw, "output", None)
+        if out is not None:
+            from .video_output import engine_labels
+            eng_name = getattr(out, "engine_name", "")
+            label = {"quick": tr("GPU (Qt Quick)"), "gl": tr("classico con OpenGL"),
+                     "raster": tr("raster (solo processore)")}.get(eng_name, eng_name)
+            api = out.api_name() if hasattr(out, "api_name") else ""
+            row(tr("Motore video"), label + (f" · {api}" if api else "") + " · " + tr("scelto: {0}",
+                engine_labels().get(mw.video_engine_setting(), "")))
         if out is None or not out.isVisible():
             row(tr("Finestra di uscita"), tr("chiusa"))
         else:

@@ -2762,8 +2762,7 @@ def t_fx_engine(w):
     c.fx[0]["thr"] = -30.0
     c.sends = [{"bus": b["id"], "db": 0.0, "pre": False}]
     sh.dirty = True
-    run(0.2)
-    assert b["id"] in w.ctrl.audio.buses
+    assert wait_until(lambda: b["id"] in w.ctrl.audio.buses, 5)
     w.ctrl.start_cue(c)
     run(0.5)
     inst = w.ctrl.instances[c.id]
@@ -2996,6 +2995,107 @@ def t_bus_sources_control(w):
     ins.set_cue(pc)
     run(0.2)
     w.show_data.dirty = False
+
+
+def t_audio_cache():
+    """Audio letto dal disco: la cache float32 (memmap) contiene lo stesso suono della decodifica in memoria, si
+    riusa alla seconda apertura e conserva i dettagli sotto i 16 bit di un WAV a 24 bit."""
+    import wave
+    import numpy as _np
+    from cuestage import media
+    path = tone("cache.wav", sec=2)
+    a = media.decode_audio_cached(path, channels=1)
+    ref = media.decode_audio(path, channels=1)
+    assert isinstance(a, _np.memmap) and a.dtype == _np.float32 and a.shape == ref.shape, (type(a), a.shape, ref.shape)
+    assert _np.abs(a[:, 0] - ref[:, 0] / 32768.0).max() < 2e-4
+    key = media._cache_key(path, media.SR, 1)
+    raw = os.path.join(media.audio_cache_dir(), key + ".f32")
+    t0 = os.path.getmtime(raw)
+    time.sleep(0.05)
+    b = media.decode_audio_cached(path, channels=1)
+    assert b.shape == a.shape and os.path.getsize(raw) == a.nbytes and os.path.getmtime(raw) >= t0
+    # WAV a 24 bit con un segnale di ampiezza 1/2^20: a 16 bit sparirebbe, nella cache float32 resta
+    p24 = os.path.join(TMP, "q24.wav")
+    n = media.SR
+    sig = (_np.sin(_np.arange(n) * 2 * _np.pi * 440 / media.SR) * 8).astype(_np.int32)   # ±8 su 2^23
+    raw24 = b"".join(int(x & 0xFFFFFF).to_bytes(3, "little") for x in sig[:4800])
+    with wave.open(p24, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(3)
+        wf.setframerate(media.SR)
+        wf.writeframes(raw24)
+    c = media.decode_audio_cached(p24, channels=1)
+    assert float(_np.abs(c).max()) > 0 and float(_np.abs(c).max()) < 1e-5, float(_np.abs(c).max())
+    assert media.audio_memory([a, ref])[1] > 0
+
+
+def t_video_engines(w):
+    """Motori video: scelta automatica (senza GPU si usa il classico), fotogrammi del decoder convertiti solo
+    quando servono (FrameRef), stessa geometria della GPU e del classico (crop, prospettiva, 4 angoli)."""
+    from PySide6.QtCore import QPointF, QRectF
+    from PySide6.QtGui import QImage
+    from cuestage import video_output as vo
+    from cuestage.video_quick import layer_matrix, quick_possible
+    eng = vo.resolve_engine("auto")
+    if not quick_possible():
+        assert eng in ("gl", "raster")
+    assert vo.resolve_engine("raster") == "raster"
+    out = vo.make_output(w.comp, "raster")
+    assert out.engine_name == "raster"
+    out.detach()
+    assert out.update not in w.comp.listeners
+    out.close()
+    out.deleteLater()
+    # geometria: la matrice della GPU porta gli angoli del riquadro (dopo il crop) dove li porta il QPainter
+    c = Cue("image", number="9")
+    c.crop_l, c.crop_t, c.scale, c.rotation, c.off_x = 40, 20, 70.0, 12.0, 80
+    c.warp = [[20, 0], [0, 10], [-15, 0], [0, 0]]
+    lay = vo.Layer("k", 1, 1, "fit", c)
+    img = QImage(400, 300, QImage.Format_RGB32)
+    corners = [[0.05, 0.0], [0.95, 0.05], [1.0, 1.0], [0.0, 0.9]]
+    W, H = 960, 540
+    src, m = layer_matrix(lay, img, W, H, (1920, 1080), corners)
+    _s, dst = vo.layer_geometry(lay, img, W, H, (1920, 1080))
+    from PySide6.QtGui import QPolygonF, QTransform
+    lt = QTransform()
+    QTransform.quadToQuad(QPolygonF([dst.topLeft(), dst.topRight(), dst.bottomRight(), dst.bottomLeft()]),
+                          vo.layer_quad(lay, dst, W, H, (1920, 1080)), lt)
+    t = lt * vo.corner_transform(W, H, corners)
+    for u, v_ in ((0, 0), (1, 0), (1, 1), (0, 1), (0.3, 0.7)):
+        a = m.map(QPointF(u * src.width(), v_ * src.height()))
+        b = t.map(QPointF(dst.x() + u * dst.width(), dst.y() + v_ * dst.height()))
+        assert abs(a.x() - b.x()) < 0.01 and abs(a.y() - b.y()) < 0.01, (a, b)
+    # fotogrammi del decoder: niente conversione finché nessuno li disegna
+    from PySide6.QtCore import QSize
+    from PySide6.QtMultimedia import QVideoFrame, QVideoFrameFormat
+    fr = vo.FrameRef(QVideoFrame(QVideoFrameFormat(QSize(64, 48), QVideoFrameFormat.Format_NV12)))
+    assert fr.width() == 64 and fr._img is None
+    canvas = QImage(160, 90, QImage.Format_RGB32)
+    from PySide6.QtGui import QPainter
+    p = QPainter(canvas)
+    vo.draw_layer(p, vo.Layer("f", 1, 1, "fit", Cue("video", number="8")), fr, 160, 90, (160, 90))
+    p.end()
+    assert fr._img is not None and vo.as_qimage(fr) is fr._img
+    _ = QRectF
+
+
+def t_perf_eval(w):
+    """Valutazione delle prestazioni: i passi girano senza bloccare e danno un buffer consigliato."""
+    from cuestage import perf
+    j = perf.Jitter(period=0.002, dur=0.3)
+    j.start()
+    assert wait_until(j.done, 3)
+    r = {"jitter": j.result(), "mixer": perf.bench_mixer(), "video": perf.bench_video(), "disk": perf.bench_disk(4)}
+    assert r["jitter"]["n"] > 50 and r["mixer"]["voice_ms"] > 0 and r["video"]["draw_ms"] > 0
+    n, need = perf.recommend(r)
+    assert n in perf.BUFFERS and need > 0
+    txt = "\n".join(perf.summary(r))
+    assert str(n) in txt
+    d = w.diagnostics_dialog()
+    d.run_perf()
+    assert wait_until(lambda: d.perf_btn.isEnabled(), 30)
+    assert "perf_result" in d.__dict__ and "mixer" in d.perf_result
+    d.close()
 
 
 def t_memo_skip(w):
@@ -3814,6 +3914,9 @@ if __name__ == "__main__":
     check("rack effetti delle cue e bus effetti (mandate, code, preset, finestre)", lambda: t_fx_engine(w))
     check("EQ con punti trascinabili, curve e vumeter di gate e compressore, Diagnostica", lambda: t_fx_gui_diag(w))
     check("bus: trim delle sorgenti, ingresso fisico, cue Controllo bus, Cambia preset sui bus", lambda: t_bus_sources_control(w))
+    check("audio letto dal disco (cache float32, anche 24 bit)", t_audio_cache)
+    check("motori video: GPU / classico, fotogrammi convertiti solo se servono, stessa geometria", lambda: t_video_engines(w))
+    check("valutazione delle prestazioni e buffer consigliato", lambda: t_perf_eval(w))
     check("lista: trascina su altri PANEL e GRID; Opzioni e BLIND non allargano il GRID", lambda: t_list_drop_other_lists(w))
     check("rotazione di video e immagini", lambda: t_rotation(w))
     check("GRID: pulsanti Pushbutton e Toggle, cue al rilascio", lambda: t_grid_push_toggle(w))

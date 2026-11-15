@@ -12,11 +12,52 @@ FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 
 
 class VideoMixin:
-    def _create_output(self):
+    def video_engine_setting(self):
+        """Motore video scelto nello show (gli show precedenti avevano solo «OpenGL sì/no»)."""
+        s = self.show_data.settings
+        e = s.get("output_engine")
+        if e:
+            return e
+        return "auto" if s.get("output_opengl", True) else "raster"
+
+    def _create_output(self, engine=None):
         if self.output is None:
-            self.output = make_output(self.comp, bool(self.show_data.settings.get("output_opengl", True)))
+            self.output = make_output(self.comp, engine or self.video_engine_setting())
             self.output.cornersChanged.connect(self._corners_changed)
+            fb = getattr(self.output, "fallbackRequested", None)
+            if fb is not None:
+                fb.connect(self._video_fallback)
             self._build_shortcuts(self.output)
+
+    def _drop_output(self):
+        """Chiude la finestra di uscita (per ricrearla con un altro motore). Restituisce se era visibile."""
+        out = self.output
+        if out is None:
+            return False
+        vis = out.isVisible()
+        out.detach()
+        out.close()
+        out.deleteLater()
+        self.output = None
+        return vis
+
+    def _video_fallback(self, reason):
+        """L'uscita su GPU non può funzionare (niente GPU, errore della scena): si passa al motore classico."""
+        if self.output is None or getattr(self.output, "engine_name", "") != "quick":
+            return
+        self.ctrl.message.emit(tr("Uscita video: GPU non disponibile ({0}), uso il motore classico", reason))
+        vis = self._drop_output()
+        from ..video_output import GLOutput, opengl_available
+        self._create_output("gl" if (GLOutput is not None and opengl_available()) else "raster")
+        if vis:
+            self.show_output()
+
+    def set_video_engine(self, engine):
+        self.show_data.settings["output_engine"] = engine
+        self.show_data.dirty = True
+        vis = self._drop_output()
+        if vis:
+            self.show_output()
 
     def _output_aspect(self):
         if self.output is not None and self.output.isVisible() and self.output.height():
@@ -139,14 +180,5 @@ class VideoMixin:
         if self.comp.grid:
             self._ensure_output_visible()
 
-    def toggle_gl(self):
-        self.show_data.settings["output_opengl"] = self.act_gl.isChecked()
-        self.show_data.dirty = True
-        if self.output is not None:
-            vis = self.output.isVisible()
-            self.comp.listeners.remove(self.output.update)
-            self.output.close()
-            self.output.deleteLater()
-            self.output = None
-            if vis:
-                self.show_output()
+    def toggle_gl(self):        # compatibilità: OpenGL acceso = motore automatico, spento = raster
+        self.set_video_engine("raster" if self.video_engine_setting() != "raster" else "auto")

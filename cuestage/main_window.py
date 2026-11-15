@@ -635,8 +635,17 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         add(m, tr("Geometria a 4 angoli…"), self.geometry_dialog, "Ctrl+G")
         self.act_grid = add(m, tr("Griglia di test"), self.toggle_grid)
         self.act_grid.setCheckable(True)
-        self.act_gl = add(m, tr("Usa accelerazione OpenGL (al riavvio dell'uscita)"), self.toggle_gl)
-        self.act_gl.setCheckable(True)
+        from .video_output import ENGINES, engine_labels
+        from PySide6.QtGui import QActionGroup as _AG
+        em = m.addMenu(tr("Motore video"))
+        grp = _AG(em)
+        self.engine_actions = {}
+        for k in ENGINES:
+            a = em.addAction(engine_labels()[k])
+            a.setCheckable(True)
+            grp.addAction(a)
+            a.triggered.connect(lambda _=False, k=k: self.set_video_engine(k))
+            self.engine_actions[k] = a
         self.act_vpre = add(m, tr("Precarica i video (cue con «Precarica»)"), self._toggle_video_preload)
         self.act_vpre.setCheckable(True)
 
@@ -770,7 +779,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.comp.corners[:] = [list(c) for c in s.get("output_corners")]
         self.comp.grid = bool(s.get("output_grid", False))
         self.act_grid.setChecked(self.comp.grid)
-        self.act_gl.setChecked(bool(s.get("output_opengl", True)))
+        cur = self.video_engine_setting()
+        for k, a in self.engine_actions.items():
+            a.setChecked(k == cur)
         self.act_vpre.setChecked(bool(s.get("video_preload", True)))
         self.act_full.setChecked(bool(s.get("output_fullscreen", True)))
         self.comp.changed()
