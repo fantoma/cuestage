@@ -21,7 +21,7 @@ import numpy as np
 from .i18n import tr
 from .media import SR
 
-BUFFERS = (128, 256, 512, 1024, 2048)
+BUFFERS = (128, 256, 512, 1024, 2048, 4096)
 
 
 def _timeit(fn, n):
@@ -157,16 +157,28 @@ def bench_disk(mb=48):
             pass
 
 
+def buffer_key(n):
+    """Voce di Impostazioni › Audio › Buffer audio con blocco di n campioni (e la sua coda in ms)."""
+    from .audio_engine import BUFFERS as PRESETS
+    for k, (blk, lat) in PRESETS.items():
+        if blk == n:
+            return k, lat * 1000
+    return "normale", PRESETS["normale"][1] * 1000
+
+
 def recommend(r):
     """Buffer consigliato: il più piccolo il cui blocco è almeno il doppio del ritardo peggiore (99°
-    percentile della puntualità) più il calcolo di uno show tipico (8 voci con rack e un bus con riverbero)."""
+    percentile della puntualità) più il calcolo di uno show tipico (8 voci con rack e un bus con riverbero).
+    Se il mixer vero ha avuto un picco (r["live_peak_ms"], dalla Diagnostica), la coda della scheda deve
+    contenerlo con un margine del 50 %, altrimenti quel picco diventerebbe un buco nell'audio."""
     j = r.get("jitter") or {}
     m = r.get("mixer") or {}
     p99 = float(j.get("p99_ms", 5.0))
     work = 8 * float(m.get("voice_fx_ms", m.get("voice_ms", 0.2) * 3)) + float(m.get("bus_reverb_ms", 0.2))
     need = 2.0 * (p99 + work)
+    peak = float(r.get("live_peak_ms") or 0.0)
     for n in BUFFERS:
-        if n / SR * 1000 >= need:
+        if n / SR * 1000 >= need and buffer_key(n)[1] >= 1.5 * peak:
             return n, need
     return BUFFERS[-1], need
 
@@ -200,8 +212,14 @@ def summary(r):
         out.append(tr("Disco (cache audio): lettura {0:.0f} MB/s", d["read_mb_s"]))
     if j and m:
         n, need = recommend(r)
+        peak = float(r.get("live_peak_ms") or 0.0)
+        if peak > 0:
+            out.append(tr("Picco reale del mixer finora: {0:.1f} ms (se è dovuto all'apertura dello show, "
+                          "premi «Azzera massimi», fai suonare qualche cue e ripeti la valutazione)", peak))
         out.append(tr("Buffer audio consigliato: {0} campioni ({1:.1f} ms; servono almeno {2:.1f} ms)",
                       n, n / SR * 1000, need))
+        from .audio_engine import BUFFER_LABELS
+        out.append(tr("In Impostazioni › Audio › Buffer audio: «{0}»", BUFFER_LABELS[buffer_key(n)[0]]))
     return out
 
 

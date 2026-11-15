@@ -1,7 +1,7 @@
 """Uscita video: composizione dei layer e correzione geometrica a 4 angoli (corner pin)."""
 import os
 from .i18n import tr
-from PySide6.QtCore import QPointF, QRectF, Qt, Signal, QTimer
+from PySide6.QtCore import QPointF, QRect, QRectF, Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF, QTransform, QBrush
 from PySide6.QtWidgets import QWidget
 
@@ -275,6 +275,7 @@ class _OutputMixin:
         self.drag = -1
         self.setWindowTitle(tr("CueStage – Uscita video"))
         self.setMouseTracking(True)
+        self.setMinimumSize(160, 90)          # mai una finestra di 1×1 (Wayland a volte la crea così)
         self.resize(960, 540)
         pal = self.palette()
         pal.setColor(self.backgroundRole(), Qt.black)
@@ -349,8 +350,11 @@ class _OutputMixin:
                 self.setCursor(Qt.BlankCursor)
         else:
             g = scr.availableGeometry()
+            if g.width() < 320 or g.height() < 180:     # schermo non ancora noto (Wayland): misure di ripiego
+                g = scr.geometry() if scr.geometry().width() >= 320 else QRect(0, 0, 1280, 720)
             self.showNormal()
-            self.setGeometry(g.x() + 40, g.y() + 40, min(960, g.width() - 80), min(540, g.height() - 80))
+            self.setGeometry(g.x() + 40, g.y() + 40, max(320, min(960, g.width() - 80)),
+                             max(180, min(540, g.height() - 80)))
             self.setCursor(Qt.ArrowCursor)
         self.show()
         self.raise_()

@@ -18,8 +18,12 @@ except Exception:  # PortAudio mancante
 BLOCK = 512
 # dimensione del buffer audio: (campioni per blocco, latenza richiesta in s). Più grande = meno rischio di
 # «underrun» (buchi nell'audio quando il computer è impegnato, es. col video), ma partenza un po' più lenta.
-BUFFERS = {"bassa": (512, 0.05), "normale": (1024, 0.12), "alta": (2048, 0.25), "massima": (4096, 0.5)}
-BUFFER_LABELS = {"bassa": tr("Bassa latenza (512 · ~50 ms) — solo per computer scarichi"),
+# 128 e 256: per computer veloci e scarichi (vedi Aiuto › Diagnostica › Prestazioni, che consiglia il buffer)
+BUFFERS = {"minima": (128, 0.012), "molto_bassa": (256, 0.025), "bassa": (512, 0.05), "normale": (1024, 0.12),
+           "alta": (2048, 0.25), "massima": (4096, 0.5)}
+BUFFER_LABELS = {"minima": tr("Latenza minima (128 · ~12 ms) — computer dedicato, scheda diretta"),
+                 "molto_bassa": tr("Latenza molto bassa (256 · ~25 ms) — computer veloce e scarico"),
+                 "bassa": tr("Bassa latenza (512 · ~50 ms) — solo per computer scarichi"),
                  "normale": tr("Normale (1024 · ~120 ms)"), "alta": tr("Sicura (2048 · ~250 ms)"),
                  "massima": tr("Massima sicurezza (4096 · ~500 ms)")}
 

@@ -2173,6 +2173,11 @@
   "solo per mostrare l'immagine": "solo per mostrare l'immagine",
   "in uso ({0}): {1}": "in uso ({0}): {1}",
   "presente: {0}": "presente: {0}",
-  "non usata (motore raster) · presente: {0}": "non usata (motore raster) · presente: {0}"
+  "non usata (motore raster) · presente: {0}": "non usata (motore raster) · presente: {0}",
+  "Latenza minima (128 · ~12 ms) — computer dedicato, scheda diretta": "Latenza minima (128 · ~12 ms) — computer dedicato, scheda diretta",
+  "Latenza molto bassa (256 · ~25 ms) — computer veloce e scarico": "Latenza molto bassa (256 · ~25 ms) — computer veloce e scarico",
+  "Picco reale del mixer finora: {0:.1f} ms (se è dovuto all'apertura dello show, premi «Azzera massimi», fai suonare qualche cue e ripeti la valutazione)": "Picco reale del mixer finora: {0:.1f} ms (se è dovuto all'apertura dello show, premi «Azzera massimi», fai suonare qualche cue e ripeti la valutazione)",
+  "In Impostazioni › Audio › Buffer audio: «{0}»": "In Impostazioni › Audio › Buffer audio: «{0}»",
+  "ridotta a icona": "ridotta a icona"
  }
 }

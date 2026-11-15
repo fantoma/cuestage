@@ -732,8 +732,12 @@ An audio input (e.g. the announcer's microphone) automatically lowers the cues w
 
 An *underrun* is a small gap in the audio: the card asked for the next block before the computer had it ready
 (it happens mostly with video on the output or with a busy computer). In **Settings › Audio › Audio buffer** you
-choose the size: *Low latency* 512 samples (~50 ms), *Normal* 1024 (~120 ms, default), *Safe* 2048 (~250 ms),
-*Maximum safety* 4096 (~500 ms). A bigger buffer removes the gaps; in exchange a cue is heard a few tenths of a
+choose the size: *Minimum latency* 128 samples (~12 ms), *Very low latency* 256 (~25 ms), *Low latency* 512 (~50 ms),
+*Normal* 1024 (~120 ms, default), *Safe* 2048 (~250 ms), *Maximum safety* 4096 (~500 ms). The first number is the
+block that CueStage computes each time, the second the queue in front of the card (the card's latency shown in
+Diagnostics): the queue absorbs momentary slowdowns of the computer and is also the delay between GO and sound.
+128 and 256 are for fast, idle computers, preferably with the card used directly or through PipeWire;
+**Help › Diagnostics › Performance** tells which one this computer can handle. A bigger buffer removes the gaps; in exchange a cue is heard a few tenths of a
 second after GO. If there were gaps in the last 10 seconds, the status bar shows it in yellow with their number.
 The “ALSA lib … underrun occurred” messages are no longer written to the terminal (CueStage counts them); to see
 them again: `CUESTAGE_ALSA_MESSAGES=1 cuestage`. With PipeWire it is better to use the “pipewire” or “default”
@@ -758,7 +762,8 @@ and no cue playing): **timing accuracy** of the system (a thread woken every 2 m
 case), the **cost of the audio mixer** (one voice, one voice with gate + EQ + compressor, one bus with reverb, measured
 with the real engine), the **video** cost with the classic engine (conversion of a Full HD frame and QPainter
 drawing: on the GPU these steps don't use the processor) and the **disk read speed** of the audio cache. At the end
-it suggests the **audio buffer** (the smallest one that leaves at least twice the needed time) and estimates how many
+it suggests the **audio buffer** (the smallest one that leaves at least twice the needed time, and whose queue holds the
+highest real peak of the mixer seen so far with a 50 % margin; the matching Settings entry is named) and estimates how many
 voices with an effect rack can play together. The last result is kept and included in “Copy to clipboard”.
 
 ### Effects: cue racks and effect buses

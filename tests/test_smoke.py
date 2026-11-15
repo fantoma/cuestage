@@ -2962,8 +2962,8 @@ def t_bus_sources_control(w):
     run(0.1)
     end = w.ctrl.bus_spec(b)
     assert end["level_db"] == -20.0 and end["fx"][0]["decay"] == 5.0 and b["level_db"] == 0.0   # lo show non cambia
-    assert abs(w.ctrl.audio.buses[b["id"]].level - 0.1) < 1e-3
-    assert w.ctrl.audio.buses[b["id"]].rack.procs[b["fx"][0]["id"]].p["decay"] == 5.0
+    assert wait_until(lambda: abs(w.ctrl.audio.buses[b["id"]].level - 0.1) < 1e-3
+                      and w.ctrl.audio.buses[b["id"]].rack.procs[b["fx"][0]["id"]].p["decay"] == 5.0, 3)
     # Cambia preset con un bus come target
     bv = BusView(b)
     bv.preset_dict("bus")["Secco"] = dict(bv.preset_values("bus"), level_db=-6.0, mute=True)
@@ -3107,6 +3107,53 @@ def t_perf_eval(w):
     assert wait_until(lambda: d.perf_btn.isEnabled(), 30)
     assert "perf_result" in d.__dict__ and "mixer" in d.perf_result
     d.close()
+
+
+def t_small_buffers(w):
+    """Buffer da 128 e 256 campioni: tra le impostazioni, consigliati dalla valutazione quando il computer li regge
+    (non se il mixer vero ha avuto un picco più lungo della coda) e con lo stesso suono dei blocchi grandi, effetti
+    compresi (rack della cue e bus con riverbero e delay)."""
+    import numpy as _np
+    from cuestage import dsp, perf
+    from cuestage.audio_engine import BUFFER_LABELS, BUFFERS, AudioEngine, BusRuntime, Voice
+    assert BUFFERS["minima"][0] == 128 and BUFFERS["molto_bassa"][0] == 256 and list(BUFFERS)[0] == "minima"
+    r = {"jitter": {"p50_ms": 0.15, "p99_ms": 0.3, "max_ms": 0.6, "n": 1000},
+         "mixer": {"voice_ms": 0.05, "voice_fx_ms": 0.2, "bus_reverb_ms": 0.25}}
+    assert perf.recommend(r)[0] == 256
+    r["live_peak_ms"] = 24.6                       # picco da 24,6 ms: serve una coda di almeno 37 ms (512 → 50 ms)
+    assert perf.recommend(r)[0] == 512, perf.recommend(r)
+    r["live_peak_ms"] = 60.0
+    assert perf.recommend(r)[0] == 1024, perf.recommend(r)
+    assert BUFFER_LABELS[perf.buffer_key(1024)[0]] in "\n".join(perf.summary(r))
+    if dsp.available():
+        eng = AudioEngine()
+        data = (_np.random.default_rng(3).standard_normal((48000, 2)) * 0.2).astype(_np.float32)
+        def run_blocks(block, total=4096):
+            v = Voice(data, 0.0, 0.0, True, 0.0, 0.0, 0, 1.0, None, 0.0, 0.0)
+            v.fit_matrix(2)
+            v.fx = dsp.Rack([dsp.new_fx(k) for k in ("gate", "eq", "comp")], 2, dsp.CUE_FX)
+            b = BusRuntime({"id": "x", "fx": [dsp.new_fx("delay"), dsp.new_fx("reverb")], "level_db": 0.0}, "x")
+            outs = []
+            for _ in range(total // block):
+                out = _np.zeros((block, 2), _np.float32)
+                eng._mix_voice(v, out, block, 2)
+                y = b.process(out.copy(), block, 2)
+                outs.append(out + (y if y is not None else 0))
+            return _np.concatenate(outs)
+        a, b_ = run_blocks(512), run_blocks(128)
+        assert _np.abs(a).max() > 0.01 and _np.abs(a - b_).max() < 1e-3, float(_np.abs(a - b_).max())
+    from PySide6.QtWidgets import QComboBox
+    from cuestage.ui_dialogs import SettingsDialog
+    d = SettingsDialog(dict(w.show_data.settings), None, w)
+    assert d.abuf.findData("minima") >= 0 and d.abuf.findData("molto_bassa") >= 0 and isinstance(d.abuf, QComboBox)
+    d.close()
+    # finestra di uscita: mai più piccola di 160×90
+    w.show_output()
+    run(0.2)
+    w.output.resize(1, 1)
+    run(0.1)
+    assert w.output.width() >= 160 and w.output.height() >= 90
+    w.output.hide()
 
 
 def t_memo_skip(w):
@@ -3928,6 +3975,7 @@ if __name__ == "__main__":
     check("audio letto dal disco (cache float32, anche 24 bit)", t_audio_cache)
     check("motori video: GPU / classico, fotogrammi convertiti solo se servono, stessa geometria", lambda: t_video_engines(w))
     check("valutazione delle prestazioni e buffer consigliato", lambda: t_perf_eval(w))
+    check("buffer da 128 e 256 campioni (stesso suono, effetti compresi) e finestra di uscita mai 1×1", lambda: t_small_buffers(w))
     check("lista: trascina su altri PANEL e GRID; Opzioni e BLIND non allargano il GRID", lambda: t_list_drop_other_lists(w))
     check("rotazione di video e immagini", lambda: t_rotation(w))
     check("GRID: pulsanti Pushbutton e Toggle, cue al rilascio", lambda: t_grid_push_toggle(w))

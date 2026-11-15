@@ -143,6 +143,12 @@ class DiagnosticsDialog(QDialog):
         from .perf import summary
         self.perf_btn.setEnabled(True)
         self.perf_bar.setVisible(False)
+        try:                               # picco reale del mixer (schede vere, dopo qualche blocco)
+            peaks = [d["max_ms"] for d in self.mw.ctrl.audio.diagnostics() if not d["null"] and d["blocks"] > 50]
+            if peaks:
+                self._perf_res["live_peak_ms"] = max(peaks)
+        except Exception:
+            pass
         lines = summary(self._perf_res)
         text = time.strftime("%Y-%m-%d %H:%M") + "\n" + "\n".join(lines)
         self.perf_out.setPlainText(text)
@@ -249,8 +255,11 @@ class DiagnosticsDialog(QDialog):
             row(tr("Finestra di uscita"), tr("chiusa"))
         else:
             st = getattr(out, "_diag", None) or {}
-            row(tr("Finestra di uscita"), tr("{0}×{1}, {2}", out.width(), out.height(),
-                                              tr("schermo intero") if out.isFullScreen() else tr("in finestra")))
+            mode = tr("schermo intero") if out.isFullScreen() else tr("ridotta a icona") if out.isMinimized() \
+                else tr("in finestra")
+            small = out.width() < 320 or out.height() < 180 or out.isMinimized()
+            row(tr("Finestra di uscita"), tr("{0}×{1}, {2}", out.width(), out.height(), mode),
+                _color(0.6) if small else None)
             ms_max = st.get("max", 0.0) * 1000
             row(tr("Disegno"), tr("{0:.0f} fotogrammi/s · medio {1:.1f} ms · massimo {2:.1f} ms", st.get("fps", 0.0),
                                   st.get("avg", 0.0) * 1000, ms_max), _color(ms_max / 40.0))

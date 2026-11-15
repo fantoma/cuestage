@@ -2173,6 +2173,11 @@
   "solo per mostrare l'immagine": "only to display the image",
   "in uso ({0}): {1}": "in use ({0}): {1}",
   "presente: {0}": "present: {0}",
-  "non usata (motore raster) · presente: {0}": "not used (raster engine) · present: {0}"
+  "non usata (motore raster) · presente: {0}": "not used (raster engine) · present: {0}",
+  "Latenza minima (128 · ~12 ms) — computer dedicato, scheda diretta": "Minimum latency (128 · ~12 ms) — dedicated computer, direct card access",
+  "Latenza molto bassa (256 · ~25 ms) — computer veloce e scarico": "Very low latency (256 · ~25 ms) — fast, idle computer",
+  "Picco reale del mixer finora: {0:.1f} ms (se è dovuto all'apertura dello show, premi «Azzera massimi», fai suonare qualche cue e ripeti la valutazione)": "Real mixer peak so far: {0:.1f} ms (if it was caused by opening the show, press “Reset maxima”, play a few cues and run the evaluation again)",
+  "In Impostazioni › Audio › Buffer audio: «{0}»": "In Settings › Audio › Audio buffer: “{0}”",
+  "ridotta a icona": "minimised"
  }
 }
