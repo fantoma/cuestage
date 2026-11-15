@@ -2825,6 +2825,85 @@ def t_fx_engine(w):
     w.show_data.dirty = False
 
 
+def t_fx_gui_diag(w):
+    """EQ: punti delle bande trascinabili e Q con la rotella; gate e compressore con curva e vumeter
+    d'ingresso e uscita; Aiuto › Diagnostica con carico, buffer audio ed errori del motore."""
+    from PySide6.QtCore import QEvent, QPoint, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent, QWheelEvent
+    from cuestage import dsp
+    from cuestage.i18n import tr
+    from cuestage.ui_fx import DynGraph, EqCurve, LevelMeter, open_fx_window
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    c = Cue("audio", number="1", name="Dyn", file=tone("dyn.wav", sec=5))
+    sh.cues = [c]
+    w._set_show(sh)
+    run(0.2)
+    c.fx = [dsp.new_fx("eq"), dsp.new_fx("comp")]
+    c.fx[1].update(thr=-30.0, ratio=4.0)
+    changes = []
+    eqw = open_fx_window(("cue", c.id), c.fx[0]["id"], "t", lambda: c.fx, lambda: changes.append(1), None, w)
+    run(0.2)
+    cv = eqw.findChild(EqCurve)
+    b = dsp.params(c.fx[0])["bands"][2]
+    p0 = QPointF(cv._x(float(b["f"])), cv._y(float(b["g"])))
+    p1 = QPointF(cv._x(2000.0), cv._y(6.0))
+    cv.mousePressEvent(QMouseEvent(QEvent.MouseButtonPress, p0, cv.mapToGlobal(p0), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+    cv.mouseMoveEvent(QMouseEvent(QEvent.MouseMove, p1, cv.mapToGlobal(p1), Qt.NoButton, Qt.LeftButton, Qt.NoModifier))
+    cv.mouseReleaseEvent(QMouseEvent(QEvent.MouseButtonRelease, p1, cv.mapToGlobal(p1), Qt.LeftButton, Qt.NoButton, Qt.NoModifier))
+    nb = c.fx[0]["bands"][2]
+    assert abs(nb["f"] - 2000) < 60 and abs(nb["g"] - 6.0) < 0.3 and changes, nb
+    assert abs(eqw.band_rows[2]["g"].sp.value() - nb["g"]) < 0.01      # le caselle seguono il punto
+    q0 = nb["q"]
+    p2 = QPointF(cv._x(float(nb["f"])), cv._y(float(nb["g"])))
+    cv.wheelEvent(QWheelEvent(p2, cv.mapToGlobal(p2), QPoint(0, 0), QPoint(0, 120), Qt.NoButton, Qt.NoModifier,
+                              Qt.NoScrollPhase, False))
+    assert c.fx[0]["bands"][2]["q"] > q0
+    eqw.close()
+    # RTA dell'ingresso nella finestra dell'EQ mentre la cue suona (tono a 440 Hz)
+    w.ctrl.start_cue(c)
+    run(0.5)
+
+    def eq_meter(fid):
+        inst = w.ctrl.instances.get(c.id)
+        return inst.voice.fx.meter(fid) if inst is not None and inst.voice.fx is not None else {}
+    eqw = open_fx_window(("cue", c.id), c.fx[0]["id"], "t", lambda: c.fx, lambda: None, eq_meter, w)
+    assert wait_until(lambda: eqw.curve.rta is not None, 2)
+    import numpy as _np
+    fr, db = eqw.curve.rta
+    assert 380 < fr[int(_np.argmax(db))] < 520, fr[int(_np.argmax(db))]
+    eqw.close()
+    w.ctrl.stop_all(0)
+    run(0.2)
+    # gate e compressore: curva, punto di lavoro e vumeter mentre suona
+    w.ctrl.start_cue(c)
+    run(0.6)
+
+    def meter(fid):
+        inst = w.ctrl.instances.get(c.id)
+        return inst.voice.fx.meter(fid) if inst is not None and inst.voice.fx is not None else {}
+    cw = open_fx_window(("cue", c.id), c.fx[1]["id"], "t", lambda: c.fx, lambda: None, meter, w)
+    run(0.5)
+    g = cw.findChild(DynGraph)
+    ms = {m.label: m for m in cw.findChildren(LevelMeter)}
+    assert g is not None and g.point is not None and g.point > -40
+    assert ms[tr("In")].db > ms[tr("Out")].db and ms[tr("Rid.")].db < -3
+    cw.close()
+    w.ctrl.stop_all(0)
+    run(0.2)
+    # diagnostica
+    w.ctrl.audio.note_error("prova", RuntimeError("errore di prova"))
+    w.ctrl.message.emit("messaggio di prova")
+    d = w.diagnostics_dialog()
+    run(0.7)
+    txt = d.text()
+    assert tr("Processore") in txt and tr("Calcolo del blocco") in txt and "errore di prova" in txt \
+        and "messaggio di prova" in txt, txt
+    d.reset()
+    d.close()
+    w.show_data.dirty = False
+
+
 def t_memo_skip(w):
     """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
     sh = Show()
@@ -3639,6 +3718,7 @@ if __name__ == "__main__":
     check("lista: Ctrl + trascina duplica", lambda: t_list_ctrl_copy(w))
     check("effetti interni: EQ, gate, compressore, delay, riverbero", t_fx_dsp)
     check("rack effetti delle cue e bus effetti (mandate, code, preset, finestre)", lambda: t_fx_engine(w))
+    check("EQ con punti trascinabili, curve e vumeter di gate e compressore, Diagnostica", lambda: t_fx_gui_diag(w))
     check("lista: trascina su altri PANEL e GRID; Opzioni e BLIND non allargano il GRID", lambda: t_list_drop_other_lists(w))
     check("rotazione di video e immagini", lambda: t_rotation(w))
     check("GRID: pulsanti Pushbutton e Toggle, cue al rilascio", lambda: t_grid_push_toggle(w))

@@ -178,11 +178,30 @@ class EQ(_Fx):
             self.zi = zi.copy() if (zi is not None and zi.shape[0] == len(sos)) else np.zeros((len(sos), 2, self.ch))
         self.gain = db2lin(self.p.get("gain", 0.0))
 
+    RTA_N = 8192            # campioni d'ingresso tenuti per l'analizzatore di spettro (RTA) della finestra
+
     def reset(self):
         self.zi = np.zeros((len(self.sos), 2, self.ch))
         self.prev = None
 
+    def meter(self):
+        """Ultimi campioni d'ingresso (mono, in ordine) per l'RTA: l'analisi la fa l'interfaccia."""
+        buf = getattr(self, "rbuf", None)
+        if buf is None:
+            return {}
+        return {"rta": np.concatenate((buf[self.rw:], buf[:self.rw]))}
+
     def process(self, x):
+        n = len(x)
+        if n:                    # ingresso nel buffer dell'RTA (costa una copia di un blocco)
+            if not hasattr(self, "rbuf"):
+                self.rbuf = np.zeros(self.RTA_N, np.float32)
+                self.rw = 0
+            mono = x.mean(axis=1) if x.ndim == 2 else x
+            k = min(n, self.RTA_N)
+            idx = (self.rw + np.arange(k)) % self.RTA_N
+            self.rbuf[idx] = mono[-k:]
+            self.rw = (self.rw + k) % self.RTA_N
         y = x
         if len(self.sos):
             y, self.zi = sosfilt(self.sos, x, axis=0, zi=self.zi)
@@ -195,6 +214,30 @@ class EQ(_Fx):
                 r = np.linspace(0.0, 1.0, len(x))[:, None]
                 y = yo + (y - yo) * r
         return (y * self.gain).astype(np.float32, copy=False)
+
+
+def comp_curve(p, x_db):
+    """Curva statica del compressore: livello d'uscita (dB) per livello d'entrata (dB), senza compensazione."""
+    x = np.asarray(x_db, np.float64)
+    thr, ratio, knee = float(p["thr"]), max(1.0, float(p["ratio"])), max(0.0, float(p["knee"]))
+    over = x - thr
+    slope = 1.0 - 1.0 / ratio
+    if knee > 0:
+        red = np.where(over <= -knee / 2, 0.0,
+                       np.where(over >= knee / 2, over * slope, slope * (over + knee / 2) ** 2 / (2 * knee)))
+    else:
+        red = np.maximum(over, 0.0) * slope
+    return x - red + float(p.get("makeup", 0.0))
+
+
+def gate_curve(p, x_db):
+    """Curva statica del gate: sotto soglia il segnale scende della riduzione da chiuso."""
+    x = np.asarray(x_db, np.float64)
+    return np.where(x >= float(p["thr"]), x, x + min(0.0, float(p["range"])))
+
+
+def _peak_db(x):
+    return 20 * math.log10(max(float(np.abs(x).max()) if len(x) else 0.0, 1e-6))
 
 
 class _Dyn(_Fx):
@@ -210,6 +253,7 @@ class _Dyn(_Fx):
             self.g = 0.0          # guadagno attuale (dB)
             self.env = -120.0     # livello rivelato (dB)
             self.gr = 0.0
+            self.lv_in = self.lv_out = -120.0   # picchi dell'ultimo blocco (vumeter)
 
     def reset(self):
         self.g, self.env, self.gr = 0.0, -120.0, 0.0
@@ -242,11 +286,19 @@ class _Dyn(_Fx):
         return (x * np.power(10.0, gdb / 20.0)[:, None]).astype(np.float32, copy=False)
 
     def meter(self):
-        return {"gr": self.gr}
+        return {"gr": self.gr, "in": self.lv_in, "out": self.lv_out}
+
+    def _meter_io(self, x, y):
+        self.lv_in = max(_peak_db(x), self.lv_in - 3.0)       # discesa morbida dei vumeter
+        self.lv_out = max(_peak_db(y), self.lv_out - 3.0)
+        return y
 
 
 class Compressor(_Dyn):
     def process(self, x):
+        return self._meter_io(x, self._process(x))
+
+    def _process(self, x):
         p = self.p
         thr, ratio, knee = float(p["thr"]), max(1.0, float(p["ratio"])), max(0.0, float(p["knee"]))
         lv, sizes = self._levels(x)
@@ -263,6 +315,9 @@ class Compressor(_Dyn):
 
 
 class Gate(_Dyn):
+    def process(self, x):
+        return self._meter_io(x, self._process(x))
+
     def setup(self):
         super().setup()
         p = self.p
@@ -278,7 +333,7 @@ class Gate(_Dyn):
         self.open, self.hold_left, self.gr = False, 0, 0.0
         self.g = float(self.p.get("range", -80))
 
-    def process(self, x):
+    def _process(self, x):
         p = self.p
         thr, rng = float(p["thr"]), min(0.0, float(p["range"]))
         lv, sizes = self._levels(x)
@@ -306,7 +361,7 @@ class Gate(_Dyn):
         return (x * np.power(10.0, gdb / 20.0)[:, None]).astype(np.float32, copy=False)
 
     def meter(self):
-        return {"gr": self.gr, "open": self.open}
+        return {"gr": self.gr, "open": self.open, "in": self.lv_in, "out": self.lv_out}
 
 
 def _onepole(kind, f):

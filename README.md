@@ -738,6 +738,16 @@ The “ALSA lib … underrun occurred” messages are no longer written to the t
 them again: `CUESTAGE_ALSA_MESSAGES=1 cuestage`. With PipeWire it is better to use the “pipewire” or “default”
 card instead of direct access (hw:), which is more sensitive to delays.
 
+### Diagnostics
+
+**Help › Diagnostics…** opens a window updated twice a second: **CPU** load of CueStage and of the system (load
+average and peak memory where available); for every **sound card** the audio buffer (block size in samples and
+milliseconds, latency reported by the card), the **time needed to compute each block** (average and maximum, also as a
+percentage of the block's duration: near 100 % the audio starts to drop out) and the **underruns**; the active voices
+and effect buses; the **video output** (size, frames per second, average and maximum drawing time, visible layers,
+preloaded videos); and the **log** of errors and messages of the audio and video engines. “Reset maxima” and
+“Copy to clipboard” (useful to send a report).
+
 ### Effects: cue racks and effect buses
 
 CueStage has its own built-in audio effects (written in numpy + scipy, identical on Linux, Windows and macOS; no
@@ -749,8 +759,11 @@ release, make-up gain), **delay** (time, feedback with high-/low-pass filters, p
 - **Cue rack** (inspector › **Effects** tab, audio and video cues): gate, EQ and compressor in the order you choose
   (drag to reorder, tick to switch on/off, “+ Effect”, “Remove”). They work **before** the cue's volume, curve and
   fades. Every effect is adjusted in its own **floating window** (double-click, or “Adjust…”) that stays above
-  CueStage; changes apply at once, also while the cue is playing, and the window shows the gain reduction or
-  whether the gate is open.
+  CueStage; changes apply at once, also while the cue is playing. In the **EQ** window the band points on the
+  response curve can be **dragged with the mouse** (frequency and gain; Shift = gain only) and the **wheel** over a
+  point widens or narrows the band (Q); behind the curve an **RTA** shows the spectrum of the EQ's input (1/6
+  octave). **Gate** and **compressor** show their **transfer curve** (input → output level, with threshold, knee
+  and the current working point) and the **input, gain-reduction and output meters**.
 - **Effect buses** (Settings › **Effect buses (reverb, delay…)…**, or “Effect buses…” in the Effects tab): each bus
   has a name, a sound card, a return level and mute, its own **rack** (gate, EQ, compressor, **delay** and
   **reverb**) and an **output matrix** like the cues' (stereo bus L/R × card outputs).

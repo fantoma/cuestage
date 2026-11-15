@@ -1952,6 +1952,9 @@ class Controller(QObject):
 
     def __init__(self, show, audio, loader, comp):
         super().__init__()
+        import collections
+        self.log = collections.deque(maxlen=300)        # messaggi ed errori (ora, testo): finestra Diagnostica
+        self.message.connect(lambda m: self.log.append((time.time(), str(m))))
         self.show = show
         self.audio = audio
         self.loader = loader

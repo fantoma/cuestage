@@ -239,9 +239,23 @@ class _OutputMixin:
         comp.listeners.append(self.update)
 
     def _paint(self, p):
+        import time as _t
+        t0 = _t.perf_counter()
         p.fillRect(self.rect(), Qt.black)
         render(p, self.comp, self.width(), self.height(), handles=self.edit_mode,
                active_corner=self.drag)
+        # diagnostica: tempo di disegno e fotogrammi al secondo dell'uscita
+        dt = _t.perf_counter() - t0
+        st = self.__dict__.setdefault("_diag", {"avg": 0.0, "max": 0.0, "n": 0, "total": 0, "t0": _t.monotonic(),
+                                                "fps": 0.0})
+        st["avg"] = dt if st["total"] == 0 else st["avg"] * 0.9 + dt * 0.1
+        st["max"] = max(st["max"], dt)
+        st["n"] += 1
+        st["total"] += 1
+        now = _t.monotonic()
+        if now - st["t0"] >= 1.0:
+            st["fps"] = st["n"] / (now - st["t0"])
+            st["n"], st["t0"] = 0, now
 
     def set_edit_mode(self, on):
         self.edit_mode = on

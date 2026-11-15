@@ -249,6 +249,12 @@ class Output:
         self.meter = np.zeros(channels, np.float32)
         self.null = False
         self.underruns = 0
+        # diagnostica: tempo di calcolo dei blocchi (s) rispetto alla loro durata
+        self.cb_last = 0.0
+        self.cb_avg = 0.0
+        self.cb_max = 0.0
+        self.cb_frames = 0
+        self.cb_count = 0
 
 
 class BusRuntime:
@@ -329,6 +335,8 @@ class AudioEngine:
         from .ducking import Ducker
         self.duck = Ducker()         # ingresso del ducking (microfono → riduzione delle cue / del master)
         self._mduck = {}             # chiave uscita -> ultimo guadagno del Master ducking (rampa senza scalini)
+        import collections
+        self.errors = collections.deque(maxlen=200)   # errori del mixer (ora, testo) per la finestra Diagnostica
 
     # ------------------------------------------------------------ compatibilità
     @property
@@ -511,6 +519,28 @@ class AudioEngine:
                 self.messages.append(tr("Rilettura schede audio non riuscita: {0}", e))
         self.start(self.default_id, self.channel_overrides)
 
+    def diagnostics(self):
+        """Stato di ogni uscita per la finestra Diagnostica."""
+        out = []
+        for o in {id(x): x for x in self.outputs.values()}.values():
+            blk = (o.cb_frames or BLOCK) / SR
+            lat = 0.0
+            if o.stream is not None:
+                try:
+                    lat = float(o.stream.latency)
+                except Exception:
+                    lat = 0.0
+            out.append({"name": o.name, "channels": o.channels, "null": o.null, "frames": o.cb_frames,
+                        "block_ms": blk * 1000, "latency_ms": lat * 1000, "last_ms": o.cb_last * 1000,
+                        "avg_ms": o.cb_avg * 1000, "max_ms": o.cb_max * 1000,
+                        "load": o.cb_avg / blk if blk else 0.0, "peak_load": o.cb_max / blk if blk else 0.0,
+                        "underruns": o.underruns, "blocks": o.cb_count})
+        return out
+
+    def reset_diagnostics(self):
+        for o in self.outputs.values():
+            o.cb_max = 0.0
+
     def underruns(self):
         return sum(o.underruns for o in {id(o): o for o in self.outputs.values()}.values())
 
@@ -656,7 +686,27 @@ class AudioEngine:
         return float(fade_value(g0, g1, done / max(length, 1), shape))
 
     # ------------------------------------------------------------ mixer
+    def note_error(self, where, e):
+        """Errore nel thread audio: non ferma il mixer, finisce nell'elenco della finestra Diagnostica."""
+        txt = f"{where}: {type(e).__name__}: {e}"
+        if not self.errors or self.errors[-1][1] != txt:
+            self.errors.append((time.time(), txt))
+
     def _callback(self, o, outdata, frames):
+        t0 = time.perf_counter()
+        try:
+            self._mix_block(o, outdata, frames)
+        except Exception as e:
+            self.note_error(tr("mixer «{0}»", o.name), e)
+            outdata[:] = 0
+        dt = time.perf_counter() - t0
+        o.cb_last = dt
+        o.cb_avg = dt if o.cb_count == 0 else o.cb_avg * 0.95 + dt * 0.05
+        o.cb_max = max(o.cb_max, dt)
+        o.cb_frames = frames
+        o.cb_count += 1
+
+    def _mix_block(self, o, outdata, frames):
         C = o.channels
         out = np.zeros((frames, C), np.float32)
         pout = None                       # preascolto: fuori dal master e dal Master ducking
@@ -675,15 +725,16 @@ class AudioEngine:
                         self._mix_voice(v, pout, frames, C)
                     else:
                         self._mix_voice(v, out, frames, C, bus_in)
-                except Exception:
+                except Exception as e:
+                    self.note_error(tr("voce"), e)
                     v.done = True
             for b in buses:                      # bus effetti: mandate delle cue → rack → uscite
                 try:
                     y = b.process(bus_in[b.id], frames, C)
                     if y is not None:
                         out += y
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.note_error(tr("bus «{0}»", b.spec.get("name") or b.id), e)
         # ingresso del ducking dopo il gate, nella cuffia del preascolto
         if self.preview.get("enabled") and o.key == self._key(self.preview.get("device") or None):
             mic = self.duck.read_preview(frames)

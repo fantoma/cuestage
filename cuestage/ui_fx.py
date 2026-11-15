@@ -2,7 +2,7 @@
 per ogni effetto, curva dell'EQ, mandate delle cue ai bus e finestra dei bus effetti."""
 import math
 
-from PySide6.QtCore import QPointF, Qt, QTimer, Signal
+from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFormLayout, QGridLayout, QGroupBox,
@@ -124,12 +124,117 @@ class _ParamRow(QWidget):
 
 
 class EqCurve(QWidget):
-    """Curva di risposta dell'EQ (20 Hz – 20 kHz, ±18 dB) con i punti delle bande."""
+    """Curva di risposta dell'EQ (20 Hz – 20 kHz, ±18 dB) con i punti delle bande: si trascinano con il mouse
+    (frequenza e guadagno) e la rotella sopra un punto allarga o restringe la banda (Q)."""
+    bandChanged = Signal(int, dict)        # banda, {chiave: valore}
 
     def __init__(self, get_fx, parent=None):
         super().__init__(parent)
         self.get_fx = get_fx
-        self.setMinimumSize(420, 170)
+        self.drag = None
+        self.hover = None
+        self.rta = None              # (frequenze, dBFS) dell'analizzatore di spettro dell'ingresso
+        self.setMinimumSize(420, 190)
+        self.setMouseTracking(True)
+
+    RTA_FREQS = None
+
+    def set_rta(self, samples):
+        """Analizzatore di spettro (RTA) dell'ingresso: FFT con finestra di Hann, bande da 1/6 di ottava,
+        salita veloce e discesa lenta. samples = ultimi campioni d'ingresso (mono) o None."""
+        import numpy as _np
+        if samples is None or len(samples) < 1024:
+            if self.rta is not None:
+                self.rta = None
+                self.update()
+            return
+        n = len(samples)
+        win = _np.hanning(n)
+        spec = _np.abs(_np.fft.rfft(samples * win)) * (2.0 / win.sum())
+        fr = _np.fft.rfftfreq(n, 1.0 / dsp.SR)
+        if EqCurve.RTA_FREQS is None:
+            EqCurve.RTA_FREQS = 20.0 * 2 ** (_np.arange(0, 10 * 6 + 1) / 6.0)
+        centers = EqCurve.RTA_FREQS
+        lo, hi = centers * 2 ** (-1 / 12), centers * 2 ** (1 / 12)
+        pw = spec ** 2
+        cum = _np.concatenate(([0.0], _np.cumsum(pw)))
+        i0 = _np.searchsorted(fr, lo)
+        i1 = _np.maximum(_np.searchsorted(fr, hi), i0 + 1)
+        band = _np.sqrt((cum[i1] - cum[i0]))
+        db = 20 * _np.log10(_np.maximum(band, 1e-7))
+        if self.rta is not None and len(self.rta[1]) == len(db):
+            old = self.rta[1]
+            db = _np.where(db > old, db, old * 0.7 + db * 0.3 - 0.0)   # discesa morbida
+        self.rta = (centers, db)
+        self.update()
+
+    def _y_rta(self, db):
+        """RTA: scala propria −90…0 dBFS su tutta l'altezza."""
+        h = self.height() - 20
+        return 10 + h * (1.0 - (max(-90.0, min(0.0, db)) + 90.0) / 90.0)
+
+    def _f_at(self, x):
+        return 20.0 * 10 ** (3.0 * (x - 30) / max(1.0, self.width() - 40))
+
+    def _db_at(self, y):
+        h = self.height() - 20
+        return (0.5 - (y - 10) / max(1.0, h)) * 36.0
+
+    def _band_at(self, pos):
+        fx = self.get_fx()
+        if fx is None:
+            return None
+        best, bd = None, 14.0 ** 2
+        for i, b in enumerate(dsp.params(fx)["bands"]):
+            if not b.get("on", True):
+                continue
+            dx = self._x(float(b["f"])) - pos.x()
+            dy = self._y(float(b["g"])) - pos.y()
+            if dx * dx + dy * dy < bd:
+                best, bd = i, dx * dx + dy * dy
+        return best
+
+    def mousePressEvent(self, e):
+        if e.button() == Qt.LeftButton:
+            self.drag = self._band_at(e.position())
+            if self.drag is not None:
+                self.setCursor(Qt.ClosedHandCursor)
+
+    def mouseMoveEvent(self, e):
+        pos = e.position()
+        if self.drag is None:
+            b = self._band_at(pos)
+            if b != self.hover:
+                self.hover = b
+                self.setCursor(Qt.OpenHandCursor if b is not None else Qt.ArrowCursor)
+                self.setToolTip(tr("Trascina: frequenza e guadagno · rotella: larghezza della banda (Q)")
+                                if b is not None else "")
+            return
+        f = max(20.0, min(20000.0, self._f_at(pos.x())))
+        g = max(-18.0, min(18.0, self._db_at(pos.y())))
+        if e.modifiers() & Qt.ShiftModifier:            # Shift: solo il guadagno
+            self.bandChanged.emit(self.drag, {"g": round(g, 1)})
+        else:
+            self.bandChanged.emit(self.drag, {"f": round(f, 0 if f >= 100 else 1), "g": round(g, 1)})
+        self.update()
+
+    def mouseReleaseEvent(self, e):
+        if self.drag is not None:
+            self.drag = None
+            self.setCursor(Qt.OpenHandCursor)
+
+    def wheelEvent(self, e):
+        i = self._band_at(e.position())
+        fx = self.get_fx()
+        if i is None or fx is None:
+            e.ignore()
+            return
+        q = float(dsp.params(fx)["bands"][i].get("q", 1.0))
+        step = 1.12 if e.angleDelta().y() > 0 else 1 / 1.12          # rotella in su = banda più stretta
+        q = max(0.1, min(10.0, q * step))
+        self.bandChanged.emit(i, {"q": round(q, 2)})
+        self.update()
+        e.accept()
 
     def _x(self, f):
         return 30 + (self.width() - 40) * math.log10(f / 20.0) / 3.0
@@ -158,6 +263,22 @@ class EqCurve(QWidget):
             p.drawLine(QPointF(30, y), QPointF(self.width() - 10, y))
             p.setPen(QColor("#777"))
             p.drawText(QPointF(2, y + 4), f"{db:+d}")
+        if self.rta is not None:                  # spettro dell'ingresso, dietro la curva
+            fr, db = self.rta
+            poly = QPainterPath()
+            base = self._y_rta(-90.0)
+            poly.moveTo(QPointF(self._x(float(fr[0])), base))
+            for f, d in zip(fr, db):
+                if 20.0 <= f <= 20000.0:
+                    poly.lineTo(QPointF(self._x(float(f)), self._y_rta(float(d))))
+            poly.lineTo(QPointF(self._x(float(min(fr[-1], 20000.0))), base))
+            poly.closeSubpath()
+            p.setPen(QPen(QColor(120, 200, 120, 150), 1))
+            p.setBrush(QColor(120, 200, 120, 45))
+            p.drawPath(poly)
+            p.setBrush(Qt.NoBrush)
+            p.setPen(QColor("#6a9a6a"))
+            p.drawText(QPointF(self.width() - 92, 22), tr("RTA ingresso"))
         if fx is None:
             return
         prm = dsp.params(fx)
@@ -180,6 +301,107 @@ class EqCurve(QWidget):
             p.setBrush(QColor("#ffaa28"))
             p.drawEllipse(pt, 5, 5)
             p.drawText(pt + QPointF(6, -6), str(i + 1))
+
+
+class DynGraph(QWidget):
+    """Curva del gate o del compressore: livello d'uscita in funzione di quello d'entrata (−60…0 dB), con la
+    soglia e il punto di lavoro attuale (picco d'entrata)."""
+    LO = -60.0
+
+    def __init__(self, kind, get_fx, parent=None):
+        super().__init__(parent)
+        self.kind, self.get_fx = kind, get_fx
+        self.point = None
+        self.setMinimumSize(220, 220)
+
+    def set_point(self, db):
+        self.point = db
+        self.update()
+
+    def _map(self, x_db, y_db):
+        s = min(self.width(), self.height()) - 36
+        x0, y0 = 28, 8
+        fx = (max(self.LO, min(0.0, x_db)) - self.LO) / -self.LO
+        fy = (max(self.LO, min(12.0, y_db)) - self.LO) / -self.LO
+        return QPointF(x0 + fx * s, y0 + s - fy * s)
+
+    def paintEvent(self, _e):
+        fx = self.get_fx()
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.fillRect(self.rect(), QColor("#16181d"))
+        small = QFont()
+        small.setPointSizeF(max(6.5, small.pointSizeF() * 0.75))
+        p.setFont(small)
+        for db in range(-60, 1, 12):
+            a, b = self._map(db, self.LO), self._map(db, 0)
+            c, d = self._map(self.LO, db), self._map(0, db)
+            p.setPen(QPen(QColor("#2a2e36"), 1))
+            p.drawLine(a, b)
+            p.drawLine(c, d)
+            p.setPen(QColor("#777"))
+            p.drawText(QPointF(2, d.y() + 4), str(db))
+            p.drawText(a + QPointF(-8, 12), str(db))
+        p.setPen(QPen(QColor("#444"), 1, Qt.DashLine))
+        p.drawLine(self._map(self.LO, self.LO), self._map(0, 0))          # diagonale 1:1
+        if fx is None:
+            return
+        prm = dsp.params(fx)
+        xs = [self.LO + i * (-self.LO) / 120 for i in range(121)]
+        ys = (dsp.comp_curve if self.kind == "comp" else dsp.gate_curve)(prm, xs)
+        thr = float(prm["thr"])
+        p.setPen(QPen(QColor("#ffaa28"), 1, Qt.DotLine))
+        p.drawLine(self._map(thr, self.LO), self._map(thr, 0))
+        path = QPainterPath()
+        for i, (x, y) in enumerate(zip(xs, ys)):
+            pt = self._map(x, float(y))
+            path.moveTo(pt) if i == 0 else path.lineTo(pt)
+        p.setPen(QPen(QColor("#50c8ff") if fx.get("on", True) else QColor("#666"), 2))
+        p.drawPath(path)
+        if self.point is not None and self.point > self.LO:
+            y = float((dsp.comp_curve if self.kind == "comp" else dsp.gate_curve)(prm, [self.point])[0])
+            p.setPen(Qt.NoPen)
+            p.setBrush(QColor("#ffffff"))
+            p.drawEllipse(self._map(self.point, y), 4.5, 4.5)
+
+
+class LevelMeter(QWidget):
+    """Vumeter verticale (−60…0 dBFS); con reduction=True mostra la riduzione di guadagno dall'alto (0…−30 dB)."""
+
+    def __init__(self, label, reduction=False, parent=None):
+        super().__init__(parent)
+        self.label, self.reduction = label, reduction
+        self.db = 0.0 if reduction else -120.0
+        self.setFixedWidth(30)
+        self.setMinimumHeight(180)
+
+    def set_db(self, db):
+        db = float(db)
+        if abs(db - self.db) > 0.05:
+            self.db = db
+            self.update()
+
+    def paintEvent(self, _e):
+        p = QPainter(self)
+        h = self.height() - 34
+        x, w, top = 6, self.width() - 12, 4
+        p.fillRect(x, top, w, h, QColor("#16181d"))
+        if self.reduction:
+            f = max(0.0, min(1.0, -self.db / 30.0))
+            p.fillRect(x, top, w, int(h * f), QColor("#ffaa28"))
+            txt = f"{self.db:.0f}" if self.db < -0.5 else "0"
+        else:
+            f = max(0.0, min(1.0, (self.db + 60.0) / 60.0))
+            col = QColor("#e05050") if self.db > -3 else QColor("#e0b040") if self.db > -12 else QColor("#50c070")
+            hh = int(h * f)
+            p.fillRect(x, top + h - hh, w, hh, col)
+            txt = "-∞" if self.db <= -59.5 else f"{self.db:.0f}"
+        p.setPen(QColor("#ccc"))
+        small = QFont()
+        small.setPointSizeF(max(6.5, small.pointSizeF() * 0.75))
+        p.setFont(small)
+        p.drawText(QRectF(0, top + h + 2, self.width(), 14), Qt.AlignHCenter, txt)
+        p.drawText(QRectF(0, top + h + 15, self.width(), 14), Qt.AlignHCenter, self.label)
 
 
 class FxWindow(QDialog):
@@ -245,6 +467,8 @@ class FxWindow(QDialog):
         self.on_change()
         if self.kind == "eq":
             self.curve.update()
+        elif self.kind in ("gate", "comp") and getattr(self, "graph", None) is not None:
+            self.graph.update()
 
     def _defaults(self):
         fx = self.fx()
@@ -268,11 +492,28 @@ class FxWindow(QDialog):
         if self.kind == "eq":
             self._build_eq(p)
             return
-        f = QFormLayout(self.body)
+        if self.kind in ("gate", "comp"):
+            outer = QVBoxLayout(self.body)
+            outer.setContentsMargins(0, 0, 0, 0)
+            top = QHBoxLayout()
+            self.graph = DynGraph(self.kind, self.fx)
+            top.addWidget(self.graph, 1)
+            self.meters = {}
+            for key, label in (("in", tr("In")), ("gr", tr("Rid.")), ("out", tr("Out"))):
+                m = LevelMeter(label, reduction=(key == "gr"))
+                self.meters[key] = m
+                top.addWidget(m)
+            outer.addLayout(top)
+            f = QFormLayout()
+            outer.addLayout(f)
+        else:
+            f = QFormLayout(self.body)
         for key, label, lo, hi, step, dec, unit, log in PARAMS.get(self.kind, []):
             row = _ParamRow(lo, hi, step, dec, unit, log, p.get(key, lo))
             row.changed.connect(lambda val, key=key: self._set(key, float(val)))
             f.addRow(label, row)
+        if self.kind in ("gate", "comp"):
+            self.graph.update()
         if self.kind == "delay":
             cb = QCheckBox(tr("Ping-pong (l'eco rimbalza tra sinistra e destra)"))
             cb.setChecked(bool(p.get("pingpong")))
@@ -280,17 +521,37 @@ class FxWindow(QDialog):
             f.addRow(cb)
         self.adjustSize()
 
+    def _curve_band(self, i, vals):
+        """Punto della banda trascinato nella curva (o rotella): valori e caselle aggiornati."""
+        fx = self.fx()
+        if fx is None:
+            return
+        bands = dsp.params(fx)["bands"]
+        bands[i].update(vals)
+        fx["bands"] = bands
+        rows = self.band_rows[i] if i < len(self.band_rows) else {}
+        for k, val in vals.items():
+            if k in rows:
+                rows[k].set(val)
+        self.on_change()
+
     def _build_eq(self, p):
         v = QVBoxLayout(self.body)
         v.setContentsMargins(0, 0, 0, 0)
         self.curve = EqCurve(self.fx)
+        self.curve.bandChanged.connect(self._curve_band)
+        self.band_rows = []
         v.addWidget(self.curve)
+        hint = QLabel(tr("Trascina i punti delle bande (Shift: solo il guadagno) · rotella sopra un punto: Q"))
+        hint.setStyleSheet("color:#888;font-size:11px;")
+        v.addWidget(hint)
         g = QGridLayout()
         for col, text in enumerate((tr("Banda"), tr("Tipo"), tr("Frequenza"), tr("Guadagno"), tr("Q"))):
             lab = QLabel(text)
             lab.setStyleSheet("color:#999;")
             g.addWidget(lab, 0, col)
         for i, b in enumerate(p["bands"]):
+            self.band_rows.append({})
             on = QCheckBox(str(i + 1))
             on.setChecked(bool(b.get("on", True)))
             on.toggled.connect(lambda val, i=i: self._set("on", bool(val), band=i))
@@ -307,6 +568,7 @@ class FxWindow(QDialog):
                 row = _ParamRow(lo, hi, step, dec, unit, log, b.get(key, lo))
                 row.changed.connect(lambda val, key=key, i=i: self._set(key, float(val), band=i))
                 g.addWidget(row, i + 1, col)
+                self.band_rows[i][key] = row
         v.addLayout(g)
         f = QFormLayout()
         for pre, label in (("hpf", tr("Passa-alto")), ("lpf", tr("Passa-basso"))):
@@ -341,6 +603,18 @@ class FxWindow(QDialog):
             self.on_cb.setChecked(bool(fx.get("on", True)))
             self.on_cb.blockSignals(False)
         m = self.meter_fn(self.fid) if self.meter_fn else None
+        if self.kind == "eq" and getattr(self, "curve", None) is not None:
+            try:
+                self.curve.set_rta((m or {}).get("rta"))
+            except RuntimeError:
+                pass
+            m = None
+        if self.kind in ("gate", "comp") and getattr(self, "meters", None):
+            mm = m or {}
+            self.meters["in"].set_db(mm.get("in", -120.0))
+            self.meters["out"].set_db(mm.get("out", -120.0))
+            self.meters["gr"].set_db(mm.get("gr", 0.0))
+            self.graph.set_point(mm.get("in") if m else None)
         if not m:
             self.meter.setText("")
         elif self.kind == "gate":

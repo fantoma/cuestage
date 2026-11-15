@@ -671,7 +671,19 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
 
         m = mb.addMenu(tr("&Aiuto"))
         add(m, tr("Comandi OSC / MIDI / tastiera"), lambda: HelpDialog(self).exec())
+        add(m, tr("Diagnostica…"), self.diagnostics_dialog)
         add(m, tr("Informazioni"), self._about)
+
+    def diagnostics_dialog(self):
+        """Aiuto › Diagnostica: carico del processore, buffer audio, uscita video, errori."""
+        from .ui_diag import DiagnosticsDialog
+        d = getattr(self, "_diag_dlg", None)
+        if d is None:
+            d = self._diag_dlg = DiagnosticsDialog(self)
+        d.show()
+        d.raise_()
+        d.activateWindow()
+        return d
 
     def _about(self):
         from . import __version__
