@@ -94,7 +94,7 @@ if IS_MAC:
             "CFBundleShortVersionString": VERSION,
             "CFBundleVersion": VERSION,
             "NSHighResolutionCapable": True,
-            "LSMinimumSystemVersion": "12.0",
+            "LSMinimumSystemVersion": os.environ.get("MACOS_MIN", "12.0"),   # vedi build_macos.sh
             # macOS 15+: senza questa voce non si raggiungono mixer, proiettori, OSC e istanze in rete locale
             "NSLocalNetworkUsageDescription": "CueStage comanda mixer, proiettori, luci (OSC) e altre istanze "
                                               "di CueStage sulla rete locale.",

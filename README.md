@@ -91,6 +91,12 @@ Windows:  powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1
 macOS:    packaging/build_macos.sh
 ```
 
+The macOS build installs the libraries compiled for **macOS 12** (not for the Mac that builds it: pip would
+otherwise pick numpy/scipy for macOS 14 and Qt 6.10+, which needs macOS 13, and the app would close right after
+opening on older systems). For the same reason PySide6 stays at 6.9 on macOS (`packaging/macos/constraints.txt`).
+After PyInstaller, `packaging/check_macos_min.py` checks every library inside CueStage.app and stops the build if one
+needs a newer macOS. `MACOS_MIN=13.0 packaging/build_macos.sh` raises the minimum.
+
 ## Interface language
 
 **Settings › Language**: Italiano, English, slovenščina. The choice belongs to the computer (not the show)

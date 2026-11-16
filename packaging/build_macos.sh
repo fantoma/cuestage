@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Costruisce CueStage.app e il .dmg per macOS (12 Monterey o successivo).
+# Costruisce CueStage.app e il .dmg per macOS (12 Monterey o successivo; MACOS_MIN=13.0 per alzarlo).
 #
 #   packaging/build_macos.sh                 (dalla cartella del progetto, su un Mac)
 #
@@ -25,7 +25,19 @@ mkdir -p "$BUILD" "$CACHE" dist
 say "ambiente Python ($("$PY" --version))"
 "$PY" -m venv "$BUILD/venv"
 "$BUILD/venv/bin/pip" install -q --upgrade pip
-"$BUILD/venv/bin/pip" install -q -r requirements.txt pyinstaller
+# Librerie compilate per il macOS minimo (MACOS_MIN), non per il Mac che costruisce: su un Mac recente pip
+# prenderebbe numpy/scipy «macosx_14_0» e PySide6 6.10+ (macOS 13+) e su Monterey l'app si chiuderebbe subito.
+# PySide6 resta sotto la 6.10 (Qt 6.10 richiede macOS 13).
+MACOS_MIN="${MACOS_MIN:-12.0}"
+PYV="$("$BUILD/venv/bin/python" -c 'import sys; print(f"{sys.version_info[0]}{sys.version_info[1]}")')"
+WHEELS="$BUILD/wheels-$ARCH"
+rm -rf "$WHEELS"
+"$BUILD/venv/bin/pip" download -q --only-binary=:all: --platform "macosx_${MACOS_MIN/./_}_$ARCH" \
+    --python-version "$PYV" --implementation cp -d "$WHEELS" -r requirements.txt -c packaging/macos/constraints.txt
+"$BUILD/venv/bin/pip" install -q --no-index --find-links "$WHEELS" -r requirements.txt \
+    -c packaging/macos/constraints.txt
+"$BUILD/venv/bin/pip" install -q pyinstaller
+"$BUILD/venv/bin/python" -c "import PySide6, numpy, scipy; print('PySide6', PySide6.__version__, '· numpy', numpy.__version__, '· scipy', scipy.__version__)"
 
 say "ffmpeg per $ARCH"
 case "$ARCH" in arm64) FFZ=darwin_arm64 ;; *) FFZ=darwin ;; esac
@@ -43,6 +55,9 @@ CUESTAGE_FFMPEG_DIR="$BUILD/ffmpeg" CUESTAGE_MAC_ARCH="$ARCH" \
     "$BUILD/venv/bin/pyinstaller" packaging/cuestage.spec --noconfirm --distpath dist --workpath "$BUILD/pyi"
 rm -rf dist/CueStage                                  # resta solo CueStage.app
 APP="dist/CueStage.app"
+
+say "compatibilità con macOS $MACOS_MIN"
+"$BUILD/venv/bin/python" packaging/check_macos_min.py "$APP" "$MACOS_MIN"
 
 SIGN="${CUESTAGE_CODESIGN_ID:--}"                     # «-» = firma ad hoc (gratuita, solo locale)
 say "firma ($([ "$SIGN" = "-" ] && echo "ad hoc" || echo "$SIGN"))"
