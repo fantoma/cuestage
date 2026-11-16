@@ -78,12 +78,6 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
                 f()
             except RuntimeError:
                 pass
-        from .ui_fx import RackEditor, SendsEditor
-        for ed in self.findChildren(RackEditor) + self.findChildren(SendsEditor):   # rack e mandate (preset)
-            try:
-                ed.reload()
-            except RuntimeError:
-                pass
         if self.crop_panel is not None:
             self.crop_panel.refresh()
         if getattr(self, "_text_redraw", None) is not None:
@@ -241,6 +235,12 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
                 fn()
             finally:
                 w.blockSignals(False)
+        from .ui_fx import RackEditor, SendsEditor
+        for ed in self.findChildren(RackEditor) + self.findChildren(SendsEditor):   # rack e mandate (preset)
+            try:
+                ed.reload()
+            except RuntimeError:
+                pass
         if self.crop_panel is not None:
             self.crop_panel.refresh()
         mp = getattr(self, "markers_panel", None)

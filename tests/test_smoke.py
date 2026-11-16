@@ -3315,6 +3315,20 @@ def t_bus_live_edit(w):
     run(0.1)
     se = [x for x in ins.findChildren(SendsEditor) if b["id"] in x.rows and x.isVisible()][0]
     se.rows[b["id"]][0].setValue(-6.0)
+    # mandata con fader orizzontale: 0 dB a tre quarti della corsa, in fondo «spenta», doppio clic = 0 dB
+    from cuestage.ui_fx import SendFader
+    fd = se.rows[b["id"]][0]
+    assert isinstance(fd, SendFader) and c.sends[0]["db"] == -6.0
+    for db in (-60.0, -30.0, -6.0, 0.0, 6.0, 12.0):
+        assert abs(SendFader.to_db(SendFader.to_pos(db)) - db) < 0.15, db
+    assert SendFader.to_pos(0.0) == 750 and SendFader.to_pos(-60.0) == 0
+    fd.sl.setValue(1000)
+    assert c.sends[0]["db"] == 12.0
+    fd.sl.setValue(0)
+    assert not c.sends                                       # in fondo: mandata spenta
+    fd.sl.setValue(SendFader.to_pos(-6.0))
+    assert abs(c.sends[0]["db"] + 6.0) < 0.1
+    fd.setValue(-6.0)
     bar = [x for x in ins.findChildren(PresetBar) if x.cue is c][0]
     bar._store("A")
     bar.reload("A")

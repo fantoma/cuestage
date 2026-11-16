@@ -803,7 +803,9 @@ send only the effect to the PA.
 - **Effect buses** (Settings › **Effect buses (reverb, delay…)…**, or “Effect buses…” in the Effects tab): each bus
   has a name, a sound card, a return level and mute, its own **rack** (gate, EQ, compressor, **delay** and
   **reverb**) and an **output matrix** like the cues' (stereo bus L/R × card outputs).
-- **Sends**: in the Effects tab each cue sends part of its sound to the buses (level, *spenta/off* = no send;
+- **Sends**: in the Effects tab each cue sends part of its sound to the buses with a **horizontal fader** per bus
+  (fader travel: 0 dB at three quarters, finer resolution near the top, all the way left = *spenta/off*; the value
+  can also be typed in the box next to it; double-click on the fader = 0 dB) (level, *spenta/off* = no send;
   **pre** = independent of the cue's volume and fades, otherwise it follows them). One reverb serves many cues and
   its **tail keeps ringing naturally** after a cue ends. **STOP with nothing playing** (a second Esc) also silences
   the bus tails. A bus that receives nothing and has finished its tail does not use the CPU.

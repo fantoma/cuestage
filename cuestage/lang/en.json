@@ -2188,6 +2188,7 @@
   "Spento: il pitch è nel feedback e ogni ripetizione sale (o scende) rispetto alla precedente. Acceso: si sposta solo l'uscita del delay, utile per un glissando con la cue «Controllo bus».": "Off: the pitch is in the feedback and every repeat goes up (or down) from the previous one. On: only the delay output is shifted, useful for a glissando with a “Bus control” cue.",
   "pitch {0:+.1f} st": "pitch {0:+.1f} st",
   "pitch {0:+.1f} st a ripetizione": "pitch {0:+.1f} st per repeat",
-  "⚡ Il bus sta usando valori impostati dal vivo da una cue (Controllo bus o Cambia preset): qui vedi quelli in uso; le modifiche valgono subito e restano nello show. «Ripristina» torna ai valori salvati.": "⚡ The bus is using values set live by a cue (Bus control or Change preset): here you see the ones in use; changes apply at once and stay in the show. “Restore” goes back to the saved values."
+  "⚡ Il bus sta usando valori impostati dal vivo da una cue (Controllo bus o Cambia preset): qui vedi quelli in uso; le modifiche valgono subito e restano nello show. «Ripristina» torna ai valori salvati.": "⚡ The bus is using values set live by a cue (Bus control or Change preset): here you see the ones in use; changes apply at once and stay in the show. “Restore” goes back to the saved values.",
+  "Doppio clic: 0 dB": "Double-click: 0 dB"
  }
 }

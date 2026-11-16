@@ -849,6 +849,88 @@ class RackEditor(QWidget):
                 self.list.blockSignals(False)
 
 
+class SendFader(QWidget):
+    """Fader orizzontale di una mandata: corsa da fader (0 dB a tre quarti, più risoluzione in alto), −60 = spenta,
+    casella numerica accanto, doppio clic sul fader = 0 dB. Stessa interfaccia di una casella numerica
+    (value / setValue / valueChanged)."""
+    valueChanged = Signal(float)
+    UNITY = 0.75                     # posizione dello 0 dB
+
+    def __init__(self, db, parent=None):
+        super().__init__(parent)
+        h = QHBoxLayout(self)
+        h.setContentsMargins(0, 0, 0, 0)
+        self.sl = QSlider(Qt.Horizontal)
+        self.sl.setRange(0, 1000)
+        self.sl.setMinimumWidth(160)
+        self.sl.setTickPosition(QSlider.TicksBelow)
+        self.sl.setTickInterval(250)              # tacche: −∞, −25, −11, 0 (a tre quarti), +12 dB
+        self.sl.setToolTip(tr("Doppio clic: 0 dB"))
+        self.sl.installEventFilter(self)
+        self.sp = QDoubleSpinBox()
+        self.sp.setRange(-60.0, 12.0)
+        self.sp.setDecimals(1)
+        self.sp.setSingleStep(1.0)
+        self.sp.setSuffix(" dB")
+        self.sp.setSpecialValueText(tr("spenta"))
+        self.sp.setKeyboardTracking(False)
+        self.sp.setMinimumWidth(84)
+        h.addWidget(self.sl, 1)
+        h.addWidget(self.sp)
+        self.setValue(db)
+        self.sl.valueChanged.connect(self._from_slider)
+        self.sp.valueChanged.connect(self._from_spin)
+
+    @classmethod
+    def to_pos(cls, db):
+        db = max(-60.0, min(12.0, float(db)))
+        if db >= 0.0:
+            f = cls.UNITY + (1.0 - cls.UNITY) * db / 12.0
+        else:
+            f = cls.UNITY * ((db + 60.0) / 60.0) ** 2
+        return int(round(f * 1000))
+
+    @classmethod
+    def to_db(cls, pos):
+        f = max(0.0, min(1.0, pos / 1000.0))
+        if f >= cls.UNITY:
+            return 12.0 * (f - cls.UNITY) / (1.0 - cls.UNITY)
+        return -60.0 + 60.0 * math.sqrt(f / cls.UNITY)
+
+    def value(self):
+        return self.sp.value()
+
+    def setValue(self, db):
+        db = max(-60.0, min(12.0, float(db)))
+        for w in (self.sp, self.sl):
+            w.blockSignals(True)
+        self.sp.setValue(db)
+        self.sl.setValue(self.to_pos(db))
+        for w in (self.sp, self.sl):
+            w.blockSignals(False)
+        self.valueChanged.emit(self.sp.value())
+
+    def _from_slider(self, pos):
+        db = round(self.to_db(pos), 1)
+        self.sp.blockSignals(True)
+        self.sp.setValue(db)
+        self.sp.blockSignals(False)
+        self.valueChanged.emit(self.sp.value())
+
+    def _from_spin(self, db):
+        self.sl.blockSignals(True)
+        self.sl.setValue(self.to_pos(db))
+        self.sl.blockSignals(False)
+        self.valueChanged.emit(db)
+
+    def eventFilter(self, obj, e):
+        from PySide6.QtCore import QEvent
+        if obj is self.sl and e.type() == QEvent.MouseButtonDblClick:
+            self.setValue(0.0)
+            return True
+        return False
+
+
 class SendsEditor(QWidget):
     """Mandate di una cue ai bus effetti: livello (spenta = −∞) e «pre» (prima di volume e fade)."""
     changed = Signal()
@@ -872,15 +954,8 @@ class SendsEditor(QWidget):
         for r, b in enumerate(bl):
             s = cur.get(b["id"], {})
             g.addWidget(QLabel(b.get("name") or tr("Bus")), r, 0)
-            sp = QDoubleSpinBox()
-            sp.setRange(-60.0, 12.0)
-            sp.setDecimals(1)
-            sp.setSingleStep(1.0)
-            sp.setSuffix(" dB")
-            sp.setSpecialValueText(tr("spenta"))
-            sp.setKeyboardTracking(False)
             db = s.get("db")
-            sp.setValue(-60.0 if db is None else float(db))
+            sp = SendFader(-60.0 if db is None else float(db))
             pre = QCheckBox(tr("pre"))
             pre.setToolTip(tr("Pre: la mandata non segue il volume e i fade della cue (post: li segue)"))
             pre.setChecked(bool(s.get("pre")))
@@ -889,7 +964,7 @@ class SendsEditor(QWidget):
             pre.toggled.connect(lambda _v, b=b, sp=sp, pre=pre: self._set(b["id"], sp, pre))
             g.addWidget(sp, r, 1)
             g.addWidget(pre, r, 2)
-        g.setColumnStretch(3, 1)
+        g.setColumnStretch(1, 1)
 
     def reload(self):
         """Rilegge le mandate della cue (es. dopo «Applica» di un preset)."""
