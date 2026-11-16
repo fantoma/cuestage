@@ -3185,6 +3185,71 @@ def t_small_buffers(w):
     w.output.hide()
 
 
+def t_delay_pitch(w):
+    """Delay con pitch: nel feedback ogni ripetizione sale di «pitch» semitoni rispetto alla precedente (anche in
+    giù), solo sull'uscita tutte le ripetizioni hanno lo stesso spostamento; il tempo delle ripetizioni non
+    cambia, il risultato non dipende dal buffer; il pitch si sfuma con la cue Controllo bus."""
+    import numpy as _np
+    from cuestage import dsp
+    from cuestage.buses import control_params, new_bus
+    if not dsp.available():
+        return
+    SR = dsp.SR
+
+    def echoes(pitch, out_mode=False, block=512):
+        fx = dsp.new_fx("delay")
+        fx.update(time=300.0, feedback=70.0, mix=100.0, pitch=pitch, pitch_out=out_mode, lp=12000, hp=50)
+        r = dsp.Rack([fx], 2, dsp.BUS_FX)
+        n = int(SR * 1.6)
+        x = _np.zeros((n, 2), _np.float32)
+        t = _np.arange(int(SR * 0.1)) / SR
+        x[:len(t), 0] = x[:len(t), 1] = 0.5 * _np.sin(2 * _np.pi * 440 * t) * _np.hanning(len(t))
+        y = _np.concatenate([r.process(x[i:i + block]) for i in range(0, n, block)])
+        res = []
+        for k in range(1, 5):
+            s0 = int(SR * 0.3 * k)
+            seg = y[s0:s0 + int(SR * 0.1), 0]
+            sp = _np.abs(_np.fft.rfft(seg * _np.hanning(len(seg)), 8 * len(seg)))
+            res.append(_np.argmax(sp) * SR / (8 * len(seg)))
+        return _np.array(res), y
+    f, y = echoes(2.0)
+    exp = 440 * 2 ** (2 * _np.arange(1, 5) / 12)
+    assert _np.all(_np.abs(f / exp - 1) < 0.02), (f, exp)
+    # la prima ripetizione arriva a 300 ms come senza pitch (la latenza dello shifter è compensata)
+    on = int(_np.argmax(_np.abs(y[int(SR * 0.2):, 0]) > 0.05)) + int(SR * 0.2)
+    assert abs(on / SR - 0.3) < 0.02, on / SR
+    f128, _y = echoes(2.0, block=128)
+    assert _np.allclose(f, f128)
+    f, _y = echoes(-3.0)
+    exp = 440 * 2 ** (-3 * _np.arange(1, 5) / 12)
+    assert _np.all(_np.abs(f / exp - 1) < 0.02), (f, exp)
+    f, _y = echoes(2.0, True)                        # solo uscita: tutte a +2 semitoni
+    assert _np.all(_np.abs(f / (440 * 2 ** (2 / 12)) - 1) < 0.02), f
+    f, _y = echoes(0.0)
+    assert _np.all(_np.abs(f - 440) < 3), f
+    # parametro tra quelli della cue Controllo bus (sfumabile)
+    assert "pitch" in [r[0] for r in control_params("delay")]
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    bc = Cue("buscontrol", number="1", name="Gliss")
+    sh.cues = [bc]
+    w._set_show(sh)
+    run(0.2)
+    b = new_bus(sh, "Eco", ("delay",))
+    sh.dirty = True
+    assert wait_until(lambda: b["id"] in w.ctrl.audio.buses, 5)
+    bc.bus_target = b["id"]
+    bc.bus_set = {"fx": {b["fx"][0]["id"]: {"pitch": 12.0}}}
+    bc.fade_duration = 0.6
+    w.ctrl.start_cue(bc)
+    run(0.3)
+    mid = w.ctrl.bus_spec(b)["fx"][0]["pitch"]
+    assert 0.5 < mid < 12.0, mid
+    assert wait_until(lambda: abs(w.ctrl.audio.buses[b["id"]].rack.procs[b["fx"][0]["id"]].pitch - 12.0) < 1e-6, 3)
+    w.ctrl.stop_all(0)
+    run(0.2)
+
+
 def t_memo_skip(w):
     """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
     sh = Show()
@@ -4004,6 +4069,7 @@ if __name__ == "__main__":
     check("audio letto dal disco (cache float32, anche 24 bit)", t_audio_cache)
     check("motori video: GPU / classico, fotogrammi convertiti solo se servono, stessa geometria", lambda: t_video_engines(w))
     check("valutazione delle prestazioni e buffer consigliato", lambda: t_perf_eval(w))
+    check("delay con pitch per ripetizione (in su e in giù), solo uscita, glissando con Controllo bus", lambda: t_delay_pitch(w))
     check("buffer da 128 e 256 campioni (stesso suono, effetti compresi) e finestra di uscita mai 1×1", lambda: t_small_buffers(w))
     check("lista: trascina su altri PANEL e GRID; Opzioni e BLIND non allargano il GRID", lambda: t_list_drop_other_lists(w))
     check("rotazione di video e immagini", lambda: t_rotation(w))

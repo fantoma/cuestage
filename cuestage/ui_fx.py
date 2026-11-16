@@ -30,6 +30,8 @@ PARAMS = {
               ("feedback", tr("Feedback"), 0, 95, 1, 0, " %", False),
               ("hp", tr("Passa-alto nel feedback"), 10, 2000, 1, 0, " Hz", True),
               ("lp", tr("Passa-basso nel feedback"), 500, 20000, 10, 0, " Hz", True),
+              ("pitch", tr("Pitch per ripetizione"), -12, 12, 0.1, 1, " st", False),
+              ("pitch_win", tr("Finestra del pitch"), 20, 120, 1, 0, " ms", False),
               ("mix", tr("Effetto (dry/wet)"), 0, 100, 1, 0, " %", False),
               ("level", tr("Livello effetto"), -60, 12, 0.5, 1, " dB", False)],
     "reverb": [("decay", tr("Decadimento (T60)"), 0.1, 15, 0.1, 1, " s", True),
@@ -59,7 +61,11 @@ def fx_summary(fx):
             parts.append(tr("LPF {0:.0f} Hz", p["lpf_f"]))
         return " · ".join(parts)
     if k == "delay":
-        return tr("{0:.0f} ms · fb {1:.0f} %", p["time"], p["feedback"])
+        txt = tr("{0:.0f} ms · fb {1:.0f} %", p["time"], p["feedback"])
+        if abs(float(p.get("pitch") or 0.0)) > 1e-3:
+            txt += " · " + (tr("pitch {0:+.1f} st", p["pitch"]) if p.get("pitch_out")
+                            else tr("pitch {0:+.1f} st a ripetizione", p["pitch"]))
+        return txt
     if k == "reverb":
         return tr("{0:.1f} s · pre {1:.0f} ms", p["decay"], p["predelay"])
     return ""
@@ -563,6 +569,13 @@ class FxWindow(QDialog):
             cb.setChecked(bool(p.get("pingpong")))
             cb.toggled.connect(lambda on: self._set("pingpong", bool(on)))
             f.addRow(cb)
+            po = QCheckBox(tr("Pitch solo sull'uscita (tutte le ripetizioni insieme, non si accumula)"))
+            po.setChecked(bool(p.get("pitch_out")))
+            po.setToolTip(tr("Spento: il pitch è nel feedback e ogni ripetizione sale (o scende) rispetto alla "
+                             "precedente. Acceso: si sposta solo l'uscita del delay, utile per un glissando "
+                             "con la cue «Controllo bus»."))
+            po.toggled.connect(lambda on: self._set("pitch_out", bool(on)))
+            f.addRow(po)
         self.adjustSize()
 
     def _curve_band(self, i, vals):

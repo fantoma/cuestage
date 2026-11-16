@@ -2182,6 +2182,12 @@
   "Azzera XRUN": "Azzera XRUN",
   "Riporta a zero i buchi audio (underrun) di tutte le schede e toglie l'avviso dalla barra di stato: utile dopo aver cambiato buffer o scheda": "Riporta a zero i buchi audio (underrun) di tutte le schede e toglie l'avviso dalla barra di stato: utile dopo aver cambiato buffer o scheda",
   "Livello che la cue manda al bus (dopo mandata e trim); «—» = la cue non suona": "Livello che la cue manda al bus (dopo mandata e trim); «—» = la cue non suona",
-  "Livello dell'ingresso fisico nel bus (dopo il trim); «—» = ingresso spento": "Livello dell'ingresso fisico nel bus (dopo il trim); «—» = ingresso spento"
+  "Livello dell'ingresso fisico nel bus (dopo il trim); «—» = ingresso spento": "Livello dell'ingresso fisico nel bus (dopo il trim); «—» = ingresso spento",
+  "Pitch per ripetizione": "Pitch per ripetizione",
+  "Finestra del pitch": "Finestra del pitch",
+  "Pitch solo sull'uscita (tutte le ripetizioni insieme, non si accumula)": "Pitch solo sull'uscita (tutte le ripetizioni insieme, non si accumula)",
+  "Spento: il pitch è nel feedback e ogni ripetizione sale (o scende) rispetto alla precedente. Acceso: si sposta solo l'uscita del delay, utile per un glissando con la cue «Controllo bus».": "Spento: il pitch è nel feedback e ogni ripetizione sale (o scende) rispetto alla precedente. Acceso: si sposta solo l'uscita del delay, utile per un glissando con la cue «Controllo bus».",
+  "pitch {0:+.1f} st": "pitch {0:+.1f} st",
+  "pitch {0:+.1f} st a ripetizione": "pitch {0:+.1f} st a ripetizione"
  }
 }

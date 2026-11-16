@@ -773,8 +773,18 @@ voices with an effect rack can play together. The last result is kept and includ
 CueStage has its own built-in audio effects (written in numpy + scipy, identical on Linux, Windows and macOS; no
 external plugins): **gate**, **parametric EQ** (5 bands — bell, low shelf, high shelf — plus Butterworth high-pass
 and low-pass at 12 or 24 dB/octave, with the response curve), **compressor** (threshold, ratio, soft knee, attack,
-release, make-up gain), **delay** (time, feedback with high-/low-pass filters, ping-pong, dry/wet) and **reverb**
-(feedback-delay network: decay time T60, pre-delay, size, high damping, stereo width, dry/wet).
+release, make-up gain), **delay** (time, feedback with high-/low-pass filters, ping-pong, **pitch**, dry/wet) and
+**reverb** (feedback-delay network: decay time T60, pre-delay, size, high damping, stereo width, dry/wet).
+
+**Delay with pitch.** *Pitch per repeat* (±12 semitones, 0.1 steps) puts a pitch shifter inside the delay's
+feedback: every repeat is shifted again, so with +2 the echoes go up a tone each time (+2, +4, +6…), with a negative
+value they go down; the high-/low-pass filters in the feedback keep the repeats from getting harsh. With **“Pitch on
+the output only”** the shift is applied to the delay's output instead (all repeats shifted by the same amount, no
+accumulation). *Pitch window* (20–120 ms) is the grain of the shifter: short = more precise attacks, long = smoother
+on sustained sounds. The repeat time does not change (the shifter's latency is compensated). The pitch is a numeric
+parameter, so a **Bus control** cue can fade it (e.g. from 0 to +12 in 20 s for an echo that keeps rising) and it is
+saved in the bus presets. Example: physical input (microphone) → bus with delay, pitch per repeat +1, feedback 70 %;
+send only the effect to the PA.
 
 - **Cue rack** (inspector › **Effects** tab, audio and video cues): gate, EQ and compressor in the order you choose
   (drag to reorder, tick to switch on/off, “+ Effect”, “Remove”). They work **before** the cue's volume, curve and

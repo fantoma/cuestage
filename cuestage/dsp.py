@@ -53,7 +53,7 @@ DEFAULTS = {
            "gain": 0.0},
     "comp": {"thr": -18.0, "ratio": 3.0, "knee": 6.0, "attack": 10.0, "release": 120.0, "makeup": 0.0},
     "delay": {"time": 350.0, "feedback": 35.0, "pingpong": False, "hp": 120.0, "lp": 6000.0, "mix": 100.0,
-              "level": 0.0},
+              "level": 0.0, "pitch": 0.0, "pitch_win": 40.0, "pitch_out": False},
     "reverb": {"decay": 1.8, "predelay": 20.0, "size": 60.0, "damp": 6000.0, "width": 100.0, "mix": 100.0,
                "level": 0.0},
 }
@@ -372,6 +372,57 @@ def _onepole(kind, f):
     return [(1 + x) / 2, -(1 + x) / 2], [1, -x]
 
 
+class PitchShifter:
+    """Pitch shifter a linea di ritardo: due letture che scorrono a velocità ratio, sfalsate di mezza finestra e
+    incrociate con finestre sin² (la somma resta 1), così i salti all'inizio della finestra non si sentono.
+    Latenza media dmin + finestra/2; cambi di intonazione continui (glissando) senza scatti."""
+    DMIN = 8
+
+    def __init__(self, ch, max_block, win_ms=40.0):
+        self.ch = ch
+        self.L = int(max_block) + int(SR * 0.25) + 64
+        self.buf = np.zeros((self.L, ch), np.float32)
+        self.w = 0
+        self.ph = 0.0
+        self.set_window(win_ms)
+
+    def set_window(self, win_ms):
+        self.W = max(256, min(int(SR * 0.2), int(float(win_ms) / 1000.0 * SR)))
+
+    def latency(self):
+        return self.DMIN + self.W // 2
+
+    def reset(self):
+        self.buf[:] = 0
+        self.ph = 0.0
+
+    def process(self, x, semitones):
+        n = len(x)
+        idx = (self.w + np.arange(n)) % self.L
+        self.buf[idx] = x
+        if abs(semitones) < 1e-3:
+            out = self.buf[(self.w + np.arange(n) - self.latency()) % self.L]
+            self.w = (self.w + n) % self.L
+            return out
+        r = 2.0 ** (float(semitones) / 12.0)
+        t = np.arange(n, dtype=np.float64)
+        ph = (self.ph - (r - 1.0) * t / self.W) % 1.0           # ritardo che cala (in su) o cresce (in giù)
+        out = np.zeros((n, self.ch), np.float32)
+        for off in (0.0, 0.5):
+            p2 = (ph + off) % 1.0
+            d = self.DMIN + p2 * self.W
+            pos = self.w + t - d
+            i0 = np.floor(pos)
+            fr = (pos - i0)[:, None].astype(np.float32)
+            a = self.buf[i0.astype(np.int64) % self.L]
+            b = self.buf[(i0.astype(np.int64) + 1) % self.L]
+            g = (np.sin(np.pi * p2) ** 2)[:, None].astype(np.float32)
+            out += (a + (b - a) * fr) * g
+        self.ph = float((self.ph - (r - 1.0) * n / self.W) % 1.0)
+        self.w = (self.w + n) % self.L
+        return out
+
+
 class Delay(_Fx):
     MAX = int(SR * 2.5)
 
@@ -383,6 +434,16 @@ class Delay(_Fx):
         self.hp_b, self.hp_a = _onepole("hp", p.get("hp", 120))
         self.wet = db2lin(p.get("level", 0.0)) * max(0.0, min(1.0, float(p.get("mix", 100)) / 100.0))
         self.dry = 1.0 - max(0.0, min(1.0, float(p.get("mix", 100)) / 100.0))
+        # pitch: nel feedback ogni ripetizione sale (o scende) di «pitch» semitoni rispetto alla precedente;
+        # con «pitch_out» si sposta solo l'uscita dell'effetto (tutte le ripetizioni insieme, non si accumula)
+        self.pitch = max(-24.0, min(24.0, float(p.get("pitch", 0.0) or 0.0)))
+        self.pitch_out = bool(p.get("pitch_out"))
+        if not hasattr(self, "ps"):
+            self.ps = None
+        if self.ps is None and abs(self.pitch) > 1e-3:
+            self.ps = PitchShifter(self.ch, self.MAX, p.get("pitch_win", 40.0))
+        if self.ps is not None:
+            self.ps.set_window(p.get("pitch_win", 40.0))
         if not hasattr(self, "buf") or self.buf.shape[1] != self.ch:
             self.buf = np.zeros((self.MAX, self.ch), np.float32)
             self.w = 0
@@ -395,6 +456,11 @@ class Delay(_Fx):
         self.buf[:] = 0
         self.zlp[:] = 0
         self.zhp[:] = 0
+        if self.ps is not None:
+            self.ps.reset()
+
+    def _shifting(self):
+        return self.ps is not None and abs(self.pitch) > 1e-3
 
     def _read(self, d, n):
         idx = (self.w - d + np.arange(n)) % self.MAX
@@ -404,14 +470,22 @@ class Delay(_Fx):
         n_tot = len(x)
         out = np.empty_like(x, dtype=np.float32)
         s = 0
+        shifting = self._shifting()
+        lat = self.ps.latency() if shifting else 0
+        loop_ps = shifting and not self.pitch_out
+        # il pitch shifter ritarda di lat: la lettura si anticipa di altrettanto (il tempo del delay non cambia).
+        # Nel loop: si legge prima ciò che è già stato spostato; sull'uscita: lettura a parte per l'effetto.
+        d = max(16, self.d - lat) if loop_ps else self.d
+        d_wet = max(16, self.d - lat) if (shifting and not loop_ps) else d
+        last = getattr(self, "_d_last", d)
         while s < n_tot:
-            n = min(n_tot - s, self.d)                  # a pezzi non più lunghi del ritardo (feedback corretto)
-            rd = self._read(self.d, n)
-            if self.d_old != self.d:                     # tempo cambiato: dissolvenza dalla vecchia lettura
-                old = self._read(self.d_old, n)
+            n = min(n_tot - s, d, d_wet)                # a pezzi non più lunghi del ritardo (feedback corretto)
+            rd = self._read(d, n)
+            if last != d:                                # tempo cambiato: dissolvenza dalla vecchia lettura
+                old = self._read(last, n)
                 r = np.linspace(0.0, 1.0, n)[:, None]
                 rd = old + (rd - old) * r
-                self.d_old = self.d
+                last = d
             fb, self.zlp = lfilter(self.lp_b, self.lp_a, rd, axis=0, zi=self.zlp)
             fb, self.zhp = lfilter(self.hp_b, self.hp_a, fb, axis=0, zi=self.zhp)
             fb = fb * self.fb
@@ -422,11 +496,19 @@ class Delay(_Fx):
                 xin[:, 0] = x[s:s + n].mean(axis=1)
             else:
                 xin = x[s:s + n]
+            wet = rd
+            if shifting and not loop_ps:                 # solo l'uscita: tutte le ripetizioni insieme
+                wet = self.ps.process(self._read(d_wet, n), self.pitch)
             idx = (self.w + np.arange(n)) % self.MAX
-            self.buf[idx] = xin + fb
+            wr = xin + fb
+            if loop_ps:                                  # ogni passaggio nel loop sposta l'intonazione
+                wr = self.ps.process(wr, self.pitch)
+            self.buf[idx] = wr
             self.w = (self.w + n) % self.MAX
-            out[s:s + n] = x[s:s + n] * self.dry + rd * self.wet
+            out[s:s + n] = x[s:s + n] * self.dry + wet * self.wet
             s += n
+        self._d_last = last
+        self.d_old = self.d
         self.peak = float(np.abs(out).max()) if n_tot else 0.0
         return out
 

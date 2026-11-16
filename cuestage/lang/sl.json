@@ -2182,6 +2182,12 @@
   "Azzera XRUN": "Ponastavi XRUN",
   "Riporta a zero i buchi audio (underrun) di tutte le schede e toglie l'avviso dalla barra di stato: utile dopo aver cambiato buffer o scheda": "Ponastavi zvočne prekinitve (underrun) vseh kartic na nič in odstrani opozorilo iz vrstice stanja: koristno po menjavi medpomnilnika ali kartice",
   "Livello che la cue manda al bus (dopo mandata e trim); «—» = la cue non suona": "Raven, ki ga iztočnica pošilja na vodilo (po pošiljanju in trimu); »—« = iztočnica ne predvaja",
-  "Livello dell'ingresso fisico nel bus (dopo il trim); «—» = ingresso spento": "Raven fizičnega vhoda v vodilu (po trimu); »—« = vhod izklopljen"
+  "Livello dell'ingresso fisico nel bus (dopo il trim); «—» = ingresso spento": "Raven fizičnega vhoda v vodilu (po trimu); »—« = vhod izklopljen",
+  "Pitch per ripetizione": "Višina na ponovitev",
+  "Finestra del pitch": "Okno višine",
+  "Pitch solo sull'uscita (tutte le ripetizioni insieme, non si accumula)": "Višina samo na izhodu (vse ponovitve skupaj, se ne sešteva)",
+  "Spento: il pitch è nel feedback e ogni ripetizione sale (o scende) rispetto alla precedente. Acceso: si sposta solo l'uscita del delay, utile per un glissando con la cue «Controllo bus».": "Izklopljeno: višina je v povratni zanki in vsaka ponovitev se dvigne (ali spusti) glede na prejšnjo. Vklopljeno: premakne se samo izhod zakasnitve, uporabno za glissando z iztočnico »Nadzor vodila«.",
+  "pitch {0:+.1f} st": "višina {0:+.1f} pt",
+  "pitch {0:+.1f} st a ripetizione": "višina {0:+.1f} pt na ponovitev"
  }
 }
