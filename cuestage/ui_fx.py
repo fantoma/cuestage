@@ -518,6 +518,47 @@ class FxWindow(QDialog):
         f = self.shown()
         return repr(dsp.params(f)) if f is not None else ""
 
+    @staticmethod
+    def _discrete_sig(p):
+        """Valori non numerici (acceso/spento, tipi di banda, pendenze…): se cambiano la finestra si ricostruisce."""
+        flat = {k: v for k, v in p.items() if k != "bands" and not isinstance(v, (int, float)) or isinstance(v, bool)}
+        bands = [(b.get("on", True), b.get("type")) for b in p.get("bands") or []]
+        return repr((sorted(flat.items()), bands, p.get("hpf_slope"), p.get("lpf_slope")))
+
+    def _follow_live(self):
+        """Mostra i valori in uso dal vivo: i cursori si spostano al loro posto (non quello che si sta trascinando
+        o la casella in cui si sta scrivendo); se cambia un valore non numerico la finestra si ricostruisce."""
+        fx = self.shown()
+        if fx is None:
+            return
+        p = dsp.params(fx)
+        if self._discrete_sig(p) != getattr(self, "_discrete", None):
+            from PySide6.QtWidgets import QApplication
+            if QApplication.mouseButtons() == Qt.NoButton:
+                self._build()
+            return
+        for path, row in list(getattr(self, "rows", {}).items()):
+            try:
+                if row.sl.isSliderDown() or row.sp.hasFocus():
+                    continue
+                if isinstance(path, tuple):
+                    _b, i, k = path
+                    val = p["bands"][i].get(k)
+                else:
+                    val = p.get(path)
+                if val is not None and abs(row.sp.value() - float(val)) > 1e-6:
+                    row.set(float(val))
+            except (RuntimeError, IndexError, KeyError):
+                pass
+        for name in ("curve", "graph"):
+            wdg = getattr(self, name, None)
+            if wdg is not None:
+                try:
+                    wdg.update()
+                except RuntimeError:
+                    pass
+        self._shown_sig = self._sig()
+
     def _changed(self):
         """Modifica dalla finestra: si salva (e vale anche dal vivo); la finestra non si ricostruisce per questo."""
         self.on_change()
@@ -559,6 +600,8 @@ class FxWindow(QDialog):
             return
         self._shown_sig = self._sig()
         p = dsp.params(fx)
+        self.rows = {}                    # parametro (o ("band", i, chiave)) -> riga, per seguire i valori dal vivo
+        self._discrete = self._discrete_sig(p)
         if self.kind == "eq":
             self._build_eq(p)
             return
@@ -582,6 +625,7 @@ class FxWindow(QDialog):
             row = _ParamRow(lo, hi, step, dec, unit, log, p.get(key, lo))
             row.changed.connect(lambda val, key=key: self._set(key, float(val)))
             f.addRow(label, row)
+            self.rows[key] = row
         if self.kind in ("gate", "comp"):
             self.graph.update()
         if self.kind == "delay":
@@ -646,6 +690,7 @@ class FxWindow(QDialog):
                 row.changed.connect(lambda val, key=key, i=i: self._set(key, float(val), band=i))
                 g.addWidget(row, i + 1, col)
                 self.band_rows[i][key] = row
+                self.rows[("band", i, key)] = row
         v.addLayout(g)
         f = QFormLayout()
         for pre, label in (("hpf", tr("Passa-alto")), ("lpf", tr("Passa-basso"))):
@@ -657,6 +702,7 @@ class FxWindow(QDialog):
             row = _ParamRow(20, 20000, 1, 0, " Hz", True, p.get(f"{pre}_f", 100))
             row.changed.connect(lambda val, pre=pre: self._set(f"{pre}_f", float(val)))
             h.addWidget(row, 1)
+            self.rows[f"{pre}_f"] = row
             sl = QComboBox()
             sl.addItem("12 dB/oct", 12)
             sl.addItem("24 dB/oct", 24)
@@ -667,6 +713,7 @@ class FxWindow(QDialog):
         out = _ParamRow(-18, 18, 0.5, 1, " dB", False, p.get("gain", 0.0))
         out.changed.connect(lambda val: self._set("gain", float(val)))
         f.addRow(tr("Guadagno d'uscita"), out)
+        self.rows["gain"] = out
         v.addLayout(f)
         self.adjustSize()
 
@@ -676,9 +723,7 @@ class FxWindow(QDialog):
             self.close()
             return
         if self.live_fn is not None and self._sig() != self._shown_sig:
-            from PySide6.QtWidgets import QApplication
-            if QApplication.mouseButtons() == Qt.NoButton:   # non mentre si trascina un cursore
-                self._build()                                 # valori cambiati da una cue (sfumano dal vivo)
+            self._follow_live()                               # valori cambiati da una cue (sfumano dal vivo)
         fx = self.shown()
         if self.on_cb.isChecked() != bool(fx.get("on", True)):
             self.on_cb.blockSignals(True)
@@ -838,15 +883,21 @@ class RackEditor(QWidget):
                               self.live_fn)
 
     def _refresh_text(self):
+        """Testo e spunta di ogni effetto, con i valori in uso dal vivo se una cue li ha cambiati."""
         by = {f.get("id"): f for f in self._items()}
+        if self.live_fn is not None:
+            by.update({f.get("id"): f for f in (self.live_fn() or []) if f.get("id") in by})
         for r in range(self.list.count()):
             it = self.list.item(r)
             fx = by.get(it.data(Qt.UserRole))
             if fx is not None:
-                self.list.blockSignals(True)
-                it.setText(f"{dsp.FX_LABELS.get(fx['type'], fx['type'])}   —   {fx_summary(fx)}")
-                it.setCheckState(Qt.Checked if fx.get("on", True) else Qt.Unchecked)
-                self.list.blockSignals(False)
+                txt = f"{dsp.FX_LABELS.get(fx['type'], fx['type'])}   —   {fx_summary(fx)}"
+                chk = Qt.Checked if fx.get("on", True) else Qt.Unchecked
+                if it.text() != txt or it.checkState() != chk:
+                    self.list.blockSignals(True)
+                    it.setText(txt)
+                    it.setCheckState(chk)
+                    self.list.blockSignals(False)
 
 
 class SendFader(QWidget):
@@ -1351,6 +1402,11 @@ class BusDialog(QDialog):
         bid = self._bus_id()
         if not bid:
             return
+        for rk in self.findChildren(RackEditor):          # testo degli effetti con i valori dal vivo
+            try:
+                rk._refresh_text()
+            except RuntimeError:
+                pass
         lvs = getattr(self, "level_spin", None)
         live = self.live(bid)
         if lvs is not None and live is not None and not lvs.hasFocus():   # volume che sfuma per una cue

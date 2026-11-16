@@ -3257,7 +3257,7 @@ def t_bus_live_edit(w):
     aggiorna le mandate e il rack mostrati nella scheda Effetti."""
     from PySide6.QtWidgets import QComboBox, QDoubleSpinBox
     from cuestage.inspector.presets import PresetBar
-    from cuestage.ui_fx import _WINDOWS, RackEditor, SendsEditor, _ParamRow
+    from cuestage.ui_fx import _WINDOWS, RackEditor, SendsEditor
     sh = Show()
     sh.settings["output_fullscreen"] = False
     c = Cue("audio", number="1", name="Src", file=tone("ble.wav", sec=3))
@@ -3303,7 +3303,18 @@ def t_bus_live_edit(w):
     bc.bus_set = {"fx": {fid: {"feedback": 50.0}}}          # un'altra cue cambia il feedback: la finestra segue
     w.ctrl.start_cue(bc)
     run(0.5)
-    assert fw._shown_sig == fw._sig() and any(abs(r.sp.value() - 50.0) < 1e-6 for r in fw.findChildren(_ParamRow))
+    assert fw._shown_sig == fw._sig() and abs(fw.rows["feedback"].sp.value() - 50.0) < 1e-6
+    # durante una sfumatura la finestra dell'effetto segue i valori (senza ricostruirsi)
+    bc.bus_set = {"fx": {fid: {"feedback": 10.0}}}
+    bc.fade_duration = 1.0
+    row = fw.rows["feedback"]
+    w.ctrl.start_cue(bc)
+    run(0.5)
+    mid = row.sp.value()
+    assert 10.0 < mid < 50.0 and fw.rows["feedback"] is row, mid
+    assert wait_until(lambda: abs(row.sp.value() - 10.0) < 1e-6, 3)
+    d._meter()
+    assert any("fb 10 %" in rack.list.item(i).text() for i in range(rack.list.count()))    # testo del rack
     fw.close()
     _WINDOWS.clear()
     d.close()
