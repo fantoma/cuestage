@@ -185,6 +185,37 @@ def audio_state(cue, T, n_src, n_out):
     return st + (na, nb, f)
 
 
+def fx_sends_values(cue, name):
+    """(rack, mandate ai bus) di un keyframe audio: quelli del preset (se li ha salvati) o della cue."""
+    fx, sends = cue.fx or [], cue.sends or []
+    if name != BASE:
+        p = cue.preset_dict("audio").get(name) or {}
+        fx, sends = p.get("fx", fx), p.get("sends", sends)
+    return fx, sends
+
+
+def fx_sends_state(cue, T):
+    """Rack e mandate al tempo T sui keyframe audio, None se la corsia è vuota. Le mandate sfumano tra i due
+    keyframe (in dB, a potenza costante, «spenta» = −∞); il rack è quello del keyframe precedente (gli effetti
+    cambiano a gradino, senza scatti nel suono)."""
+    tr = track(cue, "audio")
+    if not tr:
+        return None
+    na, nb, f = _segment(tr, T)
+    fa, sa = fx_sends_values(cue, na)
+    _fb, sb = fx_sends_values(cue, nb)
+    da = {s.get("bus"): s for s in sa if isinstance(s, dict) and s.get("bus")}
+    db_ = {s.get("bus"): s for s in sb if isinstance(s, dict) and s.get("bus")}
+    out = []
+    for bid in list(da) + [k for k in db_ if k not in da]:
+        a, b = da.get(bid, {}), db_.get(bid, {})
+        lvl = _power_lerp(a.get("db"), b.get("db"), f)
+        pre = bool((b if f >= 0.5 and b else a or b).get("pre"))
+        if lvl is not None:
+            out.append({"bus": bid, "db": round(lvl, 2), "pre": pre})
+    return fa, out
+
+
 def is_base(na, nb, f):
     return na == BASE and (nb == BASE or f <= 0.0)
 

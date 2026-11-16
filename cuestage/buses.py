@@ -131,6 +131,29 @@ def lerp_spec(a, b, f):
     return copy.deepcopy(b)
 
 
+def mirror_edit(before, after, over):
+    """Modifica fatta al bus salvato (finestra dei bus, da «before» ad «after») riportata anche sullo stato dal
+    vivo «over» (impostato da una cue Controllo bus o Cambia preset): così le modifiche valgono subito anche
+    mentre il bus usa valori dal vivo, e le voci non toccate restano quelle della cue."""
+    for k, v in after.items():
+        if k in ("presets", "fx") or before.get(k) == v:
+            continue
+        over[k] = copy.deepcopy(v)
+    fb, fa, fo = before.get("fx") or [], after.get("fx") or [], over.get("fx") or []
+    ids = [f.get("id") for f in fa]
+    if [f.get("id") for f in fb] != ids or [f.get("id") for f in fo] != ids:
+        if fb != fa:                          # effetti aggiunti, tolti o spostati: il rack è quello salvato
+            over["fx"] = copy.deepcopy(fa)
+        return
+    for b_fx, a_fx, o_fx in zip(fb, fa, fo):
+        for k in set(b_fx) | set(a_fx):
+            if b_fx.get(k) != a_fx.get(k):
+                if k in a_fx:
+                    o_fx[k] = copy.deepcopy(a_fx[k])
+                else:
+                    o_fx.pop(k, None)
+
+
 # parametri che una cue «Controllo bus» può cambiare in un effetto (oltre ad «Acceso»)
 def control_params(kind):
     from .ui_fx import PARAMS

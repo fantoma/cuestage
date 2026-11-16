@@ -3250,6 +3250,101 @@ def t_delay_pitch(w):
     run(0.2)
 
 
+def t_bus_live_edit(w):
+    """Bus cambiato dal vivo (Controllo bus): la finestra dei bus e quella dell'effetto mostrano i valori in uso,
+    e le modifiche fatte lì valgono subito (e restano nello show) senza perdere le altre voci della cue.
+    Ispettore: un bus creato con la cue selezionata compare subito nell'elenco. Preset della cue: «Applica»
+    aggiorna le mandate e il rack mostrati nella scheda Effetti."""
+    from PySide6.QtWidgets import QComboBox, QDoubleSpinBox
+    from cuestage.inspector.presets import PresetBar
+    from cuestage.ui_fx import _WINDOWS, RackEditor, SendsEditor, _ParamRow
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    c = Cue("audio", number="1", name="Src", file=tone("ble.wav", sec=3))
+    bc = Cue("buscontrol", number="2", name="BC")
+    sh.cues = [c, bc]
+    w._set_show(sh)
+    run(0.2)
+    ins = w.inspector
+    ins.set_cue(None)
+    ins.set_cue(bc)
+    run(0.2)
+    d = w.bus_dialog()
+    d.add(("delay",), "Eco")                        # bus creato con la cue Controllo bus selezionata
+    run(0.4)
+    b = sh.settings["buses"][0]
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Controllo bus"))
+    run(0.1)
+    assert any(cb.findData(b["id"]) >= 0 for cb in ins.findChildren(QComboBox)), "bus non nell'elenco"
+    fid = b["fx"][0]["id"]
+    bc.bus_target = b["id"]
+    bc.bus_set = {"level_db": -20.0, "fx": {fid: {"feedback": 80.0}}}
+    bc.fade_duration = 0.0
+    assert wait_until(lambda: b["id"] in w.ctrl.audio.buses, 5)
+    w.ctrl.start_cue(bc)
+    run(0.3)
+    rt = lambda: w.ctrl.audio.buses[b["id"]]
+    assert abs(rt().level - 0.1) < 1e-3 and rt().rack.procs[fid].p["feedback"] == 80.0
+    d.close()
+    d = w.bus_dialog()
+    run(0.4)
+    assert abs(d.level_spin.value() + 20.0) < 1e-6           # la finestra mostra il volume in uso
+    rack = [r for r in d.findChildren(RackEditor)][0]
+    fw = rack.open(fid)
+    run(0.2)
+    assert fw.shown()["feedback"] == 80.0 and b["fx"][0]["feedback"] == 35.0
+    fw._set("time", 500.0)                                     # modifica dalla finestra dell'effetto
+    run(0.3)
+    assert b["fx"][0]["time"] == 500.0                         # resta nello show
+    assert wait_until(lambda: rt().rack.procs[fid].p["time"] == 500.0, 3)          # vale subito
+    assert rt().rack.procs[fid].p["feedback"] == 80.0          # il feedback della cue resta
+    d.level_spin.setValue(-6.0)                                # volume dalla finestra dei bus
+    assert wait_until(lambda: abs(rt().level - 10 ** (-6 / 20)) < 1e-3, 3) and b["level_db"] == -6.0
+    bc.bus_set = {"fx": {fid: {"feedback": 50.0}}}          # un'altra cue cambia il feedback: la finestra segue
+    w.ctrl.start_cue(bc)
+    run(0.5)
+    assert fw._shown_sig == fw._sig() and any(abs(r.sp.value() - 50.0) < 1e-6 for r in fw.findChildren(_ParamRow))
+    fw.close()
+    _WINDOWS.clear()
+    d.close()
+    # preset della cue: «Applica» aggiorna le mandate mostrate
+    ins.set_cue(None)
+    ins.set_cue(c)
+    run(0.2)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Effetti"))
+    run(0.1)
+    se = [x for x in ins.findChildren(SendsEditor) if b["id"] in x.rows and x.isVisible()][0]
+    se.rows[b["id"]][0].setValue(-6.0)
+    bar = [x for x in ins.findChildren(PresetBar) if x.cue is c][0]
+    bar._store("A")
+    bar.reload("A")
+    se.rows[b["id"]][0].setValue(-30.0)
+    bar.combo.setCurrentText("A")
+    bar.apply()
+    run(0.2)
+    assert c.sends[0]["db"] == -6.0
+    shown = [x.rows[b["id"]][0].value() for x in ins.findChildren(SendsEditor) if b["id"] in x.rows and x.isVisible()]
+    assert shown and all(abs(v + 6.0) < 1e-6 for v in shown), shown
+    # keyframe audio con preset: le mandate seguono il preset in uso (e sfumano tra due keyframe)
+    from cuestage import keyframes as kf
+    c.sends = [{"bus": b["id"], "db": -30.0, "pre": False}]
+    bar._store("B")
+    c.sends = []
+    c.preset_points = [{"t": 0.0, "kind": "audio", "preset": "A"}, {"t": 1.0, "kind": "audio", "preset": "B"}]
+    assert kf.fx_sends_state(c, 0.0)[1][0]["db"] == -6.0 and kf.fx_sends_state(c, 2.0)[1][0]["db"] == -30.0
+    mid = kf.fx_sends_state(c, 0.5)[1][0]["db"]
+    assert -30.0 < mid < -6.0, mid
+    w.ctrl.start_cue(c)
+    run(0.3)
+    inst = w.ctrl.instances[c.id]
+    g_early = float(inst.voice.sends[0][1].max())
+    assert wait_until(lambda: abs(float(inst.voice.sends[0][1].max()) - 10 ** (-30 / 20)) < 1e-3, 3)
+    assert g_early > 10 ** (-29 / 20), g_early                # all'inizio più alta (preset A)
+    w.ctrl.stop_all(0)
+    run(0.2)
+    _ = QDoubleSpinBox
+
+
 def t_memo_skip(w):
     """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
     sh = Show()
@@ -4069,6 +4164,7 @@ if __name__ == "__main__":
     check("audio letto dal disco (cache float32, anche 24 bit)", t_audio_cache)
     check("motori video: GPU / classico, fotogrammi convertiti solo se servono, stessa geometria", lambda: t_video_engines(w))
     check("valutazione delle prestazioni e buffer consigliato", lambda: t_perf_eval(w))
+    check("bus dal vivo: valori in uso nelle finestre, modifiche che valgono subito; preset con le mandate", lambda: t_bus_live_edit(w))
     check("delay con pitch per ripetizione (in su e in giù), solo uscita, glissando con Controllo bus", lambda: t_delay_pitch(w))
     check("buffer da 128 e 256 campioni (stesso suono, effetti compresi) e finestra di uscita mai 1×1", lambda: t_small_buffers(w))
     check("lista: trascina su altri PANEL e GRID; Opzioni e BLIND non allargano il GRID", lambda: t_list_drop_other_lists(w))

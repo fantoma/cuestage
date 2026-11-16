@@ -1584,7 +1584,6 @@
   "Eliminare il bus «{0}»? Le mandate delle cue verso questo bus vengono tolte.": "Delete the bus “{0}”? Cue sends to this bus are removed.",
   "Nessun bus. Crea un bus (riverbero, delay…), poi nella scheda «Effetti» delle cue manda al bus una parte del loro suono.": "No buses. Create a bus (reverb, delay…), then in the cues’ “Effects” tab send part of their sound to it.",
   "Preset del bus:": "Bus preset:",
-  "⚡ Il bus sta usando valori impostati dal vivo da una cue (Controllo bus o Cambia preset): le modifiche qui valgono dopo «Ripristina».": "⚡ The bus is using values set live by a cue (Bus control or Change preset): changes made here apply after “Restore”.",
   "Ripristina": "Restore",
   "trim ": "trim ",
   "Nessuna cue manda a questo bus (scheda «Effetti» delle cue).": "No cue sends to this bus (cues’ “Effects” tab).",
@@ -2188,6 +2187,7 @@
   "Pitch solo sull'uscita (tutte le ripetizioni insieme, non si accumula)": "Pitch on the output only (all repeats together, no accumulation)",
   "Spento: il pitch è nel feedback e ogni ripetizione sale (o scende) rispetto alla precedente. Acceso: si sposta solo l'uscita del delay, utile per un glissando con la cue «Controllo bus».": "Off: the pitch is in the feedback and every repeat goes up (or down) from the previous one. On: only the delay output is shifted, useful for a glissando with a “Bus control” cue.",
   "pitch {0:+.1f} st": "pitch {0:+.1f} st",
-  "pitch {0:+.1f} st a ripetizione": "pitch {0:+.1f} st per repeat"
+  "pitch {0:+.1f} st a ripetizione": "pitch {0:+.1f} st per repeat",
+  "⚡ Il bus sta usando valori impostati dal vivo da una cue (Controllo bus o Cambia preset): qui vedi quelli in uso; le modifiche valgono subito e restano nello show. «Ripristina» torna ai valori salvati.": "⚡ The bus is using values set live by a cue (Bus control or Change preset): here you see the ones in use; changes apply at once and stay in the show. “Restore” goes back to the saved values."
  }
 }

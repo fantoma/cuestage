@@ -1584,7 +1584,6 @@
   "Eliminare il bus «{0}»? Le mandate delle cue verso questo bus vengono tolte.": "Eliminare il bus «{0}»? Le mandate delle cue verso questo bus vengono tolte.",
   "Nessun bus. Crea un bus (riverbero, delay…), poi nella scheda «Effetti» delle cue manda al bus una parte del loro suono.": "Nessun bus. Crea un bus (riverbero, delay…), poi nella scheda «Effetti» delle cue manda al bus una parte del loro suono.",
   "Preset del bus:": "Preset del bus:",
-  "⚡ Il bus sta usando valori impostati dal vivo da una cue (Controllo bus o Cambia preset): le modifiche qui valgono dopo «Ripristina».": "⚡ Il bus sta usando valori impostati dal vivo da una cue (Controllo bus o Cambia preset): le modifiche qui valgono dopo «Ripristina».",
   "Ripristina": "Ripristina",
   "trim ": "trim ",
   "Nessuna cue manda a questo bus (scheda «Effetti» delle cue).": "Nessuna cue manda a questo bus (scheda «Effetti» delle cue).",
@@ -2188,6 +2187,7 @@
   "Pitch solo sull'uscita (tutte le ripetizioni insieme, non si accumula)": "Pitch solo sull'uscita (tutte le ripetizioni insieme, non si accumula)",
   "Spento: il pitch è nel feedback e ogni ripetizione sale (o scende) rispetto alla precedente. Acceso: si sposta solo l'uscita del delay, utile per un glissando con la cue «Controllo bus».": "Spento: il pitch è nel feedback e ogni ripetizione sale (o scende) rispetto alla precedente. Acceso: si sposta solo l'uscita del delay, utile per un glissando con la cue «Controllo bus».",
   "pitch {0:+.1f} st": "pitch {0:+.1f} st",
-  "pitch {0:+.1f} st a ripetizione": "pitch {0:+.1f} st a ripetizione"
+  "pitch {0:+.1f} st a ripetizione": "pitch {0:+.1f} st a ripetizione",
+  "⚡ Il bus sta usando valori impostati dal vivo da una cue (Controllo bus o Cambia preset): qui vedi quelli in uso; le modifiche valgono subito e restano nello show. «Ripristina» torna ai valori salvati.": "⚡ Il bus sta usando valori impostati dal vivo da una cue (Controllo bus o Cambia preset): qui vedi quelli in uso; le modifiche valgono subito e restano nello show. «Ripristina» torna ai valori salvati."
  }
 }

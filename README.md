@@ -817,7 +817,10 @@ send only the effect to the PA.
 - **Presets**: the cue's audio presets also save its **rack and sends** (and “Change preset” cues apply them);
   each bus has its own **presets** (rack, matrix, level, mute, trims, physical input) in its window, and “Change
   preset” and **Bus control** cues change buses during the show (see “Cue types”). When a cue has changed a bus
-  live, the buses window says so and “Restore” goes back to the saved values.
+  live, the buses window says so and shows the **values in use** (also in the effect windows, which follow a fade
+  while it runs); a change made there applies at once and is saved in the show, while the other values set by the
+  cue stay as they are. “Restore” goes back to the saved values. “Apply” on a cue preset also updates the rack and
+  sends shown in the Effects tab.
 - Buses are part of the show settings: they are saved with the show, follow undo/redo and go to secondary instances
   that copy the settings. A bus plays on the card chosen for it; cues send to it only from the same card.
 - Requires the `scipy` library (included in the AppImage and in the installers; `pip install scipy` otherwise):

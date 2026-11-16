@@ -78,6 +78,12 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
                 f()
             except RuntimeError:
                 pass
+        from .ui_fx import RackEditor, SendsEditor
+        for ed in self.findChildren(RackEditor) + self.findChildren(SendsEditor):   # rack e mandate (preset)
+            try:
+                ed.reload()
+            except RuntimeError:
+                pass
         if self.crop_panel is not None:
             self.crop_panel.refresh()
         if getattr(self, "_text_redraw", None) is not None:

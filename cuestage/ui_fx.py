@@ -458,13 +458,15 @@ class FxWindow(QDialog):
     """Finestra in sovrimpressione con i parametri di un effetto del rack: resta aperta sopra CueStage e le
     modifiche valgono subito (anche mentre la cue o il bus suona)."""
 
-    def __init__(self, owner_key, fid, title, get_list, on_change, meter_fn=None, parent=None):
+    def __init__(self, owner_key, fid, title, get_list, on_change, meter_fn=None, parent=None, live_fn=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.Tool | Qt.WindowStaysOnTopHint | Qt.WindowCloseButtonHint | Qt.WindowTitleHint)
         self.setAttribute(Qt.WA_DeleteOnClose)
         self.owner_key, self.fid = owner_key, fid
         self.get_list, self.on_change, self.meter_fn = get_list, on_change, meter_fn
-        fx = self.fx()
+        self.live_fn = live_fn            # effetti in uso dal vivo (bus cambiato da una cue): si mostrano quelli
+        self._shown_sig = None
+        fx = self.shown()
         self.kind = fx.get("type") if fx else ""
         self.setWindowTitle(f"{dsp.FX_LABELS.get(self.kind, self.kind)} — {title}")
         v = QVBoxLayout(self)
@@ -504,6 +506,23 @@ class FxWindow(QDialog):
                 return f
         return None
 
+    def shown(self):
+        """Valori da mostrare: quelli in uso dal vivo (cue Controllo bus, Cambia preset) o quelli salvati."""
+        if self.live_fn is not None:
+            for f in self.live_fn() or []:
+                if f.get("id") == self.fid:
+                    return f
+        return self.fx()
+
+    def _sig(self):
+        f = self.shown()
+        return repr(dsp.params(f)) if f is not None else ""
+
+    def _changed(self):
+        """Modifica dalla finestra: si salva (e vale anche dal vivo); la finestra non si ricostruisce per questo."""
+        self.on_change()
+        self._shown_sig = self._sig()
+
     def _set(self, key, val, band=None):
         fx = self.fx()
         if fx is None:
@@ -514,7 +533,7 @@ class FxWindow(QDialog):
             fx["bands"] = bands
         else:
             fx[key] = val
-        self.on_change()
+        self._changed()
         if self.kind == "eq":
             self.curve.update()
         elif self.kind in ("gate", "comp") and getattr(self, "graph", None) is not None:
@@ -527,7 +546,7 @@ class FxWindow(QDialog):
         import copy
         for k, val in copy.deepcopy(dsp.DEFAULTS[self.kind]).items():
             fx[k] = val
-        self.on_change()
+        self._changed()
         self._build()
 
     def _build(self):
@@ -535,9 +554,10 @@ class FxWindow(QDialog):
         self.body = QWidget()
         self.layout().replaceWidget(old, self.body)
         old.deleteLater()
-        fx = self.fx()
+        fx = self.shown()
         if fx is None:
             return
+        self._shown_sig = self._sig()
         p = dsp.params(fx)
         if self.kind == "eq":
             self._build_eq(p)
@@ -546,7 +566,7 @@ class FxWindow(QDialog):
             outer = QVBoxLayout(self.body)
             outer.setContentsMargins(0, 0, 0, 0)
             top = QHBoxLayout()
-            self.graph = DynGraph(self.kind, self.fx)
+            self.graph = DynGraph(self.kind, self.shown)
             top.addWidget(self.graph, 1)
             self.meters = {}
             for key, label in (("in", tr("In")), ("gr", tr("Rid.")), ("out", tr("Out"))):
@@ -590,12 +610,12 @@ class FxWindow(QDialog):
         for k, val in vals.items():
             if k in rows:
                 rows[k].set(val)
-        self.on_change()
+        self._changed()
 
     def _build_eq(self, p):
         v = QVBoxLayout(self.body)
         v.setContentsMargins(0, 0, 0, 0)
-        self.curve = EqCurve(self.fx)
+        self.curve = EqCurve(self.shown)
         self.curve.bandChanged.connect(self._curve_band)
         self.band_rows = []
         v.addWidget(self.curve)
@@ -655,6 +675,11 @@ class FxWindow(QDialog):
         if fx is None:            # effetto tolto (o cue / bus eliminati): la finestra si chiude
             self.close()
             return
+        if self.live_fn is not None and self._sig() != self._shown_sig:
+            from PySide6.QtWidgets import QApplication
+            if QApplication.mouseButtons() == Qt.NoButton:   # non mentre si trascina un cursore
+                self._build()                                 # valori cambiati da una cue (sfumano dal vivo)
+        fx = self.shown()
         if self.on_cb.isChecked() != bool(fx.get("on", True)):
             self.on_cb.blockSignals(True)
             self.on_cb.setChecked(bool(fx.get("on", True)))
@@ -680,10 +705,10 @@ class FxWindow(QDialog):
             self.meter.setText(tr("Riduzione {0:.1f} dB", m["gr"]))
 
 
-def open_fx_window(owner_key, fid, title, get_list, on_change, meter_fn=None, parent=None):
+def open_fx_window(owner_key, fid, title, get_list, on_change, meter_fn=None, parent=None, live_fn=None):
     w = _WINDOWS.get((owner_key, fid))
     if w is None:
-        w = FxWindow(owner_key, fid, title, get_list, on_change, meter_fn, parent)
+        w = FxWindow(owner_key, fid, title, get_list, on_change, meter_fn, parent, live_fn)
     w.show()
     w.raise_()
     w.activateWindow()
@@ -695,9 +720,10 @@ class RackEditor(QWidget):
     accendere o spegnere, doppio clic (o «Regola…») per la finestra dei parametri."""
     changed = Signal()
 
-    def __init__(self, owner_key, title, get_list, set_list, allowed, meter_fn=None, parent=None):
+    def __init__(self, owner_key, title, get_list, set_list, allowed, meter_fn=None, parent=None, live_fn=None):
         super().__init__(parent)
         self.owner_key, self.title = owner_key, title
+        self.live_fn = live_fn
         self.get_list, self.set_list, self.allowed, self.meter_fn = get_list, set_list, allowed, meter_fn
         v = QVBoxLayout(self)
         v.setContentsMargins(0, 0, 0, 0)
@@ -808,7 +834,8 @@ class RackEditor(QWidget):
         def changed():
             self.changed.emit()
             QTimer.singleShot(0, self._refresh_text)
-        return open_fx_window(self.owner_key, fid, self.title, self._items, changed, self.meter_fn, self.window())
+        return open_fx_window(self.owner_key, fid, self.title, self._items, changed, self.meter_fn, self.window(),
+                              self.live_fn)
 
     def _refresh_text(self):
         by = {f.get("id"): f for f in self._items()}
@@ -830,6 +857,7 @@ class SendsEditor(QWidget):
         super().__init__(parent)
         from .buses import buses
         self.cue = cue
+        self.rows = {}
         g = QGridLayout(self)
         g.setContentsMargins(0, 0, 0, 0)
         bl = buses(show_fn())
@@ -856,11 +884,24 @@ class SendsEditor(QWidget):
             pre = QCheckBox(tr("pre"))
             pre.setToolTip(tr("Pre: la mandata non segue il volume e i fade della cue (post: li segue)"))
             pre.setChecked(bool(s.get("pre")))
+            self.rows[b["id"]] = (sp, pre)
             sp.valueChanged.connect(lambda _v, b=b, sp=sp, pre=pre: self._set(b["id"], sp, pre))
             pre.toggled.connect(lambda _v, b=b, sp=sp, pre=pre: self._set(b["id"], sp, pre))
             g.addWidget(sp, r, 1)
             g.addWidget(pre, r, 2)
         g.setColumnStretch(3, 1)
+
+    def reload(self):
+        """Rilegge le mandate della cue (es. dopo «Applica» di un preset)."""
+        cur = {s.get("bus"): s for s in (self.cue.sends or []) if isinstance(s, dict)}
+        for bid, (sp, pre) in self.rows.items():
+            s = cur.get(bid, {})
+            db = s.get("db")
+            for w_, fn in ((sp, lambda: sp.setValue(-60.0 if db is None else float(db))),
+                           (pre, lambda: pre.setChecked(bool(s.get("pre"))))):
+                w_.blockSignals(True)
+                fn()
+                w_.blockSignals(False)
 
     def _set(self, bid, sp, pre):
         db = None if sp.value() <= -60.0 else float(sp.value())
@@ -912,7 +953,28 @@ class BusDialog(QDialog):
         return buses(self.show_data())
 
     def _dirty(self):
+        """Bus modificato: show da salvare; se il bus usa valori dal vivo (cue Controllo bus o Cambia preset) la
+        modifica vale anche lì; se cambiano i bus (aggiunti, tolti, rinominati) l'ispettore si aggiorna."""
+        import copy
+        from .buses import mirror_edit
         self.show_data().dirty = True
+        prev = getattr(self, "_prev", None) or {}
+        over = self.mw.ctrl.bus_over
+        for b in self._buses():
+            p = prev.get(b.get("id"))
+            if p is not None and b.get("id") in over and p != b:
+                mirror_edit(p, b, over[b["id"]])
+        self._prev = {b.get("id"): copy.deepcopy(b) for b in self._buses()}
+        names = [(b.get("id"), b.get("name")) for b in self._buses()]
+        if names != getattr(self, "_names", None):
+            self._names = names
+            ins = getattr(self.mw, "inspector", None)
+            if ins is not None and getattr(ins, "cue", None) is not None:
+                QTimer.singleShot(0, ins.rebuild)     # elenchi dei bus (Controllo bus, Cambia preset, mandate)
+
+    def live(self, bid):
+        """Stato in uso dal vivo del bus (o None se usa i valori salvati)."""
+        return self.mw.ctrl.bus_over.get(bid)
 
     def reload(self, select=None):
         cur = select or self._bus_id()
@@ -977,6 +1039,9 @@ class BusDialog(QDialog):
         from .buses import BusView
         from .inspector.presets import PresetBar
         from .ui_matrix import MatrixEditor
+        import copy
+        self._prev = {x.get("id"): copy.deepcopy(x) for x in self._buses()}
+        self._names = [(x.get("id"), x.get("name")) for x in self._buses()]
         b = self.bus()
         w = QWidget()
         self.scroll.setWidget(w)
@@ -1035,11 +1100,13 @@ class BusDialog(QDialog):
         level.setSuffix(" dB")
         level.setSpecialValueText("-∞")
         level.setKeyboardTracking(False)
-        level.setValue(float(b.get("level_db", 0.0) or 0.0))
+        shown = self.live(b["id"]) or b                  # valori in uso (anche quelli impostati da una cue)
+        level.setValue(float(shown.get("level_db", 0.0) or 0.0))
         level.valueChanged.connect(lambda val: (b.__setitem__("level_db", float(val)), self._dirty()))
         lv.addWidget(level)
+        self.level_spin = level
         mute = QCheckBox(tr("Mute"))
-        mute.setChecked(bool(b.get("mute")))
+        mute.setChecked(bool(shown.get("mute")))
         mute.toggled.connect(lambda on: (b.__setitem__("mute", bool(on)), self._dirty()))
         lv.addWidget(mute)
         self.meter_lab = QLabel()
@@ -1051,7 +1118,8 @@ class BusDialog(QDialog):
         if bid_live := (b["id"] if b["id"] in self.mw.ctrl.bus_over else None):
             ov = QHBoxLayout()
             note = QLabel(tr("⚡ Il bus sta usando valori impostati dal vivo da una cue (Controllo bus o Cambia "
-                             "preset): le modifiche qui valgono dopo «Ripristina»."))
+                             "preset): qui vedi quelli in uso; le modifiche valgono subito e restano nello show. "
+                             "«Ripristina» torna ai valori salvati."))
             note.setWordWrap(True)
             note.setStyleSheet("color:#ffaa28;")
             ov.addWidget(note, 1)
@@ -1082,7 +1150,11 @@ class BusDialog(QDialog):
         def meter(fid):
             rt = eng.buses.get(bid)
             return rt.rack.meter(fid) if rt is not None else {}
-        rack = RackEditor(("bus", bid), b.get("name") or tr("Bus"), get_list, set_list, dsp.BUS_FX, meter)
+        def live_list():
+            lv_ = self.mw.ctrl.bus_over.get(bid)
+            return lv_.get("fx") if lv_ is not None else None
+        rack = RackEditor(("bus", bid), b.get("name") or tr("Bus"), get_list, set_list, dsp.BUS_FX, meter,
+                          live_fn=live_list)
         rack.changed.connect(self._dirty)
         bv.addWidget(rack)
         v.addWidget(box)
@@ -1204,6 +1276,17 @@ class BusDialog(QDialog):
         bid = self._bus_id()
         if not bid:
             return
+        lvs = getattr(self, "level_spin", None)
+        live = self.live(bid)
+        if lvs is not None and live is not None and not lvs.hasFocus():   # volume che sfuma per una cue
+            try:
+                val = float(live.get("level_db", 0.0) or 0.0)
+                if abs(lvs.value() - val) > 0.05:
+                    lvs.blockSignals(True)
+                    lvs.setValue(val)
+                    lvs.blockSignals(False)
+            except RuntimeError:
+                self.level_spin = None
         pk = self.mw.ctrl.audio.bus_meter(bid)
         db = 20 * math.log10(max(max(pk), 1e-6))
         self.meter_lab.setText(tr("Ritorno {0}", "-∞" if db < -59 else f"{db:+.0f} dB"))

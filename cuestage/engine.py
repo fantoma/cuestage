@@ -460,8 +460,11 @@ class KeyframeMixin:
             if not self.kf_aud_off and kf.track(c, "audio"):
                 self._aud_override = lambda n, self=self: kf.audio_state(
                     self.cue, self._kf_T, self.voice.n_src, n)[:3]
+                self._fx_override = kf.fx_sends_state(c, T)       # rack e mandate dei preset sui keyframe
             else:
                 self._aud_override = None
+                if not self.kf_aud_off:
+                    self._fx_override = None
         elif c.type == "video" and not self.kf_aud_off:       # lettore di sistema: solo il livello
             st = kf.audio_state(c, T, 1, 2)
             base = db_to_lin(c.level_db)
