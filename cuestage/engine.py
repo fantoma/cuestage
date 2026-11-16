@@ -518,6 +518,7 @@ class RoutedVoice:
             return
         self._fx_sig = sig
         sends = self._send_list(v.n_src)
+        v.src_id = self.cue.id
         with self.ctrl.audio.lock:
             if spec:
                 if v.fx is None:

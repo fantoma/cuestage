@@ -793,7 +793,9 @@ release, make-up gain), **delay** (time, feedback with high-/low-pass filters, p
   the bus tails. A bus that receives nothing and has finished its tail does not use the CPU.
 - **Bus sources**: the buses window lists the **cues that send to the bus**, each with a **trim** (dB) applied by
   the bus on top of the cue's send level, and the bus can also take a **physical input** (microphone or line of a
-  sound card: device, channel L and R — R = 0 for mono — and its **trim**, with an input meter). Mind the latency of
+  sound card: device, channel L and R — R = 0 for mono — and its **trim**). Every source has a **meter** (L/R bars,
+  −60…0 dBFS, peak value on the side): for a cue it shows what reaches the bus after send level and trim (“—” when
+  the cue is not playing), for the physical input the level of the input. Mind the latency of
   a live input through the computer (tens of milliseconds, more with PipeWire or a large buffer): use it for the
   effect only (e.g. a microphone into the reverb) and leave the dry signal to the mixing desk.
 - **Presets**: the cue's audio presets also save its **rack and sends** (and “Change preset” cues apply them);

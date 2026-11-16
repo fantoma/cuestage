@@ -723,6 +723,21 @@ class AudioEngine:
                 b.rack.reset()
                 b.silent = b.IDLE
 
+    def bus_source_meters(self, bid):
+        """Picchi (L, R) di ciò che ogni cue manda al bus: {id cue: [L, R]} (più voci della stessa cue: il massimo).
+        Le cue che non suonano non compaiono."""
+        out = {}
+        with self.lock:
+            voices = list(self.voices.values())
+        for v in voices:
+            sm = getattr(v, "send_meter", None)
+            pk = sm.get(bid) if sm is not None and not (v.done or v.paused) else None
+            if pk is None or not getattr(v, "src_id", ""):
+                continue
+            cur = out.get(v.src_id)
+            out[v.src_id] = [float(x) for x in (pk if cur is None else np.maximum(pk, cur))]
+        return out
+
     def bus_meter(self, bid):
         b = self.buses.get(bid)
         return [float(x) for x in b.meter] if b is not None else [0.0, 0.0]
@@ -917,7 +932,12 @@ class AudioEngine:
         for bid, m2, is_pre in sends:        # mandate ai bus effetti (pre o post volume/fade)
             dst = bus_in.get(bid)
             if dst is not None and m2.shape[0] == src.shape[1]:
-                dst[:filled] += (pre if is_pre else src) @ m2
+                part = (pre if is_pre else src) @ m2
+                dst[:filled] += part
+                # vumeter della sorgente nel bus (L, R dopo mandata e trim), con discesa come gli altri
+                pk = np.abs(part).max(axis=0).astype(np.float32) if len(part) else np.zeros(2, np.float32)
+                old_pk = v.send_meter.get(bid)
+                v.send_meter[bid] = np.maximum(pk, old_pk * 0.8) if old_pk is not None else pk
         m = v.mtx
         prev = v.mtx_prev
         if m.shape[1] != C:
@@ -981,6 +1001,8 @@ class Voice:
         self.pfl = False       # preascolto: va solo alla cuffia, fuori dal master
         self.fx = None         # rack della cue (dsp.Rack) o None
         self.sends = []        # mandate ai bus: [(id bus, matrice n_src × 2 lineare, pre)]
+        self.send_meter = {}   # id bus -> picchi (L, R) di quanto la voce manda al bus (vumeter delle sorgenti)
+        self.src_id = ""       # id della cue che suona (per i vumeter delle sorgenti del bus)
         # routing
         self.gains_fn = gains_fn or (lambda n_out: build_gains(None, None, self.n_src, n_out))
         self.out_req = ""

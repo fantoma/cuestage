@@ -2930,6 +2930,20 @@ def t_bus_sources_control(w):
     run(0.3)
     g1 = float(w.ctrl.instances[c.id].voice.sends[0][1].max())
     assert abs(g1 / g0 - 0.1) < 1e-3, (g0, g1)
+    # vumeter delle sorgenti: livello mandato al bus da ogni cue (dopo il trim), anche nella finestra dei bus
+    assert wait_until(lambda: max(w.ctrl.audio.bus_source_meters(b["id"]).get(c.id, [0])) > 0.01, 3)
+    lvl_trim = max(w.ctrl.audio.bus_source_meters(b["id"])[c.id])
+    b["trims"].pop(c.id)
+    run(0.4)
+    lvl_full = max(w.ctrl.audio.bus_source_meters(b["id"])[c.id])
+    assert 0.05 < lvl_trim / lvl_full < 0.2, (lvl_trim, lvl_full)
+    d = w.bus_dialog()
+    run(0.5)
+    assert c.id in d.src_meters and d.in_hmeter is not None
+    assert wait_until(lambda: d.src_meters[c.id].dbs and max(d.src_meters[c.id].dbs) > -40, 3)
+    assert d.in_hmeter.text() == "—"                        # ingresso fisico spento
+    d.close()
+    b["trims"][c.id] = -20.0
     w.ctrl.stop_all(0)
     run(0.2)
     w.ctrl.stop_all(0)
@@ -2946,6 +2960,14 @@ def t_bus_sources_control(w):
     assert max(w.ctrl.audio.bus_meter(b["id"])) > 0.05
     pk, _err = w.ctrl.audio.bus_input_meter(b["id"])
     assert pk is not None and max(pk) > 0.4
+    d = w.bus_dialog()
+    for _ in range(20):
+        rt.live.push(_np.full((512, 2), 0.5, _np.float32))
+        run(0.011)
+    d._meter()
+    assert d.in_hmeter.dbs and max(d.in_hmeter.dbs) > -12, d.in_hmeter.dbs     # 0,5 × trim −6 dB ≈ −12 dBFS
+    assert not d.src_meters[c.id].dbs                       # la cue non suona: nessun livello
+    d.close()
     b["input"]["on"] = False
     sh.dirty = True
     run(0.3)

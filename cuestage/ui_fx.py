@@ -404,6 +404,50 @@ class LevelMeter(QWidget):
         p.drawText(QRectF(0, top + h + 15, self.width(), 14), Qt.AlignHCenter, self.label)
 
 
+class HMeter(QWidget):
+    """Vumeter orizzontale compatto (−60…0 dBFS) con una barra per canale (L, R) e il valore del più alto."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.dbs = []
+        self.setFixedHeight(18)
+        self.setMinimumWidth(150)
+
+    def set_peaks(self, peaks):
+        """Picchi lineari (uno per canale) o None = sorgente ferma."""
+        dbs = [] if not peaks else [20 * math.log10(max(float(x), 1e-6)) for x in peaks]
+        if len(dbs) != len(self.dbs) or any(abs(a - b) > 0.2 for a, b in zip(dbs, self.dbs)):
+            self.dbs = dbs
+            self.update()
+
+    def text(self):
+        if not self.dbs:
+            return "—"
+        m = max(self.dbs)
+        return "-∞" if m <= -59.5 else f"{m:+.0f}"
+
+    def paintEvent(self, _e):
+        p = QPainter(self)
+        tw = 34
+        W, H = self.width() - tw - 4, self.height()
+        p.fillRect(0, 0, W, H, QColor("#16181d"))
+        n = max(1, len(self.dbs))
+        bh = (H - 2 - (n - 1)) / n
+        for i, db in enumerate(self.dbs):
+            f = max(0.0, min(1.0, (db + 60.0) / 60.0))
+            col = QColor("#e05050") if db > -3 else QColor("#e0b040") if db > -12 else QColor("#50c070")
+            p.fillRect(QRectF(1, 1 + i * (bh + 1), (W - 2) * f, bh), col)
+        p.setPen(QColor("#555"))
+        for mark in (-48, -24, -12, -6):                   # tacche
+            x = 1 + (W - 2) * (mark + 60.0) / 60.0
+            p.drawLine(QPointF(x, 0), QPointF(x, 3))
+        p.setPen(self.palette().windowText().color())     # leggibile con tema chiaro e scuro
+        small = QFont()
+        small.setPointSizeF(max(6.5, small.pointSizeF() * 0.85))
+        p.setFont(small)
+        p.drawText(QRectF(W + 4, 0, tw, H), Qt.AlignVCenter | Qt.AlignLeft, self.text())
+
+
 class FxWindow(QDialog):
     """Finestra in sovrimpressione con i parametri di un effetto del rack: resta aperta sopra CueStage e le
     modifiche valgono subito (anche mentre la cue o il bus suona)."""
@@ -823,7 +867,7 @@ class BusDialog(QDialog):
         self.mw = mw
         self.setWindowTitle(tr("Bus effetti"))
         self.setWindowFlags(Qt.Tool | Qt.WindowCloseButtonHint | Qt.WindowTitleHint)
-        self.resize(940, 680)
+        self.resize(1120, 720)               # largo abbastanza per i vumeter delle sorgenti
         h = QHBoxLayout(self)
         left = QVBoxLayout()
         self.list = QListWidget()
@@ -925,6 +969,8 @@ class BusDialog(QDialog):
         self.scroll.setWidget(w)
         self.meter_lab = None
         self.in_meter = None
+        self.in_hmeter = None
+        self.src_meters = {}
         if b is None:
             v = QVBoxLayout(w)
             lab = QLabel(tr("Nessun bus. Crea un bus (riverbero, delay…), poi nella scheda «Effetti» delle cue "
@@ -1073,11 +1119,15 @@ class BusDialog(QDialog):
                     trims[cid] = float(val)
                 self._dirty()
             g.addWidget(trim_spin(trims.get(c.id, 0.0), set_trim), r, 2)
+            m = HMeter()
+            m.setToolTip(tr("Livello che la cue manda al bus (dopo mandata e trim); «—» = la cue non suona"))
+            g.addWidget(m, r, 3)
+            self.src_meters[c.id] = m
             r += 1
         if not src:
             lab = QLabel(tr("Nessuna cue manda a questo bus (scheda «Effetti» delle cue)."))
             lab.setStyleSheet("color:#888;")
-            g.addWidget(lab, r, 0, 1, 3)
+            g.addWidget(lab, r, 0, 1, 4)
             r += 1
         # ingresso fisico
         inp = bus_input(b)
@@ -1105,6 +1155,9 @@ class BusDialog(QDialog):
         dev.currentIndexChanged.connect(lambda _i: set_inp("device", dev.currentData() or ""))
         g.addWidget(dev, r, 1)
         g.addWidget(trim_spin(inp["trim"], lambda val: set_inp("trim", float(val))), r, 2)
+        self.in_hmeter = HMeter()
+        self.in_hmeter.setToolTip(tr("Livello dell'ingresso fisico nel bus (dopo il trim); «—» = ingresso spento"))
+        g.addWidget(self.in_hmeter, r, 3)
         r += 1
         chs = QHBoxLayout()
         for key, label, lo in (("ch", tr("Canale (L)"), 1), ("ch2", tr("Canale R (0 = mono)"), 0)):
@@ -1119,7 +1172,7 @@ class BusDialog(QDialog):
         self.in_meter.setMinimumWidth(160)
         chs.addWidget(self.in_meter)
         chs.addStretch(1)
-        g.addLayout(chs, r, 0, 1, 3)
+        g.addLayout(chs, r, 0, 1, 4)
         g.setColumnStretch(1, 1)
         return box
 
@@ -1141,6 +1194,15 @@ class BusDialog(QDialog):
         pk = self.mw.ctrl.audio.bus_meter(bid)
         db = 20 * math.log10(max(max(pk), 1e-6))
         self.meter_lab.setText(tr("Ritorno {0}", "-∞" if db < -59 else f"{db:+.0f} dB"))
+        try:                                    # vumeter delle sorgenti: cue che mandano al bus e ingresso fisico
+            sm = self.mw.ctrl.audio.bus_source_meters(bid)
+            for cid, m in list(getattr(self, "src_meters", {}).items()):
+                m.set_peaks(sm.get(cid))
+            if getattr(self, "in_hmeter", None) is not None:
+                ipk, err = self.mw.ctrl.audio.bus_input_meter(bid)
+                self.in_hmeter.set_peaks(ipk)          # l'eventuale errore è nella riga sotto
+        except RuntimeError:                    # finestra ricostruita nel frattempo
+            self.src_meters, self.in_hmeter = {}, None
         lab = getattr(self, "in_meter", None)
         if lab is not None:
             try:
@@ -1150,9 +1212,8 @@ class BusDialog(QDialog):
                 elif err:
                     lab.setText("⚠ " + err)
                     lab.setStyleSheet("color:#e0b040;")
-                else:
-                    idb = 20 * math.log10(max(max(ipk), 1e-6))
-                    lab.setText(tr("Ingresso {0}", "-∞" if idb < -59 else f"{idb:+.0f} dB"))
-                    lab.setStyleSheet("color:#e05050;" if idb > -3 else "")
+                else:                           # il livello è nel vumeter accanto al trim: qui solo gli errori
+                    lab.setText("")
+                    lab.setStyleSheet("")
             except RuntimeError:
                 self.in_meter = None
