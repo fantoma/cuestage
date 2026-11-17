@@ -3518,18 +3518,33 @@ def t_small_screen(w):
             w.inspector.tabs.setCurrentIndex(i)
             run(0.05)
             m = w.minimumSizeHint()
-            if not (m.width() <= 1000 and m.height() <= 640):    # per capire chi allarga (es. su Windows)
+            # soglie per caratteri da 9 punti a 96 dpi (12 pixel); con caratteri più grandi (es. Windows del CI a
+            # 144 dpi) crescono in proporzione
+            from PySide6.QtGui import QFontInfo
+            k = max(1.0, QFontInfo(w.font()).pixelSize() / 12.0)
+            if not (m.width() <= 1000 * k and m.height() <= 640 * k):    # per capire chi allarga (es. su Windows)
                 from PySide6.QtCore import Qt as _Qt
                 tw = w.inspector.tabs
                 cw = tw.cornerWidget(_Qt.TopRightCorner)
-                parts = {"barra": w.centralWidget().layout().itemAt(0).layout().minimumSize().width()
-                         if w.centralWidget().layout().itemAt(0).layout() is not None else None,
+                cl = w.centralWidget().layout()
+                bars = [cl.itemAt(k).layout() for k in range(cl.count()) if cl.itemAt(k).layout() is not None]
+                parts = {"barra": bars[0].minimumSize().width() if bars else None,
                          "ispettore": w.inspector.minimumSizeHint().width(),
                          "schede": tw.tabBar().minimumSizeHint().width(),
                          "frecce": tw.usesScrollButtons(),
                          "angolo": cw.minimumSizeHint().width() if cw is not None else 0,
                          "pagina": tw.currentWidget().minimumSizeHint().width()}
+                parts["scala"] = round(k, 2)
                 raise AssertionError((c.type, w.inspector._tab_keys[i], m, parts))
+    w.inspector.set_cue(None)
+    w.inspector.set_cue(vc)
+    run(0.2)
+    pb = w.inspector.preset_bar                    # schermo stretto: barra dei preset compatta, comandi nel menu
+    if w.inspector.screen() is not None and w.inspector.screen().availableGeometry().width() < 1500:
+        assert pb.compact and not pb._btns[0].isVisible() and pb._compact_acts[0].isVisible()
+    pb.set_compact(False)
+    assert pb._btns[0].isVisible() and not pb._compact_acts[0].isVisible()
+    pb.set_compact(True)
     w.resize(1200, 700)
     run(0.1)
     texts = [b.text() for b, _f, _s in w._transport_btns]

@@ -2198,6 +2198,7 @@
   "Web ← {0}": "Web ← {0}",
   "Angoli (web): {0}": "Corners (web): {0}",
   "{0} (web · {1})": "{0} (web · {1})",
-  " (questa regia)": " (this control room)"
+  " (questa regia)": " (this control room)",
+  "Applica, salva, aggiorna, rinomina o elimina il preset selezionato": "Apply, save, update, rename or delete the selected preset"
  }
 }

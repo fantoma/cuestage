@@ -261,6 +261,23 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         self.cue = cue
         self.rebuild()
 
+    def _compact_preset_bar(self):
+        """Barra dei preset accanto alle schede in versione stretta sugli schermi piccoli (meno di 1500 pixel) o se
+        l'ispettore è stretto: con tutti i pulsanti imponeva all'ispettore una larghezza minima di 450–700 pixel."""
+        bar = getattr(self, "preset_bar", None)
+        if bar is None or not hasattr(bar, "set_compact"):
+            return
+        try:
+            scr = self.screen()
+            narrow = scr is not None and scr.availableGeometry().width() < 1500
+            bar.set_compact(narrow or (self.width() > 0 and self.width() < 760))
+        except RuntimeError:
+            pass
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._compact_preset_bar()
+
     def rebuild(self):
         keys = getattr(self, "_tab_keys", [])
         cur_key = keys[self.tabs.currentIndex()] if 0 <= self.tabs.currentIndex() < len(keys) else ""
@@ -317,6 +334,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         if t in ("audio", "video", "image"):
             # preset della cue (audio e video insieme), sulla riga dei tab
             self.preset_bar = self._preset_bar()
+            self._compact_preset_bar()
             self.tabs.setCornerWidget(self.preset_bar, Qt.TopRightCorner)
             self.preset_bar.show()
         if t == "fade":

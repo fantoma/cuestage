@@ -164,6 +164,9 @@ class CuePresetBar(PresetBar):
         self.use_lab.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         h.addWidget(self.use_lab, 1)
         from PySide6.QtWidgets import QMenu, QToolButton
+        self._lab = lab
+        self._btns, self._compact_acts = [], []
+        m = QMenu(self)
         for text, tip, fn in (
             (tr("Applica"), tr("Copia i valori del preset in questa cue"), self.apply),
             (tr("Salva come…"), tr("Crea un nuovo preset con i valori audio e video attuali di questa cue"),
@@ -175,16 +178,40 @@ class CuePresetBar(PresetBar):
             b.setToolTip(tip)
             b.clicked.connect(fn)
             h.addWidget(b)
+            self._btns.append(b)
+            a = m.addAction(text, fn)            # nella versione compatta i comandi sono tutti nel menu
+            a.setToolTip(tip)
+            self._compact_acts.append(a)
+        sep = m.addSeparator()
+        self._compact_acts.append(sep)
+        m.addAction(tr("Rinomina…"), self.rename)
+        m.addAction(tr("Elimina"), self.delete)
         more = QToolButton()
         more.setText("⋯")
         more.setToolTip(tr("Rinomina o elimina il preset selezionato"))
         more.setPopupMode(QToolButton.InstantPopup)
-        m = QMenu(more)
-        m.addAction(tr("Rinomina…"), self.rename)
-        m.addAction(tr("Elimina"), self.delete)
         more.setMenu(m)
         h.addWidget(more)
+        self._more = more
+        self.compact = None
+        self.set_compact(False)
         self.reload()
+
+    def set_compact(self, on):
+        """Versione stretta per schermi piccoli: solo l'elenco dei preset e il menu ⋯ con tutti i comandi."""
+        on = bool(on)
+        if on == self.compact:
+            return
+        self.compact = on
+        self._lab.setVisible(not on)
+        for b in self._btns:
+            b.setVisible(not on)
+        for a in self._compact_acts:
+            a.setVisible(on)
+        self.combo.setMinimumWidth(90 if on else 130)
+        self._more.setText("Preset ▾" if on else "⋯")
+        self._more.setToolTip(tr("Applica, salva, aggiorna, rinomina o elimina il preset selezionato") if on
+                              else tr("Rinomina o elimina il preset selezionato"))
 
     def presets(self):
         names = {}
