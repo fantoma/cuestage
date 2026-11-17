@@ -65,7 +65,7 @@ get them): GitHub Actions builds them and also tests the program on each system.
   (unzip it and start `CueStage.exe`, even from a USB stick). On the first start Windows SmartScreen may say
   “Windows protected your PC”: *More info › Run anyway* (the program is not signed with a commercial
   certificate).
-- **macOS 12 or later**: `CueStage-<version>-macos-arm64.dmg` for Apple Silicon Macs (M1, M2…),
+- **macOS 12 or later** (12.3 or later on Apple Silicon): `CueStage-<version>-macos-arm64.dmg` for Apple Silicon Macs (M1, M2…),
   `…-macos-x86_64.dmg` for Intel Macs. Open the .dmg and drag CueStage to Applications. If it is not
   notarised, on the first start: right-click (or ctrl-click) on CueStage › *Open* › *Open*; or
   System Settings › Privacy & Security › *Open Anyway*. When asked for access to the **local network**
@@ -95,7 +95,9 @@ The macOS build installs the libraries compiled for **macOS 12** (not for the Ma
 otherwise pick numpy/scipy for macOS 14 and Qt 6.10+, which needs macOS 13, and the app would close right after
 opening on older systems). For the same reason PySide6 stays at 6.9 on macOS (`packaging/macos/constraints.txt`).
 After PyInstaller, `packaging/check_macos_min.py` checks every library inside CueStage.app and stops the build if one
-needs a newer macOS. `MACOS_MIN=13.0 packaging/build_macos.sh` raises the minimum.
+needs a newer macOS. On Apple Silicon the minimum is **12.3**, because SciPy for arm64 is compiled for macOS 12.3
+(its package says 12.0, its libraries require 12.3); on Intel it is 12.0. `MACOS_MIN=13.0 packaging/build_macos.sh`
+raises the minimum.
 
 ## Interface language
 

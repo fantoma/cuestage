@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Costruisce CueStage.app e il .dmg per macOS (12 Monterey o successivo; MACOS_MIN=13.0 per alzarlo).
+# Costruisce CueStage.app e il .dmg per macOS 12 Monterey o successivo (Apple Silicon: 12.3; MACOS_MIN=13.0 per alzarlo).
 #
 #   packaging/build_macos.sh                 (dalla cartella del progetto, su un Mac)
 #
@@ -28,11 +28,17 @@ say "ambiente Python ($("$PY" --version))"
 # Librerie compilate per il macOS minimo (MACOS_MIN), non per il Mac che costruisce: su un Mac recente pip
 # prenderebbe numpy/scipy «macosx_14_0» e PySide6 6.10+ (macOS 13+) e su Monterey l'app si chiuderebbe subito.
 # PySide6 resta sotto la 6.10 (Qt 6.10 richiede macOS 13).
-MACOS_MIN="${MACOS_MIN:-12.0}"
+# Apple Silicon: scipy per arm64 è compilato per macOS 12.3 (le sue librerie lo richiedono, anche se il pacchetto
+# dice 12.0), quindi su quei Mac il minimo è 12.3; sui Mac Intel resta 12.0.
+if [ -z "${MACOS_MIN:-}" ]; then
+    case "$ARCH" in arm64) MACOS_MIN=12.3 ;; *) MACOS_MIN=12.0 ;; esac
+fi
+export MACOS_MIN                                     # anche per cuestage.spec (LSMinimumSystemVersion)
+MACOS_TAG="${MACOS_MIN%%.*}_0"                       # pip: le etichette dei pacchetti da macOS 11 in poi sono «N_0»
 PYV="$("$BUILD/venv/bin/python" -c 'import sys; print(f"{sys.version_info[0]}{sys.version_info[1]}")')"
 WHEELS="$BUILD/wheels-$ARCH"
 rm -rf "$WHEELS"
-"$BUILD/venv/bin/pip" download -q --only-binary=:all: --platform "macosx_${MACOS_MIN/./_}_$ARCH" \
+"$BUILD/venv/bin/pip" download -q --only-binary=:all: --platform "macosx_${MACOS_TAG}_$ARCH" \
     --python-version "$PYV" --implementation cp -d "$WHEELS" -r requirements.txt -c packaging/macos/constraints.txt
 "$BUILD/venv/bin/pip" install -q --no-index --find-links "$WHEELS" -r requirements.txt \
     -c packaging/macos/constraints.txt
