@@ -3501,6 +3501,37 @@ def t_bus_control_overlap(w):
     _ = dsp
 
 
+def t_small_screen(w):
+    """Schermo 1366×768: la finestra principale (anche con una cue video nell'ispettore) non deve chiedere più
+    spazio dello schermo; sugli schermi stretti i pulsanti di trasporto mostrano solo il simbolo."""
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    vc = Cue("video", number="1", name="V", file=make_video("small.mp4"))
+    sh.cues = [vc, Cue("audio", number="2", name="A", file=tone("small.wav", sec=1))]
+    w._set_show(sh)
+    run(0.2)
+    for c in sh.cues:
+        w.inspector.set_cue(None)
+        w.inspector.set_cue(c)
+        run(0.3)
+        for i in range(w.inspector.tabs.count()):
+            w.inspector.tabs.setCurrentIndex(i)
+            run(0.05)
+            m = w.minimumSizeHint()
+            assert m.width() <= 1000 and m.height() <= 640, (c.type, w.inspector._tab_keys[i], m)
+    w.resize(1200, 700)
+    run(0.1)
+    texts = [b.text() for b, _f, _s in w._transport_btns]
+    assert texts[0] == "❚❚" and texts[2].endswith("STOP") and not w.clock.isVisible(), texts
+    w.COMPACT_W = 0                               # schermo largo: testi completi
+    scr_wide = w.screen() is not None and w.screen().availableGeometry().width() >= 1500
+    if scr_wide:
+        w.resize(1600, 900)
+        run(0.1)
+        assert w._transport_btns[0][0].text() == w._transport_btns[0][1]
+    del w.COMPACT_W
+
+
 def t_memo_skip(w):
     """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
     sh = Show()
@@ -4320,6 +4351,7 @@ if __name__ == "__main__":
     check("audio letto dal disco (cache float32, anche 24 bit)", t_audio_cache)
     check("motori video: GPU / classico, fotogrammi convertiti solo se servono, stessa geometria", lambda: t_video_engines(w))
     check("valutazione delle prestazioni e buffer consigliato", lambda: t_perf_eval(w))
+    check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))
     check("Controllo bus sovrapposti: voci proprie, vince la più recente; mandate che sfumano col preset", lambda: t_bus_control_overlap(w))
     check("bus dal vivo: valori in uso nelle finestre, modifiche che valgono subito; preset con le mandate", lambda: t_bus_live_edit(w))
     check("delay con pitch per ripetizione (in su e in giù), solo uscita, glissando con Controllo bus", lambda: t_delay_pitch(w))

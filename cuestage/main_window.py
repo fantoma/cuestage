@@ -8,7 +8,7 @@ from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QKeySequence, Q
 from PySide6.QtWidgets import (
     QAbstractItemView, QHBoxLayout, QHeaderView, QLabel,
     QMainWindow, QMessageBox, QPushButton, QScrollArea, QSlider, QSplitter, QStackedWidget,
-    QVBoxLayout, QWidget,
+    QSizePolicy, QVBoxLayout, QWidget,
 )
 
 from .audio_engine import AudioEngine
@@ -307,7 +307,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.master_label.setStyleSheet("font-weight:bold;")
         self.master_slider = MasterSlider(Qt.Horizontal)
         self.master_slider.setRange(-600, 60)        # decimi di dB
-        self.master_slider.setFixedWidth(180)
+        self.master_slider.setMinimumWidth(100)     # si stringe sugli schermi piccoli (1366×768)
+        self.master_slider.setMaximumWidth(180)
         self.master_slider.setFocusPolicy(Qt.NoFocus)
         self.master_slider.setToolTip(tr("Volume globale di audio e video · doppio clic = 0 dB"))
         self.master_slider.valueChanged.connect(self._master_changed)
@@ -325,7 +326,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.pfl_label.setStyleSheet("font-weight:bold;color:#3d8fd6;")
         self.pfl_slider = MasterSlider(Qt.Horizontal)
         self.pfl_slider.setRange(-600, 120)
-        self.pfl_slider.setFixedWidth(130)
+        self.pfl_slider.setMinimumWidth(80)
+        self.pfl_slider.setMaximumWidth(130)
         self.pfl_slider.setFocusPolicy(Qt.NoFocus)
         self.pfl_slider.setToolTip(tr("Volume del preascolto (cuffia): solo le cue con «Preascolto» · doppio clic = 0 dB"))
         self.pfl_slider.valueChanged.connect(self._pfl_changed)
@@ -361,6 +363,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         dv.addStretch(1)
         bar.addLayout(dv)
         self._dim_look = None
+        self._transport_btns = []          # (pulsante, testo, testo corto per schermi stretti)
         self._duck_look = None
         for text, color, fn, tip in (
             (tr("❚❚ Pausa"), "#8a6d1a", self.pause_all, "F7"),
@@ -369,9 +372,10 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         ):
             b = QPushButton(text)
             b.setFixedHeight(70)
-            b.setMinimumWidth(110)
+            b.setMinimumWidth(64)
             b.setFocusPolicy(Qt.NoFocus)
-            b.setToolTip(tip)
+            b.setToolTip(text + " (" + tip + ")")
+            self._transport_btns.append((b, text, text.split(" ")[0] + (" STOP" if fn == self.stop_all else "")))
             b.setStyleSheet(f"QPushButton{{background:{color};color:white;font-weight:bold;"
                             f"font-size:14px;border-radius:8px;padding:0 12px;}}")
             b.clicked.connect(fn)
@@ -541,7 +545,9 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.setCentralWidget(central)
         self.statusBar().showMessage(tr("Pronto"))
         self.engine_label = QLabel()
-        self.statusBar().addPermanentWidget(self.engine_label)
+        self.engine_label.setMinimumWidth(80)            # testo lungo: si taglia invece di allargare la finestra
+        self.engine_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        self.statusBar().addPermanentWidget(self.engine_label, 1)
         self.cluster_btn = QPushButton("")
         self.cluster_btn.setFlat(True)
         self.cluster_btn.setFocusPolicy(Qt.NoFocus)
@@ -1135,6 +1141,29 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         db = float(d.cfg.get("master_db") or 0)
         why = {"on": "acceso", "warn": tr("acceso ma la riduzione è 0 dB"), "off": "spento"}[look]
         self.dim_btn.setToolTip(tr("DIM: abbassa l'uscita master di {0:.1f} dB (la riduzione del Master ducking) — {1}. Anche da MIDI (Impostazioni › MIDI) e OSC (/dim). Tasto destro: impostazioni del ducking.", db, why))
+
+    COMPACT_W = 1300
+
+    def resizeEvent(self, e):
+        """Schermi stretti (es. 1366×768): pulsanti di trasporto con il solo simbolo e orologio nascosto, così la
+        barra in alto non obbliga la finestra a essere più larga dello schermo."""
+        super().resizeEvent(e)
+        self._update_compact()
+
+    def showEvent(self, e):
+        super().showEvent(e)
+        self._update_compact()
+
+    def _update_compact(self):
+        scr = self.screen()
+        narrow_screen = scr is not None and scr.availableGeometry().width() < 1500
+        compact = narrow_screen or self.width() < self.COMPACT_W
+        if compact != getattr(self, "_compact", None):
+            self._compact = compact
+            for b, full, short in getattr(self, "_transport_btns", []):
+                b.setText(short if compact else full)
+            if getattr(self, "clock", None) is not None:
+                self.clock.setVisible(not compact)
 
     def closeEvent(self, e):
         if not self._confirm_discard():

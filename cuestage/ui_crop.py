@@ -62,7 +62,7 @@ class CropView(QWidget):
         self.keep_aspect_fn = lambda: True    # True = la dimensione mantiene le proporzioni
         self.out_size_fn = None               # -> (w, h) dell'uscita in pixel
         self._frozen = None                   # durante un trascinamento: (k della vista, centro)
-        self.setMinimumSize(300, 150)
+        self.setMinimumSize(240, 100)   # schermi piccoli (1366×768)
         self.setMouseTracking(True)
         self.setToolTip(tr("Trascina i quadratini: dimensione · Alt+trascina: cambia le proporzioni · "
                            "Ctrl+trascina: crop · Maiusc: simmetrico · rotella: dimensione · doppio clic: togli il crop"))
@@ -419,7 +419,7 @@ class OutputFrameView(QWidget):
         self.state_fn = lambda: cue
         self.locked_fn = lambda: None
         self.drag = None
-        self.setMinimumSize(300, 150)
+        self.setMinimumSize(240, 100)
         self.setMouseTracking(True)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)

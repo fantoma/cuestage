@@ -1318,6 +1318,10 @@ duplicate · Del delete · Ctrl+↑/↓ move · Ctrl+G geometry · Ctrl+S save �
 Ctrl+H history · Ctrl+Alt+V show versions. Files and folders can be dragged from the file manager into the list and
 cues can be reordered with the mouse.
 
+Small screens (e.g. 1366×768 laptops): on screens narrower than 1500 pixels the Pause / Resume / STOP buttons show
+only their symbol (full name in the tooltip) and the clock is hidden; in the Video / Image tab of the inspector the
+fields and the preview are separated by a draggable divider, so the window always fits the screen.
+
 ## Technical notes
 
 - Code structure (`cuestage/`):

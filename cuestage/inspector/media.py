@@ -1221,15 +1221,21 @@ class MediaTabsMixin:
         hint.setStyleSheet("color:#888; font-size:10px;")
         f.addRow(reset)
         f.addRow(hint)
-        left = self._scrolled(w)   # scorre solo la colonna dei campi
-        left.setMinimumWidth(w.sizeHint().width() + 20)
-        left.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        h.addWidget(left, 0)
+        left = self._scrolled(w)   # scorre la colonna dei campi (anche in orizzontale se lo spazio è poco)
+        left.setMinimumWidth(min(w.sizeHint().width() + 20, 260))
+        left.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        # campi e anteprima in un divisore trascinabile: su schermi piccoli (1366×768) la scheda non obbliga la
+        # finestra a essere più larga dello schermo
+        from PySide6.QtWidgets import QSplitter
+        split = QSplitter(Qt.Horizontal)
+        split.setChildrenCollapsible(False)
+        split.addWidget(left)
+        h.addWidget(split, 1)
 
         # --- editor visivo del crop (fermo immagine con timeline per i video)
         self.crop_panel = CropPanel(cue, self.loader, self.ctrl.image, self.ctrl.comp,
                                     lambda: self.show_fn().settings)
-        self.crop_panel.setMinimumWidth(560)
+        self.crop_panel.setMinimumWidth(300)
 
         def crop_dragged():
             self.refresh_fields()
@@ -1237,7 +1243,10 @@ class MediaTabsMixin:
         self.crop_panel.changed.connect(crop_dragged)
         self.crop_panel.kbar.presetInUse.connect(self._show_in_use)
         QTimer.singleShot(0, self.crop_panel.kbar.update_in_use)
-        h.addWidget(self.crop_panel, 1)
+        split.addWidget(self.crop_panel)
+        split.setStretchFactor(0, 0)
+        split.setStretchFactor(1, 1)
+        split.setSizes([w.sizeHint().width() + 20, 600])
         return outer
 
     def _update_px_labels(self):
