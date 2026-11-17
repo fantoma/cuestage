@@ -1109,7 +1109,8 @@ def t_pfl_buttons(w):
     run(0.2)
     assert gc.pfl and gc.id not in w.ctrl.instances      # PFL acceso, la cue non è partita
     r = w.grid.canvas.cell_rect(0, 0)
-    QTest.mouseClick(w.grid.canvas, Qt.LeftButton, Qt.NoModifier, QPoint(int(r.center().x()), int(r.bottom() - 12)))
+    # in basso a sinistra: fuori dal pulsante PFL anche se la casella è bassa (finestra piccola)
+    QTest.mouseClick(w.grid.canvas, Qt.LeftButton, Qt.NoModifier, QPoint(int(r.left() + 10), int(r.bottom() - 5)))
     wait_until(lambda: gc.id in w.ctrl.instances)
     assert gc.id in w.ctrl.instances and w.ctrl.instances[gc.id].pfl   # il resto della casella la avvia
     w.ctrl.stop_all(0)
@@ -3529,9 +3530,18 @@ def t_small_screen(w):
                 from PySide6.QtCore import Qt as _Qt
                 tw = w.inspector.tabs
                 cw = tw.cornerWidget(_Qt.TopRightCorner)
-                cl = w.centralWidget().layout()
-                bars = [cl.itemAt(k).layout() for k in range(cl.count()) if cl.itemAt(k).layout() is not None]
-                parts = {"barra": bars[0].minimumSize().width() if bars else None,
+                bw = w._bar_widget
+                bl = bw.layout()
+                items = []
+                for k in range(bl.count()):
+                    it = bl.itemAt(k)
+                    x = it.widget()
+                    if x is not None and x.isVisible():
+                        items.append((type(x).__name__, getattr(x, "text", lambda: "")()[:12],
+                                      max(x.minimumSizeHint().width(), x.minimumWidth())))
+                    elif it.layout() is not None:
+                        items.append(("L", it.layout().minimumSize().width()))
+                parts = {"barra": bw.minimumSizeHint().width(), "elementi": items,
                          "ispettore": w.inspector.minimumSizeHint().width(),
                          "schede": tw.tabBar().minimumSizeHint().width(),
                          "frecce": tw.usesScrollButtons(),

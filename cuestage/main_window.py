@@ -86,6 +86,48 @@ class MasterSlider(QSlider):
         self.setValue(0)
 
 
+class _BarScroll(QScrollArea):
+    """Barra in alto (GO, standby, volume, trasporto…) che non impone mai la sua larghezza alla finestra: se lo
+    spazio non basta compare una barra di scorrimento orizzontale invece di allargare la finestra oltre lo schermo
+    (con molti pulsanti — proiettori, mixer, regie — o caratteri grandi)."""
+
+    def __init__(self, inner):
+        super().__init__()
+        self.inner = inner
+        self.setWidget(inner)
+        self.setWidgetResizable(True)
+        self.setFrameShape(QScrollArea.NoFrame)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+        self._fit()
+
+    def minimumSizeHint(self):
+        from PySide6.QtCore import QSize
+        return QSize(120, self.height())
+
+    def sizeHint(self):
+        from PySide6.QtCore import QSize
+        return QSize(self.inner.sizeHint().width(), self.height())
+
+    def _fit(self):
+        need = self.inner.minimumSizeHint().width() > self.viewport().width() + 1
+        h = self.inner.minimumSizeHint().height() + (self.horizontalScrollBar().sizeHint().height() if need else 0)
+        if self.height() != h:
+            self.setFixedHeight(h)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._fit()
+
+    def event(self, e):
+        from PySide6.QtCore import QEvent
+        r = super().event(e)
+        if e.type() == QEvent.LayoutRequest:
+            self._fit()
+        return r
+
+
 class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, GroupsMixin, GridMixin, ListsMixin,
                  RemoteMixin, WebMixin, VideoMixin, FilesMixin, HistoryMixin, QMainWindow):
     def __init__(self, path=None):
@@ -387,7 +429,10 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         cf.setPointSize(18)
         self.clock.setFont(cf)
         bar.addWidget(self.clock)
-        root.addLayout(bar)
+        self._bar_widget = QWidget()
+        self._bar_widget.setLayout(bar)
+        bar.setContentsMargins(0, 0, 0, 0)
+        root.addWidget(_BarScroll(self._bar_widget))
 
         # tabella cue
         self.model = CueTableModel(self.show_data, self.ctrl, self.loader)
