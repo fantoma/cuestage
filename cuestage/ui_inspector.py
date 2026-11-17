@@ -56,6 +56,10 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         self.header.setStyleSheet("font-weight:bold; font-size:13px; padding:4px;")
         lay.addWidget(self.header)
         self.tabs = QTabWidget()
+        # frecce di scorrimento sempre (alcuni stili, es. Windows, le tolgono e la barra delle schede impone la
+        # larghezza di tutte le schede: su uno schermo 1366×768 la finestra usciva dallo schermo)
+        self.tabs.setUsesScrollButtons(True)
+        self.tabs.tabBar().setExpanding(False)
         lay.addWidget(self.tabs)
         from PySide6.QtCore import QSettings
         self._tab_keys = []

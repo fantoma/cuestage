@@ -2,7 +2,7 @@
 from ..i18n import tr
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (
-    QComboBox, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton,
+    QComboBox, QHBoxLayout, QInputDialog, QLabel, QMessageBox, QPushButton, QSizePolicy,
     QWidget,
 )
 
@@ -31,7 +31,9 @@ class PresetBar(QWidget):
         h.addWidget(self.combo, 1)
         self.use_lab = QLabel()
         self.use_lab.setStyleSheet("color:#888;")
-        h.addWidget(self.use_lab)
+        self.use_lab.setMinimumWidth(0)          # «in uso: …» lungo: si taglia, non allarga la barra
+        self.use_lab.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        h.addWidget(self.use_lab, 1)
         for text, tip, fn in (
             (tr("Applica"), tr("Copia i valori del preset in questa cue"), self.apply),
             (tr("Salva come…"), tr("Crea un nuovo preset con i valori attuali di questa cue"), self.save_new),
@@ -57,6 +59,7 @@ class PresetBar(QWidget):
         na, nb, f = state
         cur = nb if f >= 0.999 else na
         self.use_lab.setText(tr("▸ in uso: ") + kfm.describe(state))
+        self.use_lab.setToolTip(self.use_lab.text())
         self.use_lab.setStyleSheet("color:#ffaa28;" if self.kind == "visual" else "color:#50c8ff;")
         if cur != kfm.BASE and cur in self.presets():
             self.combo.setCurrentText(cur)
@@ -157,7 +160,9 @@ class CuePresetBar(PresetBar):
         h.addWidget(self.combo)
         self.use_lab = QLabel()
         self.use_lab.setStyleSheet("color:#888;")
-        h.addWidget(self.use_lab)
+        self.use_lab.setMinimumWidth(0)          # «in uso: …» lungo: si taglia, non allarga la barra
+        self.use_lab.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        h.addWidget(self.use_lab, 1)
         from PySide6.QtWidgets import QMenu, QToolButton
         for text, tip, fn in (
             (tr("Applica"), tr("Copia i valori del preset in questa cue"), self.apply),

@@ -3518,7 +3518,18 @@ def t_small_screen(w):
             w.inspector.tabs.setCurrentIndex(i)
             run(0.05)
             m = w.minimumSizeHint()
-            assert m.width() <= 1000 and m.height() <= 640, (c.type, w.inspector._tab_keys[i], m)
+            if not (m.width() <= 1000 and m.height() <= 640):    # per capire chi allarga (es. su Windows)
+                from PySide6.QtCore import Qt as _Qt
+                tw = w.inspector.tabs
+                cw = tw.cornerWidget(_Qt.TopRightCorner)
+                parts = {"barra": w.centralWidget().layout().itemAt(0).layout().minimumSize().width()
+                         if w.centralWidget().layout().itemAt(0).layout() is not None else None,
+                         "ispettore": w.inspector.minimumSizeHint().width(),
+                         "schede": tw.tabBar().minimumSizeHint().width(),
+                         "frecce": tw.usesScrollButtons(),
+                         "angolo": cw.minimumSizeHint().width() if cw is not None else 0,
+                         "pagina": tw.currentWidget().minimumSizeHint().width()}
+                raise AssertionError((c.type, w.inspector._tab_keys[i], m, parts))
     w.resize(1200, 700)
     run(0.1)
     texts = [b.text() for b, _f, _s in w._transport_btns]
@@ -3831,7 +3842,8 @@ def t_cluster_slow_transfer():
             time.sleep(len(payload) / 2e6)              # ~2 MB/s
         return old_send(sock, lock, obj, payload)
     cl.send_frame = slow_send
-    cl.CLIENT_TIMEOUT = 0.5                             # prima: secondaria scollegata se il file durava di più
+    cl.CLIENT_TIMEOUT = 1.0                             # il file dura ~1,5 s: prima la secondaria veniva scollegata
+    # (1 s e non meno: con il computer carico un battito in ritardo bastava a far fallire la prova)
     try:
         sh = Show()
         sh.settings["output_fullscreen"] = False
