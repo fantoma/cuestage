@@ -750,13 +750,30 @@ class MediaTabsMixin:
             v_ = getattr(inst, "voice", None)
             rk = getattr(v_, "fx", None)
             return rk.meter(fid) if rk is not None else {}
-        rack = RackEditor(("cue", cue.id), cue.label(), get_list, set_list, dsp.CUE_FX, meter)
+        def live_ov():
+            inst = self.ctrl.instances.get(cue.id)
+            return getattr(inst, "_fx_override", None) if inst is not None else None
+
+        def live_rack():
+            ov = live_ov()
+            return ov[0] if ov is not None and ov[0] is not None else None
+
+        def live_sends():
+            ov = live_ov()
+            return ov[1] if ov is not None and ov[1] is not None else None
+
+        def set_live_sends(sends):
+            inst = self.ctrl.instances.get(cue.id)
+            ov = getattr(inst, "_fx_override", None) if inst is not None else None
+            if ov is not None and ov[1] is not None:
+                inst._fx_override = (ov[0], sends)
+        rack = RackEditor(("cue", cue.id), cue.label(), get_list, set_list, dsp.CUE_FX, meter, live_fn=live_rack)
         rack.changed.connect(self._emit)
         bv.addWidget(rack)
         v.addWidget(box)
         sbox = QGroupBox(tr("Mandate ai bus effetti (riverbero, delay…)"))
         sv = QVBoxLayout(sbox)
-        sends = SendsEditor(cue, self.show_fn)
+        sends = SendsEditor(cue, self.show_fn, live_fn=live_sends, live_set=set_live_sends)
         sends.changed.connect(self._emit)
         sv.addWidget(sends)
         b = QPushButton(tr("Bus effetti…"))

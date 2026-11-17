@@ -1342,6 +1342,9 @@ class BusControlInstance(Instance):
             self.ctrl.message.emit(tr("Controllo bus '{0}': bus non trovato", c.label()))
             self.finish()
             return
+        if not c.bus_set:
+            self.ctrl.message.emit(tr("Controllo bus '{0}': nessun valore da cambiare (spunta «cambia» accanto ai "
+                                      "parametri nell'ispettore)", c.label()))
         to = apply_control(self.ctrl.bus_spec(b), c.bus_set or {})
         self.fade = BusFade(self.ctrl, b["id"], to, float(c.fade_duration or 0), c.fade_shape)
         if self.fade.done:

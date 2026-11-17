@@ -2189,6 +2189,7 @@
   "pitch {0:+.1f} st": "višina {0:+.1f} pt",
   "pitch {0:+.1f} st a ripetizione": "višina {0:+.1f} pt na ponovitev",
   "⚡ Il bus sta usando valori impostati dal vivo da una cue (Controllo bus o Cambia preset): qui vedi quelli in uso; le modifiche valgono subito e restano nello show. «Ripristina» torna ai valori salvati.": "⚡ Vodilo uporablja vrednosti, ki jih je v živo nastavila iztočnica (Nadzor vodila ali Zamenjaj prednastavitev): tu vidiš tiste v uporabi; spremembe veljajo takoj in ostanejo v predstavi. »Obnovi« vrne shranjene vrednosti.",
-  "Doppio clic: 0 dB": "Dvojni klik: 0 dB"
+  "Doppio clic: 0 dB": "Dvojni klik: 0 dB",
+  "Controllo bus '{0}': nessun valore da cambiare (spunta «cambia» accanto ai parametri nell'ispettore)": "Nadzor vodila '{0}': nič za spremeniti (označi »spremeni« ob parametrih v nadzorniku)"
  }
 }

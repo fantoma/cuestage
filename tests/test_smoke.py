@@ -3315,6 +3315,33 @@ def t_bus_live_edit(w):
     assert wait_until(lambda: abs(row.sp.value() - 10.0) < 1e-6, 3)
     d._meter()
     assert any("fb 10 %" in rack.list.item(i).text() for i in range(rack.list.count()))    # testo del rack
+    # Spazio con la finestra dell'effetto in primo piano: è il GO (anche col fuoco su «Acceso»), l'effetto resta acceso
+    from PySide6.QtCore import Qt as _Qt
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QApplication, QLineEdit
+    bc.bus_set = {"fx": {fid: {"feedback": 20.0}}}
+    bc.fade_duration = 0.0
+    w.ctrl.playhead_to(bc) if hasattr(w.ctrl, "playhead_to") else None
+    fw.show()
+    fw.activateWindow()
+    fw.on_cb.setFocus()
+    run(0.2)
+    if QApplication.activeWindow() is fw:          # con la piattaforma «offscreen» il fuoco non sempre si sposta
+        QTest.keyClick(fw.on_cb, _Qt.Key_Space)
+        run(0.3)
+        assert fw.on_cb.isChecked() and b["fx"][0].get("on", True)
+        assert wait_until(lambda: rt().rack.procs[fid].p["feedback"] == 20.0, 3), "lo Spazio non ha dato il GO"
+        name = [x for x in d.findChildren(QLineEdit) if x.text() == b["name"]]
+        if name:                                   # nel nome del bus lo Spazio resta uno spazio
+            d.activateWindow()
+            name[0].setFocus()
+            run(0.2)
+            if QApplication.activeWindow() is d:
+                before = len(w.ctrl.instances)
+                QTest.keyClick(name[0], _Qt.Key_Space)
+                run(0.1)
+                assert name[0].text().endswith(" ")
+                _ = before
     fw.close()
     _WINDOWS.clear()
     d.close()
@@ -3350,6 +3377,25 @@ def t_bus_live_edit(w):
     assert c.sends[0]["db"] == -6.0
     shown = [x.rows[b["id"]][0].value() for x in ins.findChildren(SendsEditor) if b["id"] in x.rows and x.isVisible()]
     assert shown and all(abs(v + 6.0) < 1e-6 for v in shown), shown
+    # Cambia preset sulla cue in esecuzione: il fader della mandata mostra quella in uso e la si può regolare
+    c.sends = [{"bus": b["id"], "db": -30.0, "pre": False}]
+    w.ctrl.start_cue(c)
+    run(0.3)
+    pc = Cue("preset", number="9", name="PC")
+    pc.target, pc.preset_audio, pc.fade_duration = c.id, "A", 0.0
+    sh.cues.append(pc)
+    w.ctrl.start_cue(pc)
+    run(0.5)
+    se = [x for x in ins.findChildren(SendsEditor) if b["id"] in x.rows and x.isVisible()][0]
+    assert abs(se.rows[b["id"]][0].value() + 6.0) < 0.05, se.rows[b["id"]][0].value()   # in uso: −6 (preset A)
+    assert c.sends[0]["db"] == -30.0                                       # salvato: invariato
+    se.rows[b["id"]][0].setValue(-12.0)
+    inst = w.ctrl.instances[c.id]
+    assert inst._fx_override[1][0]["db"] == -12.0                          # vale subito per la cue in esecuzione
+    assert wait_until(lambda: abs(float(inst.voice.sends[0][1].max()) - 10 ** (-12 / 20)) < 1e-3, 3)
+    w.ctrl.stop_all(0)
+    run(0.2)
+    sh.cues.remove(pc)
     # keyframe audio con preset: le mandate seguono il preset in uso (e sfumano tra due keyframe)
     from cuestage import keyframes as kf
     c.sends = [{"bus": b["id"], "db": -30.0, "pre": False}]

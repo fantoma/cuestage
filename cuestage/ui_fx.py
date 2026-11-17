@@ -2,7 +2,7 @@
 per ogni effetto, curva dell'EQ, mandate delle cue ai bus e finestra dei bus effetti."""
 import math
 
-from PySide6.QtCore import QPointF, QRectF, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QPointF, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFormLayout, QGridLayout, QGroupBox,
@@ -454,6 +454,52 @@ class HMeter(QWidget):
         p.drawText(QRectF(W + 4, 0, tw, H), Qt.AlignVCenter | Qt.AlignLeft, self.text())
 
 
+class _ShowKeys(QObject):
+    """Filtro dell'applicazione: nelle finestre degli effetti e dei bus lo Spazio è sempre il GO, anche se il
+    fuoco è su una casella di spunta o un pulsante (prima lo Spazio accendeva / spegneva l'effetto o premeva il
+    pulsante, e la cue non partiva). Nei campi di testo veri (nome del bus) lo Spazio resta uno spazio."""
+
+    def eventFilter(self, obj, e):
+        from PySide6.QtCore import QEvent
+        from PySide6.QtWidgets import QAbstractSpinBox, QApplication, QLineEdit, QPlainTextEdit, QTextEdit
+        t = e.type()
+        if t not in (QEvent.ShortcutOverride, QEvent.KeyPress):
+            return False
+        if e.key() != Qt.Key_Space or e.modifiers() not in (Qt.NoModifier, Qt.KeypadModifier):
+            return False
+        win = QApplication.activeWindow()
+        mw = getattr(win, "_show_keys", None) if win is not None else None
+        if mw is None:
+            return False
+        fw = QApplication.focusWidget()
+        if isinstance(fw, (QPlainTextEdit, QTextEdit)) or (
+                isinstance(fw, QLineEdit) and not isinstance(fw.parentWidget(), QAbstractSpinBox)):
+            return False
+        if t == QEvent.ShortcutOverride:
+            e.accept()                      # niente scorciatoie del widget: arriva il KeyPress qui sotto
+            return True
+        if not e.isAutoRepeat():
+            mw.go()
+        return True
+
+
+def install_show_keys(win):
+    """Tasti di regia (Spazio = GO, Esc = stop, F7/F8 = pausa/riprendi) anche su questa finestra: con la finestra di
+    un effetto o dei bus in primo piano il GO deve partire comunque."""
+    from PySide6.QtWidgets import QApplication
+    p = win.parentWidget()
+    while p is not None and not hasattr(p, "_build_shortcuts"):
+        p = p.parentWidget()
+    if p is None:
+        return
+    win._show_keys = p                      # finestra principale che riceve il GO
+    p._build_shortcuts(win)
+    app = QApplication.instance()
+    if getattr(app, "_cs_show_keys", None) is None:
+        app._cs_show_keys = _ShowKeys()
+        app.installEventFilter(app._cs_show_keys)
+
+
 class FxWindow(QDialog):
     """Finestra in sovrimpressione con i parametri di un effetto del rack: resta aperta sopra CueStage e le
     modifiche valgono subito (anche mentre la cue o il bus suona)."""
@@ -491,6 +537,7 @@ class FxWindow(QDialog):
         self.timer.timeout.connect(self._poll)
         self.timer.start()
         _WINDOWS[(owner_key, fid)] = self
+        install_show_keys(self)
 
     def done(self, r):
         _WINDOWS.pop((self.owner_key, self.fid), None)
@@ -986,11 +1033,19 @@ class SendsEditor(QWidget):
     """Mandate di una cue ai bus effetti: livello (spenta = −∞) e «pre» (prima di volume e fade)."""
     changed = Signal()
 
-    def __init__(self, cue, show_fn, parent=None):
+    def __init__(self, cue, show_fn, parent=None, live_fn=None, live_set=None):
         super().__init__(parent)
         from .buses import buses
         self.cue = cue
         self.rows = {}
+        # mandate in uso dal vivo (Cambia preset, keyframe con preset): i fader le seguono; una modifica fatta qui
+        # vale anche per la cue in esecuzione (live_set)
+        self.live_fn, self.live_set = live_fn, live_set
+        if live_fn is not None:
+            self._timer = QTimer(self)
+            self._timer.setInterval(150)
+            self._timer.timeout.connect(self._follow_live)
+            self._timer.start()
         g = QGridLayout(self)
         g.setContentsMargins(0, 0, 0, 0)
         bl = buses(show_fn())
@@ -1017,10 +1072,22 @@ class SendsEditor(QWidget):
             g.addWidget(pre, r, 2)
         g.setColumnStretch(1, 1)
 
-    def reload(self):
-        """Rilegge le mandate della cue (es. dopo «Applica» di un preset)."""
-        cur = {s.get("bus"): s for s in (self.cue.sends or []) if isinstance(s, dict)}
+    def _follow_live(self):
+        live = self.live_fn() if self.live_fn is not None else None
+        self.reload(live if live is not None else self.cue.sends, skip_active=True)
+
+    def reload(self, sends=None, skip_active=False):
+        """Rilegge le mandate della cue (es. dopo «Applica» di un preset) o quelle in uso dal vivo."""
+        if sends is None:
+            sends = self.cue.sends
+        cur = {s.get("bus"): s for s in (sends or []) if isinstance(s, dict)}
         for bid, (sp, pre) in self.rows.items():
+            if skip_active and (sp.sl.isSliderDown() or sp.sp.hasFocus()):
+                continue
+            want_db = cur.get(bid, {}).get("db")
+            want = -60.0 if want_db is None else max(-60.0, min(12.0, float(want_db)))
+            if skip_active and abs(sp.value() - want) < 0.05 and pre.isChecked() == bool(cur.get(bid, {}).get("pre")):
+                continue
             s = cur.get(bid, {})
             db = s.get("db")
             for w_, fn in ((sp, lambda: sp.setValue(-60.0 if db is None else float(db))),
@@ -1035,6 +1102,12 @@ class SendsEditor(QWidget):
         if db is not None or pre.isChecked():
             sends.append({"bus": bid, "db": db, "pre": bool(pre.isChecked())})
         self.cue.sends = sends
+        if self.live_set is not None and self.live_fn is not None and self.live_fn() is not None:
+            import copy
+            live = [x for x in (self.live_fn() or []) if isinstance(x, dict) and x.get("bus") != bid]
+            if db is not None or pre.isChecked():
+                live.append({"bus": bid, "db": db, "pre": bool(pre.isChecked())})
+            self.live_set(copy.deepcopy(live))
         self.changed.emit()
 
 
@@ -1048,6 +1121,7 @@ class BusDialog(QDialog):
         self.setWindowTitle(tr("Bus effetti"))
         self.setWindowFlags(Qt.Tool | Qt.WindowCloseButtonHint | Qt.WindowTitleHint)
         self.resize(1120, 720)               # largo abbastanza per i vumeter delle sorgenti
+        install_show_keys(self)
         h = QHBoxLayout(self)
         left = QVBoxLayout()
         self.list = QListWidget()
@@ -1197,8 +1271,15 @@ class BusDialog(QDialog):
         v.addWidget(pb)
         f = QFormLayout()
         name = QLineEdit(b.get("name") or "")
-        name.editingFinished.connect(lambda: (b.__setitem__("name", name.text().strip() or b.get("name")),
-                                              self._dirty(), self.reload(b["id"])))
+        def name_done():
+            new = name.text().strip() or b.get("name")
+            if new == b.get("name"):
+                return
+            b["name"] = new
+            self._dirty()
+            # dopo: ricaricare adesso distruggerebbe la casella dentro il suo stesso segnale (crash)
+            QTimer.singleShot(0, lambda bid=b["id"]: self.reload(bid))
+        name.editingFinished.connect(name_done)
         f.addRow(tr("Nome"), name)
         eng = self.mw.ctrl.audio
         from .audio_engine import device_label, list_devices

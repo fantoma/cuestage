@@ -2189,6 +2189,7 @@
   "pitch {0:+.1f} st": "pitch {0:+.1f} st",
   "pitch {0:+.1f} st a ripetizione": "pitch {0:+.1f} st per repeat",
   "⚡ Il bus sta usando valori impostati dal vivo da una cue (Controllo bus o Cambia preset): qui vedi quelli in uso; le modifiche valgono subito e restano nello show. «Ripristina» torna ai valori salvati.": "⚡ The bus is using values set live by a cue (Bus control or Change preset): here you see the ones in use; changes apply at once and stay in the show. “Restore” goes back to the saved values.",
-  "Doppio clic: 0 dB": "Double-click: 0 dB"
+  "Doppio clic: 0 dB": "Double-click: 0 dB",
+  "Controllo bus '{0}': nessun valore da cambiare (spunta «cambia» accanto ai parametri nell'ispettore)": "Bus control '{0}': nothing to change (tick “change” next to the parameters in the inspector)"
  }
 }
