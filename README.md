@@ -127,7 +127,7 @@ The web interface for phones and tablets and the start-up self-test messages are
 | **Video** | MP4, MOV, MKV, WebM… same options as audio + layer, opacity, fit, **crop**, **position** and **size** |
 | **Image** | PNG, JPG, … duration (0 = until stopped), fade in/out, layer, opacity, crop, position and size |
 | **Change preset** | Takes a running cue to one of its presets (audio: volume, matrix, output volumes, rack and sends; video: crop, offset, size, perspective, opacity) over the chosen transition time. It only applies to that run: the saved cue does not change. The target list also contains the **effect buses** (“Bus: name”) with their presets: numeric values (level, trims, effect parameters) fade, the rest changes at once |
-| **Bus control** | Changes an effect bus live: return level, mute, physical input on/off and its trim, and for each effect of the bus on/off and its parameters (only the items marked “change”). Numeric values fade over the transition time with the chosen shape. The values stay until another cue changes them, the show is reloaded or “Restore” is pressed in the buses window; the saved bus does not change |
+| **Bus control** | Changes an effect bus live: return level, mute, physical input on/off and its trim, and for each effect of the bus on/off and its parameters (only the items marked “change”). Numeric values fade over the transition time with the chosen shape. Each cue drives only the items it changes: two Bus control cues on the same bus that change different items work together, while if a newer cue changes an item that another one is still fading, the newer cue takes it over (also when its target value is the current one). An effect level at −60 dB switches the effect output off. The values stay until another cue changes them, the show is reloaded or “Restore” is pressed in the buses window; the saved bus does not change |
 | **Fade** | Takes the volume and/or opacity of another cue to a value, with duration and shape (S, linear, dB). Presets “Fade OUT + stop” and “Fade IN” (starts the target from silence) |
 | **Command** | Play, Stop (with fade), Pause, Resume, **Exit loop** (the target finishes the lap in progress and goes on to OUT), Stop all, Move playhead |
 | **OSC** | Sends an OSC message (host, port, address, automatically typed arguments) |
@@ -816,7 +816,8 @@ send only the effect to the PA.
   the cue is not playing), for the physical input the level of the input. Mind the latency of
   a live input through the computer (tens of milliseconds, more with PipeWire or a large buffer): use it for the
   effect only (e.g. a microphone into the reverb) and leave the dry signal to the mixing desk.
-- **Presets**: the cue's audio presets also save its **rack and sends** (and “Change preset” cues apply them);
+- **Presets**: the cue's audio presets also save its **rack and sends** (and “Change preset” cues apply them: the
+  rack at once, the sends fading over the transition time);
   each bus has its own **presets** (rack, matrix, level, mute, trims, physical input) in its window, and “Change
   preset” and **Bus control** cues change buses during the show (see “Cue types”). When a cue has changed a bus
   live, the buses window says so and shows the **values in use** (also in the effect windows, which follow a fade

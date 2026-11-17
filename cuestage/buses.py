@@ -204,6 +204,26 @@ def control_params(kind):
     return list(PARAMS.get(kind, []))
 
 
+def control_paths(changes):
+    """Voci dello stato del bus comandate da una cue Controllo bus (percorsi come in engine._spec_diff)."""
+    ch = changes or {}
+    out = [(k,) for k in ("level_db", "mute") if k in ch]
+    if "input_on" in ch:
+        out.append(("input", "on"))
+    if "input_trim" in ch:
+        out.append(("input", "trim"))
+    for fid, vals in (ch.get("fx") or {}).items():
+        for k in vals or {}:
+            if k.startswith("band") and k.endswith("_g"):
+                try:
+                    out.append(("fx", ("#", fid), "bands", int(k[4:-2]) - 1, "g"))
+                except ValueError:
+                    pass
+            else:
+                out.append(("fx", ("#", fid), k))
+    return out
+
+
 def apply_control(spec, changes):
     """Stato del bus dopo i cambiamenti di una cue «Controllo bus» (spec non viene modificato).
     changes: {level_db, mute, input_on, input_trim, fx: {id effetto: {on, parametro: valore}}}."""

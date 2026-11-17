@@ -204,8 +204,13 @@ def fx_sends_state(cue, T):
     na, nb, f = _segment(tr, T)
     fa, sa = fx_sends_values(cue, na)
     _fb, sb = fx_sends_values(cue, nb)
-    da = {s.get("bus"): s for s in sa if isinstance(s, dict) and s.get("bus")}
-    db_ = {s.get("bus"): s for s in sb if isinstance(s, dict) and s.get("bus")}
+    return fa, lerp_sends(sa, sb, f)
+
+
+def lerp_sends(sa, sb, f):
+    """Mandate a metà strada tra due elenchi (dB a potenza costante, «spenta» = −∞; «pre» dal più vicino)."""
+    da = {s.get("bus"): s for s in sa or [] if isinstance(s, dict) and s.get("bus")}
+    db_ = {s.get("bus"): s for s in sb or [] if isinstance(s, dict) and s.get("bus")}
     out = []
     for bid in list(da) + [k for k in db_ if k not in da]:
         a, b = da.get(bid, {}), db_.get(bid, {})
@@ -213,7 +218,7 @@ def fx_sends_state(cue, T):
         pre = bool((b if f >= 0.5 and b else a or b).get("pre"))
         if lvl is not None:
             out.append({"bus": bid, "db": round(lvl, 2), "pre": pre})
-    return fa, out
+    return out
 
 
 def is_base(na, nb, f):

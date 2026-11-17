@@ -3435,6 +3435,72 @@ def t_bus_live_edit(w):
     _ = QDoubleSpinBox
 
 
+def t_bus_control_overlap(w):
+    """Cue Controllo bus sullo stesso bus: ognuna tocca solo le sue voci (due cue con voci diverse non si
+    disturbano), la più recente prende in carico le voci che un'altra sta ancora sfumando; −60 dB = effetto
+    spento. Cambia preset con mandate: le mandate sfumano nella durata. Come lo show d'esempio: livello del delay
+    a −60 in 3 s, poi (dopo 3,5 s) di nuovo a 0 dB in 5 s."""
+    from cuestage import dsp
+    from cuestage.buses import new_bus
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    b = new_bus(sh, "Bus 1", ("delay",))
+    fid = b["fx"][0]["id"]
+    src = Cue("audio", number="1", name="Src", file=tone("ov.wav", sec=15))
+    c7 = Cue("buscontrol", number="7", name="Giù")
+    c7.bus_target, c7.bus_set, c7.fade_duration = b["id"], {"fx": {fid: {"level": -60.0}}}, 0.8
+    c8 = Cue("buscontrol", number="8", name="Su")
+    c8.bus_target, c8.bus_set, c8.fade_duration = b["id"], {"fx": {fid: {"level": 0.0}}}, 1.0
+    c8.trigger, c8.delay = "with_prev", 2.0
+    cf = Cue("buscontrol", number="9", name="Feedback")
+    cf.bus_target, cf.bus_set, cf.fade_duration = b["id"], {"fx": {fid: {"feedback": 80.0}}}, 0.8
+    sh.cues = [src, c7, c8, cf]
+    w._set_show(sh)
+    assert wait_until(lambda: b["id"] in w.ctrl.audio.buses, 5)
+    lvl = lambda: w.ctrl.bus_spec(b)["fx"][0]["level"]
+    w.ctrl.start_cue(c7)                         # (c8 parte da sola 2 s dopo: «insieme alla precedente» + ritardo)
+    w.ctrl.start_cue(cf)                         # un'altra voce dello stesso bus, insieme
+    proc = w.ctrl.audio.buses[b["id"]].rack.procs[fid]
+    seen, wet_off, t0 = [], False, time.monotonic()
+    while time.monotonic() - t0 < 5.0:
+        run(0.05)
+        seen.append(lvl())
+        if abs(lvl() + 60.0) < 1e-6 and w.ctrl.audio.buses[b["id"]].rack.procs[fid].wet == 0.0:
+            wet_off = True                       # −60 dB = effetto spento del tutto
+        if seen[-1] == 0.0 and min(seen) <= -59.99 and len(seen) > 5:
+            break
+    assert min(seen) <= -59.99 and any(-59 < x < -5 for x in seen), seen[:12]   # scende sfumando (con cf insieme)
+    assert wet_off and w.ctrl.bus_spec(b)["fx"][0]["feedback"] == 80.0
+    assert wait_until(lambda: abs(lvl()) < 1e-6, 4)               # c8 lo riporta a 0 dB
+    _ = proc
+    # due cue insieme sulla stessa voce: vince la più recente (anche se il valore d'arrivo è quello attuale)
+    w.ctrl.start_cue(c7)
+    run(0.3)
+    w.ctrl.start_cue(c8)
+    v0 = lvl()
+    run(1.5)
+    assert abs(lvl()) < 1e-6 and v0 < -1.0, (v0, lvl())
+    w.ctrl.stop_all(0)
+    run(0.2)
+    # Cambia preset con mandate: sfumano nella durata del cambio
+    src.sends = []
+    src.presets = {"audio": {"eco": {"sends": [{"bus": b["id"], "db": -4.0, "pre": False}]}}}
+    pc = Cue("preset", number="11", name="PC")
+    pc.target, pc.preset_audio, pc.fade_duration, pc.fade_shape = src.id, "eco", 1.0, "linear"
+    sh.cues.append(pc)
+    w.ctrl.start_cue(src)
+    run(0.3)
+    w.ctrl.start_cue(pc)
+    run(0.5)
+    inst = w.ctrl.instances[src.id]
+    mid = inst._sends_spec()[0]["db"]
+    assert -30.0 < mid < -4.5, mid
+    assert wait_until(lambda: abs(inst._sends_spec()[0]["db"] + 4.0) < 1e-6, 3)
+    w.ctrl.stop_all(0)
+    run(0.2)
+    _ = dsp
+
+
 def t_memo_skip(w):
     """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
     sh = Show()
@@ -4254,6 +4320,7 @@ if __name__ == "__main__":
     check("audio letto dal disco (cache float32, anche 24 bit)", t_audio_cache)
     check("motori video: GPU / classico, fotogrammi convertiti solo se servono, stessa geometria", lambda: t_video_engines(w))
     check("valutazione delle prestazioni e buffer consigliato", lambda: t_perf_eval(w))
+    check("Controllo bus sovrapposti: voci proprie, vince la più recente; mandate che sfumano col preset", lambda: t_bus_control_overlap(w))
     check("bus dal vivo: valori in uso nelle finestre, modifiche che valgono subito; preset con le mandate", lambda: t_bus_live_edit(w))
     check("delay con pitch per ripetizione (in su e in giù), solo uscita, glissando con Controllo bus", lambda: t_delay_pitch(w))
     check("buffer da 128 e 256 campioni (stesso suono, effetti compresi) e finestra di uscita mai 1×1", lambda: t_small_buffers(w))

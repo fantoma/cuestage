@@ -83,6 +83,11 @@ def db2lin(db):
     return 10.0 ** (float(db) / 20.0)
 
 
+def _level(db):
+    """Livello d'uscita di un effetto: −60 dB (in fondo) = spento del tutto, come i fader di CueStage."""
+    return 0.0 if float(db) <= -60.0 else db2lin(db)
+
+
 # ======================================================================= filtri (RBJ cookbook)
 
 def _norm(b, a):
@@ -432,7 +437,7 @@ class Delay(_Fx):
         self.fb = max(0.0, min(0.95, float(p["feedback"]) / 100.0))
         self.lp_b, self.lp_a = _onepole("lp", p.get("lp", 6000))
         self.hp_b, self.hp_a = _onepole("hp", p.get("hp", 120))
-        self.wet = db2lin(p.get("level", 0.0)) * max(0.0, min(1.0, float(p.get("mix", 100)) / 100.0))
+        self.wet = _level(p.get("level", 0.0)) * max(0.0, min(1.0, float(p.get("mix", 100)) / 100.0))
         self.dry = 1.0 - max(0.0, min(1.0, float(p.get("mix", 100)) / 100.0))
         # pitch: nel feedback ogni ripetizione sale (o scende) di «pitch» semitoni rispetto alla precedente;
         # con «pitch_out» si sposta solo l'uscita dell'effetto (tutte le ripetizioni insieme, non si accumula)
@@ -552,7 +557,7 @@ class Reverb(_Fx):
         self.tl = np.array([1, 0, 1, 0, 1, 0, 1, 0], np.float64) / 2.0
         self.tr = np.array([0, 1, 0, 1, 0, 1, 0, 1], np.float64) / 2.0
         mix = max(0.0, min(1.0, float(p.get("mix", 100)) / 100.0))
-        self.wet = db2lin(p.get("level", 0.0)) * mix
+        self.wet = _level(p.get("level", 0.0)) * mix
         self.dry = 1.0 - mix
         self.width = wd
         self.sign = np.array([1, -1, 1, -1, -1, 1, -1, 1], np.float64)

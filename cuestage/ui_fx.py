@@ -1167,10 +1167,11 @@ class BusDialog(QDialog):
             p = prev.get(b.get("id"))
             if p is not None and b.get("id") in over and p != b:
                 mirror_edit(p, b, over[b["id"]])
-                for f in fades:                   # sfumatura in corso: anche il punto di partenza e quello d'arrivo
-                    if f.bid == b.get("id"):
-                        mirror_edit(p, b, f.frm)
-                        mirror_edit(p, b, f.to)
+                from .engine import _spec_diff
+                edited = {q for q, _x, _y in _spec_diff(p, b)}
+                for f in fades:                   # sfumatura in corso: le voci toccate qui non le sfuma più
+                    if f.bid == b.get("id") and hasattr(f, "lanes"):
+                        f.lanes = [ln for ln in f.lanes if ln[0] not in edited]
         self._prev = {b.get("id"): copy.deepcopy(b) for b in self._buses()}
         names = [(b.get("id"), b.get("name")) for b in self._buses()]
         if names != getattr(self, "_names", None):

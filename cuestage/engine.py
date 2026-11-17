@@ -224,16 +224,45 @@ class AudioMorph:
         return kf.interp_audio(s0, s1, f)
 
 
+class SendsMorph:
+    """Mandate ai bus che sfumano verso quelle di un preset (Cambia preset con durata)."""
+
+    def __init__(self, s0, s1, dur, shape):
+        import copy as _copy
+        self.s0, self.s1 = _copy.deepcopy(s0 or []), _copy.deepcopy(s1 or [])
+        self.dur = max(0.0, float(dur))
+        self.shape = "linear" if shape == "db" else (shape or "scurve")
+        self.elapsed = 0.0
+
+    def step(self, dt):
+        self.elapsed += dt
+
+    @property
+    def done(self):
+        return self.dur <= 0 or self.elapsed >= self.dur
+
+    def value(self):
+        from .media import fade_shape
+        if self.done:
+            return [dict(x) for x in self.s1]
+        f = float(fade_shape(min(1.0, self.elapsed / self.dur), self.shape))
+        return kf.lerp_sends(self.s0, self.s1, f)
+
+
 def start_preset(inst, target, vis_name, aud_name, dur, shape):
     """«Cambia preset»: porta un'istanza in esecuzione verso un preset della sua cue. La corsia
     interessata smette di seguire i keyframe e parte dal valore che ha in quel momento."""
     voice = getattr(inst, "voice", None)
     if aud_name:
         pa = target.preset_dict("audio").get(aud_name) or {}
-        if "fx" in pa or "sends" in pa:          # rack e mandate del preset: subito (gli effetti non hanno scalini)
+        if "fx" in pa or "sends" in pa:          # rack del preset: subito; mandate: sfumano nella durata
             import copy as _copy
+            cur_sends = inst._sends_spec() if hasattr(inst, "_sends_spec") else []
+            new_sends = _copy.deepcopy(pa["sends"]) if "sends" in pa else None
             inst._fx_override = (_copy.deepcopy(pa["fx"]) if "fx" in pa else None,
-                                 _copy.deepcopy(pa["sends"]) if "sends" in pa else None)
+                                 _copy.deepcopy(cur_sends) if new_sends is not None and dur > 0 else new_sends)
+            inst._sends_morph = SendsMorph(cur_sends, new_sends, dur, shape) \
+                if new_sends is not None and dur > 0 else None
         if voice is not None and voice.n_out():
             n_out = voice.n_out()
             cur = inst._aud_override(n_out) if inst._aud_override else \
@@ -454,6 +483,13 @@ class KeyframeMixin:
             else:
                 self.kf_op_ratio = 1.0
         voice = getattr(self, "voice", None)
+        sm = getattr(self, "_sends_morph", None)
+        if sm is not None:                                   # mandate che sfumano verso un preset
+            sm.step(dt)
+            ov = self._fx_override
+            self._fx_override = (ov[0] if ov is not None else None, sm.value())
+            if sm.done:
+                self._sends_morph = None
         if isinstance(self._aud_override, AudioMorph):
             self._aud_override.step(dt)
         elif voice is not None:
@@ -1303,11 +1339,77 @@ class PresetInstance(Instance):
         return float(self.cue.fade_duration or 0)
 
 
+def _spec_diff(a, b, path=()):
+    """Voci diverse tra due stati di un bus: [(percorso, valore in a, valore in b)]. Gli effetti si indirizzano
+    per id ("#", id), le altre liste per posizione; dove la struttura cambia la voce è l'intero valore."""
+    if isinstance(a, dict) and isinstance(b, dict):
+        out = []
+        for k in b:
+            if k == "presets":
+                continue
+            if k not in a:
+                out.append((path + (k,), None, b[k]))
+            elif a[k] != b[k]:
+                out += _spec_diff(a[k], b[k], path + (k,))
+        return out
+    if isinstance(a, list) and isinstance(b, list) and len(a) == len(b):
+        ida = [x.get("id") if isinstance(x, dict) else None for x in a]
+        idb = [x.get("id") if isinstance(x, dict) else None for x in b]
+        if ida != idb:
+            return [(path, a, b)]
+        out = []
+        for i, (x, y) in enumerate(zip(a, b)):
+            seg = ("#", ida[i]) if ida[i] is not None else i
+            if x != y:
+                out += _spec_diff(x, y, path + (seg,))
+        return out
+    return [(path, a, b)]
+
+
+def _spec_get(d, path):
+    for seg in path:
+        if isinstance(seg, tuple):
+            d = next((x for x in d if isinstance(x, dict) and x.get("id") == seg[1]), None)
+        elif isinstance(d, list):
+            d = d[seg] if 0 <= seg < len(d) else None
+        else:
+            d = d.get(seg) if isinstance(d, dict) else None
+        if d is None:
+            return None
+    return d
+
+
+def _spec_set(d, path, value):
+    """Imposta una voce nello stato del bus; False se il percorso non esiste più (effetto tolto)."""
+    import copy as _copy
+    if not path:
+        return False
+    parent = _spec_get(d, path[:-1]) if len(path) > 1 else d
+    last = path[-1]
+    if isinstance(last, tuple):
+        return False
+    if isinstance(parent, list) and isinstance(last, int) and 0 <= last < len(parent):
+        parent[last] = _copy.deepcopy(value)
+        return True
+    if isinstance(parent, dict):
+        parent[last] = _copy.deepcopy(value)
+        return True
+    return False
+
+
+def _is_num(v):
+    return isinstance(v, (int, float)) and not isinstance(v, bool)
+
+
 class BusFade:
     """Porta lo stato dal vivo di un bus verso «to» nel tempo indicato: numeri (volume, trim, parametri degli
-    effetti) sfumano con la forma scelta, il resto (acceso/spento, mute, matrice) cambia subito."""
+    effetti) sfumano con la forma scelta, il resto (acceso/spento, mute, matrice) cambia subito.
+    Tocca solo le voci che cambia: due cue sullo stesso bus che cambiano voci diverse non si disturbano, e se una
+    cue più recente cambia una voce che un'altra sta ancora sfumando, quella voce passa alla più recente."""
 
-    def __init__(self, ctrl, bid, to, dur, shape):
+    def __init__(self, ctrl, bid, to, dur, shape, paths=None):
+        """paths: voci che la cue comanda (Controllo bus), anche se hanno già il valore d'arrivo: le prende
+        comunque in carico (una cue partita prima smette di sfumarle). Senza: le voci diverse da «to»."""
         import copy as _copy
         from .buses import bus_by_id
         self.ctrl, self.bid, self.to = ctrl, bid, to
@@ -1316,16 +1418,46 @@ class BusFade:
         self.dur = max(0.0, float(dur or 0))
         self.shape = "linear" if shape == "db" else (shape or "scurve")
         self.done = False
+        if paths is None:
+            diff = _spec_diff(self.frm, to)
+        else:
+            diff = [(p, _spec_get(self.frm, p), _spec_get(to, p)) for p in paths]
+            diff = [(p, x, y) for p, x, y in diff if y is not None]
+        self.lanes = [(p, x, y) for p, x, y in diff if _is_num(x) and _is_num(y)]
+        over = self._over()
+        for p, _x, y in diff:                       # valori non numerici (o nuovi): subito
+            if not (_is_num(_x) and _is_num(y)) and not _spec_set(over, p, y):
+                over.clear()
+                over.update(_copy.deepcopy(to))     # struttura cambiata (effetti aggiunti / tolti): tutto subito
+                self.lanes = []
+                break
+        paths = {p for p, _x, _y in self.lanes}
+        fades = [f for f in getattr(ctrl, "_bus_fades", []) if not f.done]
+        for f in fades:                              # le voci di questa cue non le sfuma più nessun altro
+            if f.bid == bid:
+                f.lanes = [ln for ln in f.lanes if ln[0] not in paths]
+        ctrl._bus_fades = fades + [self]
         self.step(0.0 if self.dur > 0 else 1.0)
 
+    def _over(self):
+        import copy as _copy
+        from .buses import bus_by_id
+        over = self.ctrl.bus_over.get(self.bid)
+        if over is None:
+            b = bus_by_id(self.ctrl.show, self.bid)
+            over = self.ctrl.bus_over[self.bid] = _copy.deepcopy(b if b is not None else self.to)
+        return over
+
     def step(self, t):
-        from .buses import lerp_spec
         from .media import fade_shape
         if self.done:
             return
         f = 1.0 if self.dur <= 0 else min(1.0, max(0.0, t / self.dur))
         k = float(fade_shape(f, self.shape))
-        self.ctrl.bus_over[self.bid] = self.to if k >= 1.0 else lerp_spec(self.frm, self.to, k)
+        over = self._over()
+        for p, x, y in self.lanes:
+            _spec_set(over, p, y if k >= 1.0 else x + (y - x) * k)
+        self.ctrl.bus_over[self.bid] = over
         if f >= 1.0:
             self.done = True
 
@@ -1354,8 +1486,10 @@ class BusControlInstance(Instance):
                 self.ctrl.message.emit(tr("Controllo bus '{0}': {1} effetti indicati nella cue non ci sono più nel bus "
                                           "(tolti o ricreati dopo aver preparato la cue): riapri la cue e scegli di "
                                           "nuovo i parametri", c.label(), len(missing)))
+        from .buses import control_paths
         to = apply_control(self.ctrl.bus_spec(b), c.bus_set or {})
-        self.fade = BusFade(self.ctrl, b["id"], to, float(c.fade_duration or 0), c.fade_shape)
+        self.fade = BusFade(self.ctrl, b["id"], to, float(c.fade_duration or 0), c.fade_shape,
+                            paths=control_paths(c.bus_set or {}))
         if self.fade.done:
             self.finish()
 
@@ -2105,6 +2239,7 @@ class Controller(QObject):
     def set_show(self, show):
         self.stop_all(0)
         self.bus_over = {}
+        self._bus_fades = []
         self.show = show
         self.playheads = {}
         self._images.clear()
