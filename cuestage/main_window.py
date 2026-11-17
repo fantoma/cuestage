@@ -1156,7 +1156,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
 
     def _update_compact(self):
         scr = self.screen()
-        narrow_screen = scr is not None and scr.availableGeometry().width() < 1500
+        narrow_screen = getattr(self, "force_compact", False) or (
+            scr is not None and scr.availableGeometry().width() < 1500)
         compact = narrow_screen or self.width() < self.COMPACT_W
         if compact != getattr(self, "_compact", None):
             self._compact = compact

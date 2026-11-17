@@ -3509,6 +3509,9 @@ def t_small_screen(w):
     vc = Cue("video", number="1", name="V", file=make_video("small.mp4"))
     sh.cues = [vc, Cue("audio", number="2", name="A", file=tone("small.wav", sec=1))]
     w._set_show(sh)
+    # come su uno schermo 1366×768, qualunque sia lo schermo (virtuale) della macchina di prova
+    w.force_compact = w.inspector.force_compact = True
+    w._update_compact()
     run(0.2)
     for c in sh.cues:
         w.inspector.set_cue(None)
@@ -3540,8 +3543,7 @@ def t_small_screen(w):
     w.inspector.set_cue(vc)
     run(0.2)
     pb = w.inspector.preset_bar                    # schermo stretto: barra dei preset compatta, comandi nel menu
-    if w.inspector.screen() is not None and w.inspector.screen().availableGeometry().width() < 1500:
-        assert pb.compact and not pb._btns[0].isVisible() and pb._compact_acts[0].isVisible()
+    assert pb.compact and not pb._btns[0].isVisible() and pb._compact_acts[0].isVisible()
     pb.set_compact(False)
     assert pb._btns[0].isVisible() and not pb._compact_acts[0].isVisible()
     pb.set_compact(True)
@@ -3549,6 +3551,7 @@ def t_small_screen(w):
     run(0.1)
     texts = [b.text() for b, _f, _s in w._transport_btns]
     assert texts[0] == "❚❚" and texts[2].endswith("STOP") and not w.clock.isVisible(), texts
+    w.force_compact = False
     w.COMPACT_W = 0                               # schermo largo: testi completi
     scr_wide = w.screen() is not None and w.screen().availableGeometry().width() >= 1500
     if scr_wide:
@@ -3556,6 +3559,8 @@ def t_small_screen(w):
         run(0.1)
         assert w._transport_btns[0][0].text() == w._transport_btns[0][1]
     del w.COMPACT_W
+    w.force_compact = w.inspector.force_compact = False
+    w._update_compact()
 
 
 def t_memo_skip(w):

@@ -269,7 +269,8 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
             return
         try:
             scr = self.screen()
-            narrow = scr is not None and scr.availableGeometry().width() < 1500
+            narrow = getattr(self, "force_compact", False) or (
+                scr is not None and scr.availableGeometry().width() < 1500)
             bar.set_compact(narrow or (self.width() > 0 and self.width() < 760))
         except RuntimeError:
             pass
