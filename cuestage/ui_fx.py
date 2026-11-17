@@ -1160,10 +1160,17 @@ class BusDialog(QDialog):
         self.show_data().dirty = True
         prev = getattr(self, "_prev", None) or {}
         over = self.mw.ctrl.bus_over
+        fades = [f for inst in list(self.mw.ctrl.instances.values())
+                 for f in (getattr(inst, "fade", None), getattr(inst, "_bus_fade", None))
+                 if f is not None and hasattr(f, "bid") and not f.done]
         for b in self._buses():
             p = prev.get(b.get("id"))
             if p is not None and b.get("id") in over and p != b:
                 mirror_edit(p, b, over[b["id"]])
+                for f in fades:                   # sfumatura in corso: anche il punto di partenza e quello d'arrivo
+                    if f.bid == b.get("id"):
+                        mirror_edit(p, b, f.frm)
+                        mirror_edit(p, b, f.to)
         self._prev = {b.get("id"): copy.deepcopy(b) for b in self._buses()}
         names = [(b.get("id"), b.get("name")) for b in self._buses()]
         if names != getattr(self, "_names", None):

@@ -1342,9 +1342,18 @@ class BusControlInstance(Instance):
             self.ctrl.message.emit(tr("Controllo bus '{0}': bus non trovato", c.label()))
             self.finish()
             return
+        from .buses import describe_control
         if not c.bus_set:
             self.ctrl.message.emit(tr("Controllo bus '{0}': nessun valore da cambiare (spunta «cambia» accanto ai "
                                       "parametri nell'ispettore)", c.label()))
+        else:
+            rows, missing = describe_control(self.ctrl.bus_spec(b), c.bus_set)
+            self.ctrl.message.emit(tr("Controllo bus '{0}' → bus «{1}» in {2:g} s: {3}", c.label(), b.get("name") or "",
+                                      float(c.fade_duration or 0), "; ".join(rows) or "—"))
+            if missing:
+                self.ctrl.message.emit(tr("Controllo bus '{0}': {1} effetti indicati nella cue non ci sono più nel bus "
+                                          "(tolti o ricreati dopo aver preparato la cue): riapri la cue e scegli di "
+                                          "nuovo i parametri", c.label(), len(missing)))
         to = apply_control(self.ctrl.bus_spec(b), c.bus_set or {})
         self.fade = BusFade(self.ctrl, b["id"], to, float(c.fade_duration or 0), c.fade_shape)
         if self.fade.done:

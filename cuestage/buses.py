@@ -131,6 +131,44 @@ def lerp_spec(a, b, f):
     return copy.deepcopy(b)
 
 
+def describe_control(spec, changes):
+    """(righe «cosa cambia», voci che non si possono applicare) di una cue Controllo bus sul bus «spec»: per la
+    Diagnostica, così si vede se la cue è partita, cosa ha cambiato e se punta a effetti che il bus non ha più
+    (tolti o ricreati dopo aver preparato la cue, o sostituiti da un preset del bus)."""
+    from . import dsp
+    rows, missing = [], []
+    ch = changes or {}
+
+    def num(v):
+        return f"{float(v):g}" if isinstance(v, (int, float)) and not isinstance(v, bool) else str(v)
+    if "level_db" in ch:
+        rows.append(tr("volume {0} → {1} dB", num(spec.get("level_db", 0.0)), num(ch["level_db"])))
+    if "mute" in ch:
+        rows.append(tr("mute → {0}", tr("sì") if ch["mute"] else tr("no")))
+    if "input_on" in ch:
+        rows.append(tr("ingresso fisico → {0}", tr("acceso") if ch["input_on"] else tr("spento")))
+    if "input_trim" in ch:
+        rows.append(tr("trim ingresso {0} → {1} dB", num(bus_input(spec)["trim"]), num(ch["input_trim"])))
+    by = {f.get("id"): f for f in spec.get("fx") or []}
+    for fid, vals in (ch.get("fx") or {}).items():
+        fx = by.get(fid)
+        if fx is None:
+            missing.append(fid)
+            continue
+        p = dsp.params(fx)
+        name = dsp.FX_LABELS.get(fx.get("type"), fx.get("type"))
+        for k, v in (vals or {}).items():
+            if k.startswith("band") and k.endswith("_g"):
+                try:
+                    old = p["bands"][int(k[4:-2]) - 1]["g"]
+                except (ValueError, IndexError):
+                    old = "?"
+            else:
+                old = p.get(k, "?")
+            rows.append(f"{name}: {k} {num(old)} → {num(v)}")
+    return rows, missing
+
+
 def mirror_edit(before, after, over):
     """Modifica fatta al bus salvato (finestra dei bus, da «before» ad «after») riportata anche sullo stato dal
     vivo «over» (impostato da una cue Controllo bus o Cambia preset): così le modifiche valgono subito anche

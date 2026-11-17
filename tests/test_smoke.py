@@ -3285,6 +3285,25 @@ def t_bus_live_edit(w):
     run(0.3)
     rt = lambda: w.ctrl.audio.buses[b["id"]]
     assert abs(rt().level - 0.1) < 1e-3 and rt().rack.procs[fid].p["feedback"] == 80.0
+    logs = [m for _t, m in list(w.ctrl.log)]             # Diagnostica: cosa ha cambiato la cue
+    assert any("feedback 35 → 80" in m and "Eco" in m for m in logs), logs[-3:]
+    # effetto ricreato dopo aver preparato la cue: avviso nel registro e nell'ispettore
+    from PySide6.QtWidgets import QLabel
+    bc2 = Cue("buscontrol", number="3", name="Orfana")
+    bc2.bus_target, bc2.bus_set = b["id"], {"fx": {"nonce": {"feedback": 10.0}}}
+    bc2.fade_duration = 0.0
+    sh.cues.append(bc2)
+    w.ctrl.start_cue(bc2)
+    run(0.2)
+    assert any("Orfana" in m and "non ci sono più" in m for _t, m in list(w.ctrl.log))
+    ins.set_cue(None)
+    ins.set_cue(bc2)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Controllo bus"))
+    run(0.2)
+    assert any("non ha più" in x.text() for x in ins.findChildren(QLabel) if x.isVisible())
+    sh.cues.remove(bc2)
+    ins.set_cue(None)
+    w.ctrl.bus_over[b["id"]]["fx"][0]["feedback"] = 80.0
     d.close()
     d = w.bus_dialog()
     run(0.4)

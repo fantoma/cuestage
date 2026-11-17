@@ -666,6 +666,27 @@ class ControlTabsMixin:
             cb.setCurrentIndex(0 if cur is None else (1 if cur else 2))
             cb.currentIndexChanged.connect(lambda _i: set_key(path, cb.currentData()))
             return cb
+        ids = {fx.get("id") for fx in b.get("fx") or []}
+        orphans = [k for k in (bs.get("fx") or {}) if k not in ids]
+        if orphans:                       # effetti tolti o ricreati dopo aver preparato la cue: valori senza effetto
+            ow = QHBoxLayout()
+            lab = QLabel(tr("⚠ Questa cue cambia {0} effetti che il bus non ha più (tolti o ricreati): quei valori "
+                            "non fanno nulla. Scegli di nuovo i parametri qui sotto.", len(orphans)))
+            lab.setWordWrap(True)
+            lab.setStyleSheet("color:#e0b040;")
+            ow.addWidget(lab, 1)
+            clean = QPushButton(tr("Togli"))
+
+            def drop_orphans():
+                for k in orphans:
+                    (bs.get("fx") or {}).pop(k, None)
+                if not bs.get("fx"):
+                    bs.pop("fx", None)
+                self._emit()
+                QTimer.singleShot(0, self.rebuild)
+            clean.clicked.connect(drop_orphans)
+            ow.addWidget(clean)
+            v.addLayout(ow)
         live = self.ctrl.bus_spec(b) if hasattr(self.ctrl, "bus_spec") else b
         g = QGroupBox(tr("Bus «{0}»", b.get("name") or ""))
         gf = QFormLayout(g)

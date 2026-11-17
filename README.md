@@ -824,7 +824,9 @@ send only the effect to the PA.
   cue stay as they are. “Restore” goes back to the saved values. In the buses window and in the effect windows the
   **Space bar is GO** (and Esc, F7, F8 work as in the main window), even when a checkbox or button has the focus.
   Likewise the send faders in a cue's Effects tab show the sends in use while a “Change preset” or audio keyframes
-  change them, and moving a fader then changes the playing cue too. “Apply” on a cue preset also updates the rack and
+  change them, and moving a fader then changes the playing cue too. Every Bus control cue writes in **Help › Diagnostics** what it changed
+  (e.g. “Bus control '2 BC' → bus “Delay” in 3 s: Delay: feedback 35 → 85”); if the cue refers to effects that the
+  bus no longer has (removed or re-created after preparing the cue) the log and the cue's inspector say so. “Apply” on a cue preset also updates the rack and
   sends shown in the Effects tab.
 - Buses are part of the show settings: they are saved with the show, follow undo/redo and go to secondary instances
   that copy the settings. A bus plays on the card chosen for it; cues send to it only from the same card.
