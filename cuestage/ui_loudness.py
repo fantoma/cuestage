@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
 
 from . import loudness
 from .i18n import tr
-from .model import MAX_DB, MIN_DB
 
 DEFAULT_TARGET = -14.0
 
@@ -42,23 +41,29 @@ def target_setting(show):
 
 # ============================================================================ normalizzazione
 
+TRIM_MIN, TRIM_MAX = -24.0, 24.0
+
+
 class NormalizeDialog(QDialog):
-    """Elenco delle cue con audio: si scelgono, si analizzano (LUFS integrati del tratto IN–OUT) e si applica la
-    correzione al Volume della cue, in modo relativo (si somma al volume già impostato)."""
-    COLS = 9
+    """Elenco delle cue con audio: si scelgono, si analizzano (LUFS integrati del tratto IN–OUT) e la correzione
+    va nell'OUT TRIM di ogni cue (il Volume della cue resta com'è: una cue abbassata apposta resta sotto le altre).
+    Prima di applicare, il nuovo OUT TRIM di ogni cue si ritocca con la rotella del mouse."""
+    COLS = 10
+    C_NEW = 9
 
     def __init__(self, mw, parent=None):
         super().__init__(parent or mw)
         self.mw = mw
         self.setWindowTitle(tr("Normalizza il volume (LUFS)"))
         self.setWindowFlags(Qt.Tool | Qt.WindowCloseButtonHint | Qt.WindowTitleHint)
-        self.resize(980, 560)
+        self.resize(1040, 560)
         self.results = {}          # id cue -> {lufs, peak} o {error}
-        self.applied = {}          # id cue -> correzione già applicata (dB)
+        self.adjust = {}           # id cue -> ritocco a mano (dB) del nuovo OUT TRIM (rotella)
         self._queue = []
         self._worker = None
         self._cancel = False
         self._prog = {}
+        self._total = 0
         v = QVBoxLayout(self)
         top = QHBoxLayout()
         top.addWidget(QLabel(tr("Riferimento")))
@@ -71,22 +76,19 @@ class NormalizeDialog(QDialog):
         self.target.setToolTip(tr("−14 LUFS: musica in streaming · −16: podcast · −23: broadcast (EBU R128)"))
         self.target.valueChanged.connect(self._target_changed)
         top.addWidget(self.target)
-        self.presets_cb = QCheckBox(tr("Correggi anche i preset audio della cue"))
-        self.presets_cb.setChecked(True)
-        self.presets_cb.setToolTip(tr("Il volume salvato nei preset audio (e quindi nei keyframe e nelle cue «Cambia "
-                                      "preset») riceve la stessa correzione"))
-        top.addWidget(self.presets_cb)
         top.addStretch(1)
         v.addLayout(top)
         info = QLabel(tr("Si misura il tratto tra IN e OUT di ogni cue (senza curva di volume e fade). La correzione "
-                         "si somma al Volume già impostato nella cue (scheda Audio, accanto alla matrice): una cue "
-                         "abbassata apposta di 3 dB resta 3 dB sotto le altre."))
+                         "va nell'OUT TRIM della cue (manopola nella scheda Audio, accanto alla matrice): il Volume "
+                         "della cue non cambia, quindi una cue abbassata apposta di 3 dB resta 3 dB sotto le altre. "
+                         "Rotella del mouse sul «Nuovo OUT TRIM»: ±0,5 dB (Maiusc ±0,1) · doppio clic: torna al "
+                         "valore calcolato."))
         info.setWordWrap(True)
         info.setStyleSheet("color:#888;")
         v.addWidget(info)
         self.table = QTableWidget(0, self.COLS)
         self.table.setHorizontalHeaderLabels(["", tr("Cue"), tr("Nome"), tr("Lista"), "LUFS", tr("Picco"), tr("Volume"),
-                                              tr("Correzione"), tr("Nuovo volume")])
+                                              tr("OUT TRIM"), tr("Correzione"), tr("Nuovo OUT TRIM")])
         self.table.verticalHeader().setVisible(False)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -94,6 +96,7 @@ class NormalizeDialog(QDialog):
         hh.setSectionResizeMode(QHeaderView.ResizeToContents)
         hh.setSectionResizeMode(2, QHeaderView.Stretch)
         self.table.itemChanged.connect(lambda _it: self._update_buttons())
+        self.table.viewport().installEventFilter(self)
         v.addWidget(self.table, 1)
         self.progress = QProgressBar()
         self.progress.setVisible(False)
@@ -110,7 +113,7 @@ class NormalizeDialog(QDialog):
         self.analyze_btn = QPushButton(tr("Analizza le selezionate"))
         self.analyze_btn.clicked.connect(self.analyze)
         bt.addWidget(self.analyze_btn)
-        self.apply_btn = QPushButton(tr("Applica il volume alle selezionate"))
+        self.apply_btn = QPushButton(tr("Applica l'OUT TRIM alle selezionate"))
         self.apply_btn.clicked.connect(self.apply)
         bt.addWidget(self.apply_btn)
         close = QPushButton(tr("Chiudi"))
@@ -161,20 +164,57 @@ class NormalizeDialog(QDialog):
         self._update_buttons()
 
     # ---- valori
-    def pending(self, cue):
-        """Correzione ancora da applicare (dB) alla cue, None se non analizzata o non misurabile."""
+    def correction(self, cue):
+        """Correzione calcolata (dB) per arrivare al riferimento, None se non analizzata o non misurabile."""
         res = self.results.get(cue.id) or {}
-        corr = loudness.correction(res.get("lufs"), self.target.value())
+        return loudness.correction(res.get("lufs"), self.target.value())
+
+    def new_trim(self, cue):
+        """Nuovo OUT TRIM della cue: correzione calcolata più l'eventuale ritocco con la rotella."""
+        corr = self.correction(cue)
         if corr is None:
             return None
-        return round(corr - self.applied.get(cue.id, 0.0), 1)
+        return round(max(TRIM_MIN, min(TRIM_MAX, corr + self.adjust.get(cue.id, 0.0))), 1)
+
+    def pending(self, cue):
+        """Quanto cambierebbe l'OUT TRIM applicando (dB), None se non analizzata."""
+        nt = self.new_trim(cue)
+        if nt is None:
+            return None
+        return round(nt - float(getattr(cue, "out_trim_db", 0.0) or 0.0), 1)
+
+    def nudge(self, cue, delta):
+        """Ritocca il nuovo OUT TRIM di una cue (rotella)."""
+        if self.correction(cue) is None:
+            return
+        self.adjust[cue.id] = round(self.adjust.get(cue.id, 0.0) + delta, 1)
+        self._refresh()
+
+    def eventFilter(self, obj, e):
+        from PySide6.QtCore import QEvent
+        if obj is self.table.viewport() and e.type() in (QEvent.Wheel, QEvent.MouseButtonDblClick):
+            pos = e.position().toPoint()
+            r, col = self.table.rowAt(pos.y()), self.table.columnAt(pos.x())
+            if col == self.C_NEW and 0 <= r < len(self.cues):
+                c = self.cues[r][1]
+                if e.type() == QEvent.MouseButtonDblClick:
+                    self.adjust.pop(c.id, None)
+                    self._refresh()
+                    return True
+                d = e.angleDelta().y() or e.angleDelta().x()
+                if d:
+                    step = 0.1 if e.modifiers() & Qt.ShiftModifier else 0.5
+                    self.nudge(c, step if d > 0 else -step)
+                return True
+        return super().eventFilter(obj, e)
 
     def _fill_row(self, r):
         c = self.cues[r][1]
         res = self.results.get(c.id)
         lvl = float(c.level_db)
-        cells = {6: _fmt(lvl, " dB", sign=True)}
-        tip = ""
+        trim = float(getattr(c, "out_trim_db", 0.0) or 0.0)
+        cells = {6: _fmt(lvl, " dB", sign=True), 7: _fmt(trim, " dB", sign=True)}
+        tip = tr("Rotella: ±0,5 dB (Maiusc ±0,1) · doppio clic: valore calcolato")
         color = None
         if c.id in self._prog and res is None:
             cells[4] = tr("analisi… {0} %", int(self._prog[c.id] * 100))
@@ -186,39 +226,38 @@ class NormalizeDialog(QDialog):
         else:
             cells[4] = _fmt(res.get("lufs"), " LUFS")
             cells[5] = _fmt(res.get("peak"), " dBFS")
-            pend = self.pending(c)
-            if pend is None:
-                cells[7] = tr("silenzio")
+            corr = self.correction(c)
+            if corr is None:
+                cells[8] = tr("silenzio")
             else:
-                done = self.applied.get(c.id)
-                cells[7] = _fmt(pend, " dB", sign=True) + (tr(" (applicati {0})", _fmt(done, " dB", sign=True))
-                                                           if done else "")
-                new = max(MIN_DB, min(MAX_DB, lvl + pend))
-                cells[8] = _fmt(new, " dB", sign=True)
-                peak_after = (res.get("peak") or -120.0) + new
-                if lvl + pend > MAX_DB:
-                    cells[8] += " ⚠"
-                    tip = tr("Oltre il massimo di {0:+.0f} dB: la cue resterà sotto il riferimento", MAX_DB)
+                cells[8] = _fmt(corr, " dB", sign=True)
+                nt = self.new_trim(c)
+                adj = self.adjust.get(c.id, 0.0)
+                cells[9] = _fmt(nt, " dB", sign=True) + (tr(" (ritocco {0})", _fmt(adj, "", sign=True)) if adj else "")
+                peak_after = (res.get("peak") or -120.0) + lvl + nt
+                if corr + adj > TRIM_MAX:
+                    cells[9] += " ⚠"
+                    tip = tr("Oltre il massimo di {0:+.0f} dB: la cue resterà sotto il riferimento", TRIM_MAX)
                     color = "#e0b040"
                 elif peak_after > -1.0:
-                    cells[8] += " ⚠"
+                    cells[9] += " ⚠"
                     tip = tr("Picco previsto {0:+.1f} dBFS: rischio di distorsione (con il master a 0 dB)", peak_after)
                     color = "#e05050"
-                elif abs(pend) < 0.05:
-                    color = "#50c070"
+                elif abs(nt - trim) < 0.05:
+                    color = "#50c070"                    # già applicato
         for col in range(4, self.COLS):
             it = self.table.item(r, col)
             it.setText(cells.get(col, ""))
-            it.setToolTip(tip if col == 8 else "")
-            it.setForeground(QBrush(QColor(color)) if color and col in (7, 8) else QBrush())
+            it.setToolTip(tip if col == self.C_NEW else "")
+            it.setForeground(QBrush(QColor(color)) if color and col in (8, 9) else QBrush())
 
     def _refresh(self):
         for r in range(self.table.rowCount()):
             self._fill_row(r)
         done = [c for _l, c in self.cues if c.id in self.results and "lufs" in self.results[c.id]]
         if done:
-            ups = sum(1 for c in done if (self.pending(c) or 0) > 0.05)
-            downs = sum(1 for c in done if (self.pending(c) or 0) < -0.05)
+            ups = sum(1 for c in done if (self.correction(c) or 0) > 0.05)
+            downs = sum(1 for c in done if (self.correction(c) or 0) < -0.05)
             self.summary.setText(tr("Analizzate {0} cue · da alzare: {1} · da abbassare: {2} · riferimento {3:.1f} "
                                     "LUFS", len(done), ups, downs, self.target.value()))
         self._update_buttons()
@@ -227,7 +266,7 @@ class NormalizeDialog(QDialog):
         sel = self.checked()
         busy = self._worker is not None and self._worker.is_alive()
         self.analyze_btn.setEnabled(bool(sel) and not busy)
-        self.apply_btn.setEnabled(not busy and any((self.pending(c) or 0) != 0 for c in sel))
+        self.apply_btn.setEnabled(not busy and any(self.pending(c) not in (None, 0.0) for c in sel))
 
     def _target_changed(self, val):
         self.mw.show_data.settings["norm_target"] = float(val)
@@ -289,30 +328,24 @@ class NormalizeDialog(QDialog):
     def apply(self):
         n, extra = 0, []
         for c in self.checked():
-            pend = self.pending(c)
-            if pend is None or abs(pend) < 0.05:
+            nt = self.new_trim(c)
+            if nt is None or abs(nt - float(getattr(c, "out_trim_db", 0.0) or 0.0)) < 0.05:
                 continue
-            old = float(c.level_db)
-            c.level_db = round(max(MIN_DB, min(MAX_DB, old + pend)), 1)
-            if self.presets_cb.isChecked():
-                for p in (c.preset_dict("audio") or {}).values():
-                    if isinstance(p, dict) and "level_db" in p:
-                        p["level_db"] = round(max(MIN_DB, min(MAX_DB, float(p["level_db"]) + pend)), 1)
-            self.applied[c.id] = round(self.applied.get(c.id, 0.0) + pend, 1)
+            c.out_trim_db = nt
             n += 1
-            extra.append(f"{c.number or c.label()} {pend:+.1f}")
+            extra.append(f"{c.number or c.label()} {nt:+.1f}")
         if not n:
+            self.mw.status(tr("Normalizza: niente da cambiare (OUT TRIM già applicati)"))
             return
         sh = self.mw.show_data
         sh.dirty = True
         try:
             self.mw.model.refresh()
-            ins = self.mw.inspector
-            if ins.cue is not None:
-                ins.refresh_fields()
+            if self.mw.inspector.cue is not None:
+                self.mw.inspector.refresh_fields()
         except Exception:
             pass
-        self.mw.status(tr("Volume normalizzato su {0} cue: {1}", n, ", ".join(extra[:12]) +
+        self.mw.status(tr("OUT TRIM normalizzato su {0} cue: {1}", n, ", ".join(extra[:12]) +
                           (" …" if len(extra) > 12 else "")))
         self._refresh()
 

@@ -110,6 +110,12 @@ class Instance:
         return self.live_gain * self.xf_gain
 
     @property
+    def out_trim_gain(self):
+        """OUT TRIM della cue (manopola nella scheda Audio, lo imposta Normalizza): guadagno lineare."""
+        ot = float(getattr(self.cue, "out_trim_db", 0.0) or 0.0)
+        return db_to_lin(ot) if ot else 1.0
+
+    @property
     def trim_op(self):
         return 0.0 if self.blind else self.live_op * self.xf_op
 
@@ -643,6 +649,7 @@ class RoutedVoice:
         self._live_db = float(c.level_db)
         v.blind = self.blind               # il mixer calcola il vumeter ma non manda il suono all'uscita
         v.duck_db = self.duck_db
+        v.trim_g = v.trim_t = self.out_trim_gain   # OUT TRIM: nel suono della cue (uscite, mandate, misuratori)
         v.pfl = self.pfl
         v.gains_fn = self._gains
         if silent:
@@ -671,6 +678,7 @@ class RoutedVoice:
     def _update_route(self):
         if self.voice is not None:
             self.voice.duck_db = self.duck_db
+            self.voice.trim_t = self.out_trim_gain      # OUT TRIM dal vivo: il mixer fa la rampa
             self._apply_fx(self.voice)
         k = self._route_key()
         if k != self._route_sig:
@@ -1061,7 +1069,8 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
             fov = max(0.0, min(1.0, (end - pos) / vfo))
         if self.aout is not None:
             vol = self.env_vol.get(now) * float(curve_gain(self.curve, pos)) * fo * self.ctrl.audio.master \
-                * self.kf_level_ratio * self.trim_gain * self.duck_gain() * self.ctrl.audio.duck.master_gain()
+                * self.kf_level_ratio * self.trim_gain * self.out_trim_gain * self.duck_gain() \
+                * self.ctrl.audio.duck.master_gain()
             # il lettore di sistema non può andare alla cuffia del preascolto: in preascolto tace
             self.aout.setVolume(0.0 if (self.blind or self.pfl) else max(0.0, min(1.0, vol)))
         oc = 1.0

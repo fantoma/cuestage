@@ -637,6 +637,10 @@ All the audio handling of an audio or video cue is in the inspector's **Audio** 
   It works during playback too; it is disabled while a keyframe with an audio preset is in charge of the matrix.
   Beside it a **level meter** of the cue (one bar per channel of the file, on the fader's scale, with the 0 dB mark):
   the level going out, after the matrix and the master volume.
+- **OUT TRIM** (knob between the matrix fader and the matrix, −24…+24 dB): extra gain of the cue after volume,
+  curve and fades, applied to everything the cue sends out (outputs, effect-bus sends, meters). It is where
+  **Normalize** puts its correction, so the cue's own Volume stays as you set it. Wheel ±0.5 dB (Shift ±0.1),
+  drag to turn, double-click = 0 dB; it can be changed during playback too (with a short ramp, no clicks).
 - **Matrix**: rows = channels of the file (L/R, or L R C LFE Ls Rs for a 5.1…), columns = card outputs. Click a
   crosspoint = on (0 dB) / off; drag vertically or use the wheel for the volume (Ctrl+wheel: tenths);
   double-click = exact value; right-click = quick values or “only this output”. The last row (“Vol. out”) sets
@@ -848,18 +852,20 @@ The **Normalize** menu helps all the cues play at the same perceived loudness.
   blocks, absolute and relative gates — same result as ffmpeg's `ebur128`) of the stretch between IN and OUT is
   measured in the background, together with the sample peak. Mono files are measured as dual mono (they normally go
   to left and right). With the **target** (e.g. −14 LUFS for music streaming, −16 podcasts, −23 broadcast) each cue
-  shows its **correction** (e.g. cue 1 −2.0 dB, cue 2 +3.0 dB) and the resulting volume.
-  After the analysis the selection can be changed: **Apply volume to selected** adds the correction to the
-  **Volume** already set in each ticked cue (Audio tab, next to the matrix), so a cue deliberately set 3 dB lower
-  stays 3 dB below the others; optionally the cue's audio presets get the same correction. Applying twice does
-  nothing more; changing the target afterwards applies only the difference. A ⚠ marks a cue that would exceed
-  +12 dB or whose expected peak goes above −1 dBFS. Undo works as for any other change.
+  shows its **correction** (e.g. cue 1 −2.0 dB, cue 2 +3.0 dB), its current **OUT TRIM** and the **new OUT TRIM**.
+  The correction goes into the cue's **OUT TRIM** (the knob in the Audio tab, next to the matrix), not into its
+  Volume: a cue deliberately set 3 dB lower stays 3 dB below the others, and presets, keyframes and “Change preset”
+  cues are not touched. Before applying, the **new OUT TRIM** of each cue can be fine-tuned with the **mouse
+  wheel** over its cell (±0.5 dB, Shift ±0.1; double-click = back to the computed value). After the analysis the
+  selection can be changed: **Apply OUT TRIM to selected** sets the new OUT TRIM of the ticked cues. Applying twice
+  does nothing more; changing the target afterwards applies only the difference. A ⚠ marks a cue that would exceed
+  +24 dB or whose expected peak (with Volume and OUT TRIM) goes above −1 dBFS. Undo works as for any other change.
 - **Real-time LUFS meter…** measures a cue while it plays, in the style of Youlean Loudness Meter: momentary
   (400 ms), short term (3 s), integrated, loudness range (LRA), peak and the difference from the target, with a
   history graph (short term as coloured area — green on target, blue below, yellow/red above — and momentary as a
   line) and M/S bars. A selector chooses the cue; with **Follow the playing cue** (on by default) the meter moves by
   itself to the cue that is playing when the chosen one is stopped, or it can follow the cue selected in the list.
-  It measures the cue's sound after its volume, curve and fades, before the master. “Reset at every start” clears
+  It measures the cue's sound after its volume, curve, fades and OUT TRIM, before the matrix and the master. “Reset at every start” clears
   the integrated value when the cue starts again.
 
 ## Markers

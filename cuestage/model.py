@@ -121,6 +121,8 @@ class Cue:
         # ducking: riduzione in dB (positiva, 0 = spento) quando l'ingresso del ducking supera la soglia;
         # su un gruppo vale per tutte le sue cue (che non ne hanno uno proprio)
         "duck_db": 0.0,
+        # OUT TRIM (dB): guadagno in più dopo volume, curva e fade; lo imposta Normalizza (LUFS)
+        "out_trim_db": 0.0,
         # rack effetti della cue (gate, EQ, compressore: vedi dsp.py) e mandate ai bus effetti
         # [{"bus": id, "db": livello o None = spenta, "pre": prima del volume e dei fade}]
         "fx": [], "sends": [],

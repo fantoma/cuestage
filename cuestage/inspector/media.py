@@ -61,6 +61,71 @@ class MediaTabsMixin:
             b.hide()
         return w
 
+    def _trim_knob(self):
+        """OUT TRIM della cue come manopola (−24…+24 dB): guadagno in più dopo volume, curva e fade, che riceve
+        la correzione di Normalizza (LUFS). Rotella: ±0,5 dB (Maiusc: ±0,1) · doppio clic: 0 dB."""
+        from PySide6.QtCore import QEvent, QObject
+        from PySide6.QtWidgets import QDial
+        cue = self.cue
+        w = QWidget()
+        w.setFixedWidth(78)
+        v = QVBoxLayout(w)
+        v.setContentsMargins(0, 0, 0, 0)
+        v.setSpacing(2)
+        title = QLabel(tr("OUT TRIM"))
+        title.setAlignment(Qt.AlignHCenter)
+        title.setStyleSheet("font-weight:bold; font-size:10px;")
+        v.addWidget(title)
+        dial = QDial()
+        dial.setRange(-240, 240)
+        dial.setNotchesVisible(True)
+        dial.setNotchTarget(6.0)
+        dial.setSingleStep(5)
+        dial.setPageStep(30)
+        dial.setFixedSize(64, 64)
+        dial.setToolTip(tr("OUT TRIM: guadagno in più della cue, dopo volume, curva e fade. Lo imposta "
+                           "Normalizza › Normalizza il volume delle cue (LUFS). Rotella ±0,5 dB (Maiusc ±0,1) · "
+                           "doppio clic = 0 dB"))
+        v.addWidget(dial, 0, Qt.AlignHCenter)
+        val = QLabel()
+        val.setAlignment(Qt.AlignHCenter)
+        v.addWidget(val)
+        v.addStretch(1)
+
+        def show():
+            db = float(getattr(cue, "out_trim_db", 0.0) or 0.0)
+            dial.blockSignals(True)
+            dial.setValue(int(round(db * 10)))
+            dial.blockSignals(False)
+            val.setText(f"{db:+.1f} dB")
+            val.setStyleSheet("color:#50c8ff;" if abs(db) > 0.05 else "color:#888;")
+
+        def set_db(db):
+            cue.out_trim_db = round(max(-24.0, min(24.0, float(db))), 1)
+            show()
+            self._emit()
+        dial.valueChanged.connect(lambda x: set_db(x / 10.0))
+
+        class _F(QObject):
+            def eventFilter(self_, obj, e):
+                if e.type() == QEvent.Wheel:
+                    step = 0.1 if e.modifiers() & Qt.ShiftModifier else 0.5
+                    d = e.angleDelta().y() or e.angleDelta().x()
+                    if d:
+                        set_db(float(cue.out_trim_db or 0.0) + (step if d > 0 else -step))
+                    return True
+                if e.type() == QEvent.MouseButtonDblClick:
+                    set_db(0.0)
+                    return True
+                return False
+        flt = _F(dial)
+        dial.installEventFilter(flt)
+        w._filter = flt
+        self.trim_dial = dial
+        self.bound.append((dial, show))
+        show()
+        return w
+
     def _audio_out_section(self, kbar, info):
         """Scheda audio della cue e matrice canali sorgente × uscite della scheda, al tempo del
         cursore della timeline dei keyframe (kbar)."""
@@ -176,6 +241,9 @@ class MediaTabsMixin:
             fader.setFixedHeight(hgt)                    # alto quanto la matrice, alla sua sinistra
             hh = QHBoxLayout()
             hh.addWidget(fader)
+            knob = self._trim_knob()
+            knob.setFixedHeight(hgt)
+            hh.addWidget(knob)
             hh.addWidget(sa, 1)
             v.addLayout(hh)
             kbar.timeChanged.connect(lambda *_a: fader.sync())

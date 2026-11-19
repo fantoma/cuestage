@@ -3296,12 +3296,17 @@ def t_bus_live_edit(w):
     sh.cues.append(bc2)
     w.ctrl.start_cue(bc2)
     run(0.2)
-    assert any("Orfana" in m and "non ci sono più" in m for _t, m in list(w.ctrl.log))
+    from cuestage.i18n import tr as _tr                   # (il messaggio è tradotto: si cerca nella lingua in uso)
+    gone = _tr("Controllo bus '{0}': {1} effetti indicati nella cue non ci sono più nel bus (tolti o ricreati dopo "
+               "aver preparato la cue): riapri la cue e scegli di nuovo i parametri").split("{1}")[1][:20]
+    assert any("Orfana" in m and gone in m for _t, m in list(w.ctrl.log)), gone
     ins.set_cue(None)
     ins.set_cue(bc2)
     ins.tabs.setCurrentIndex(ins._tab_keys.index("Controllo bus"))
     run(0.2)
-    assert any("non ha più" in x.text() for x in ins.findChildren(QLabel) if x.isVisible())
+    warn = _tr("⚠ Questa cue cambia {0} effetti che il bus non ha più (tolti o ricreati): quei valori "
+               "non fanno nulla. Scegli di nuovo i parametri qui sotto.", 1)
+    assert any(x.text() == warn for x in ins.findChildren(QLabel) if x.isVisible())
     sh.cues.remove(bc2)
     ins.set_cue(None)
     w.ctrl.bus_over[b["id"]]["fx"][0]["feedback"] = 80.0
@@ -3633,8 +3638,9 @@ def t_markers_live(w):
 
 def t_normalize(w):
     """Menu Normalizza: analisi LUFS delle cue con audio (BS.1770, come ffmpeg ebur128), correzioni rispetto al
-    riferimento, applicazione relativa al Volume già impostato solo sulle cue spuntate (anche ai preset), niente
-    doppia applicazione; misuratore in tempo reale della cue scelta."""
+    riferimento, la correzione va nell'OUT TRIM (il Volume resta) solo sulle cue spuntate, ritocco con la rotella,
+    niente doppia applicazione; manopola OUT TRIM nell'inspector, OUT TRIM nel mixer (anche dal vivo); misuratore in
+    tempo reale della cue scelta."""
     import math as _m
     import wave as _wave
     import numpy as _np
@@ -3678,16 +3684,55 @@ def t_normalize(w):
     pa, pb = d.pending(a), d.pending(b)
     assert abs(pa - (-14 - ra["lufs"])) < 0.11 and 11 < pb < 13, (pa, pb)
     d.set_checked([b.id])                                                  # solo «Piano»
+    assert d.apply_btn.isEnabled()
+    d.apply_btn.click()                                                    # come l'utente: il pulsante
+    assert a.out_trim_db == 0.0 and a.level_db == 0.0
+    assert abs(b.out_trim_db - pb) < 0.06 and b.level_db == -3.0, (b.out_trim_db, b.level_db)  # il Volume resta
+    assert b.presets["audio"]["P"]["level_db"] == -10.0                   # i preset non si toccano
+    assert d.pending(b) == 0.0 and not d.apply_btn.isEnabled()            # niente doppia applicazione
+    trim = b.out_trim_db
     d.apply()
-    assert a.level_db == 0.0 and abs(b.level_db - (-3.0 + pb)) < 0.06, (a.level_db, b.level_db)   # relativo
-    assert abs(b.presets["audio"]["P"]["level_db"] - (-10.0 + pb)) < 0.06
-    lvl = b.level_db
-    d.apply()                                                              # niente doppia applicazione
-    assert b.level_db == lvl and d.pending(b) == 0.0
-    d.target.setValue(-16.0)                                               # nuovo riferimento: solo la differenza
-    assert abs(d.pending(b) + 2.0) < 0.05
-    d.apply()
-    assert abs(b.level_db - (lvl - 2.0)) < 0.06
+    assert b.out_trim_db == trim
+    d.target.setValue(-16.0)                                               # nuovo riferimento: −2 dB
+    assert abs(d.pending(b) + 2.0) < 0.05 and abs(d.new_trim(b) - (trim - 2.0)) < 0.06
+    # rotella sul «Nuovo OUT TRIM» della riga di «Piano»: +0,5 dB per scatto, Maiusc +0,1; doppio clic azzera
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent, QWheelEvent
+    rb_ = [c.id for _l, c in d.cues].index(b.id)
+    run(0.1)
+    rect = d.table.visualItemRect(d.table.item(rb_, d.C_NEW))
+    pt = QPointF(rect.center())
+
+    def wheel(mods=Qt.NoModifier, dy=120):
+        app.sendEvent(d.table.viewport(), QWheelEvent(pt, QPointF(0, 0), QPoint(0, 0), QPoint(0, dy), Qt.NoButton,
+                                                      mods, Qt.NoScrollPhase, False))
+    wheel()
+    wheel()
+    wheel(Qt.ShiftModifier, -120)
+    assert abs(d.adjust[b.id] - 0.9) < 1e-6, d.adjust
+    assert abs(d.new_trim(b) - round(trim - 2.0 + 0.9, 1)) < 0.06
+    assert "ritocco" in d.table.item(rb_, d.C_NEW).text() or "+0.9" in d.table.item(rb_, d.C_NEW).text()
+    app.sendEvent(d.table.viewport(), QMouseEvent(QMouseEvent.MouseButtonDblClick, pt, pt, Qt.LeftButton,
+                                                  Qt.LeftButton, Qt.NoModifier))
+    assert b.id not in d.adjust
+    wheel()
+    d.apply_btn.click()
+    assert abs(b.out_trim_db - (trim - 1.5)) < 0.06, (b.out_trim_db, trim)
+    # la manopola OUT TRIM nell'inspector (scheda Audio) mostra il valore e si gira con la rotella
+    w.inspector.set_cue(b)
+    run(0.2)
+    dial = w.inspector.trim_dial
+    assert dial.value() == int(round(b.out_trim_db * 10)), (dial.value(), b.out_trim_db)
+    t0 = b.out_trim_db
+    c_ = QPointF(dial.width() / 2, dial.height() / 2)
+    app.sendEvent(dial, QWheelEvent(c_, c_, QPoint(0, 0), QPoint(0, 120), Qt.NoButton, Qt.NoModifier,
+                                    Qt.NoScrollPhase, False))
+    assert abs(b.out_trim_db - (t0 + 0.5)) < 1e-6 and dial.value() == int(round(b.out_trim_db * 10))
+    app.sendEvent(dial, QWheelEvent(c_, c_, QPoint(0, 0), QPoint(0, -120), Qt.NoButton, Qt.NoModifier,
+                                    Qt.NoScrollPhase, False))
+    assert abs(b.out_trim_db - t0) < 1e-6
+    d._refresh()
+    assert abs(d.pending(b) - (d.new_trim(b) - t0)) < 0.06
     d.close()
     # misuratore in tempo reale: la cue «Forte» suona a ≈ −6 LUFS (volume 0 dB)
     mw_ = w.loudness_meter()
@@ -3701,7 +3746,13 @@ def t_normalize(w):
     run(0.2)
     w.ctrl.start_cue(b)                                  # «Forte» ferma, suona «Piano»: il misuratore passa a quella
     assert wait_until(lambda: mw_.combo.currentData() == b.id, 3)
-    assert wait_until(lambda: mw_.meter.seconds() > 0.8, 4)
+    ib = w.ctrl.instances[b.id]
+    assert abs(ib.voice.trim_t - 10 ** (b.out_trim_db / 20)) < 1e-3, ib.voice.trim_t  # l'OUT TRIM arriva al mixer
+    assert wait_until(lambda: mw_.meter.seconds() > 1.5, 4)
+    want = -16.0 - 3.0 + 0.5                             # riferimento + Volume della cue + ritocco
+    assert abs(mw_.meter.momentary() - want) < 1.0, (mw_.meter.momentary(), want)
+    b.out_trim_db -= 6.0                                 # in diretta: subito più piano (rampa nel mixer)
+    assert wait_until(lambda: abs(ib.voice.trim_g - 10 ** (b.out_trim_db / 20)) < 1e-3, 2), ib.voice.trim_g
     w.ctrl.stop_all(0)
     run(0.2)
     mw_.close()

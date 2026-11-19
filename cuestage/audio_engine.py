@@ -908,6 +908,12 @@ class AudioEngine:
             else:
                 g *= d1
             v.duck_g = d1
+        t0, t1 = v.trim_g, v.trim_t          # OUT TRIM della cue (normalizzazione): prima di mandate e misuratori
+        if abs(t1 - t0) > 1e-6:
+            g *= np.linspace(t0, t1, filled, dtype=np.float32)
+            v.trim_g = t1
+        elif t1 != 1.0:
+            g *= t1
         src = v.data[idx]
         if src.dtype == np.int16:
             src = src.astype(np.float32) * I16
@@ -930,7 +936,7 @@ class AudioEngine:
         src = src.astype(np.float32, copy=False)
         src *= g[:, None]
         tap = getattr(v, "loud_tap", None)
-        if tap is not None:                  # misuratore LUFS: copia del suono della cue (dopo volume e fade)
+        if tap is not None:                  # misuratore LUFS: copia del suono della cue (dopo volume, fade e OUT TRIM)
             tap.append(src.copy())
         for bid, m2, is_pre in sends:        # mandate ai bus effetti (pre o post volume/fade)
             dst = bus_in.get(bid)
@@ -1001,6 +1007,8 @@ class Voice:
         self.done = False
         self.duck_db = 0.0     # riduzione (dB) quando il ducking interviene; la imposta l'istanza
         self.duck_g = 1.0      # guadagno di ducking del blocco precedente
+        self.trim_g = 1.0      # OUT TRIM della cue (lineare) del blocco precedente
+        self.trim_t = 1.0      # OUT TRIM da raggiungere: rampa lungo il blocco, senza click
         self.pfl = False       # preascolto: va solo alla cuffia, fuori dal master
         self.fx = None         # rack della cue (dsp.Rack) o None
         self.sends = []        # mandate ai bus: [(id bus, matrice n_src × 2 lineare, pre)]
