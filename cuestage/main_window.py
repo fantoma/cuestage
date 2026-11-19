@@ -132,6 +132,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
                  RemoteMixin, WebMixin, VideoMixin, FilesMixin, HistoryMixin, QMainWindow):
     def __init__(self, path=None):
         super().__init__()
+        from .rt import install as _rt_install
+        _rt_install()                    # misura del garbage collector, GIL ceduto più spesso al thread audio
         self.show_data = Show()
         self.loader = MediaLoader()
         self.audio = AudioEngine()

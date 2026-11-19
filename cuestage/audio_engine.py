@@ -259,6 +259,7 @@ class Output:
         self.cb_max = 0.0
         self.cb_frames = 0
         self.cb_count = 0
+        self.prio = None           # (riuscito, descrizione) della priorità del thread audio (rt.py)
 
 
 class BusRuntime:
@@ -493,6 +494,9 @@ class AudioEngine:
             block, lat = BUFFERS.get(self.buffer, BUFFERS["normale"])
 
             def cb(outdata, frames, t, st, o=o):
+                if o.prio is None:                 # primo blocco: priorità alta per il thread audio
+                    from .rt import raise_thread_priority
+                    o.prio = raise_thread_priority()
                 if st.output_underflow:
                     o.underruns += 1
                 self._callback(o, outdata, frames)
@@ -565,7 +569,7 @@ class AudioEngine:
                         "block_ms": blk * 1000, "latency_ms": lat * 1000, "last_ms": o.cb_last * 1000,
                         "avg_ms": o.cb_avg * 1000, "max_ms": o.cb_max * 1000,
                         "load": o.cb_avg / blk if blk else 0.0, "peak_load": o.cb_max / blk if blk else 0.0,
-                        "underruns": o.underruns, "blocks": o.cb_count})
+                        "underruns": o.underruns, "blocks": o.cb_count, "prio": o.prio})
         return out
 
     def reset_diagnostics(self):

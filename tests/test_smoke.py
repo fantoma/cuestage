@@ -3847,6 +3847,43 @@ def t_missing_files(w):
     w.show_data.dirty = False
 
 
+def t_rt_gc(w):
+    """Tempo reale: lo show aperto viene congelato nel garbage collector, le pause del collector sono misurate,
+    il thread audio prova ad alzare la priorità; tutto in Diagnostica."""
+    import gc as _gc
+    import threading as _th
+    from cuestage import rt
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    sh.cues = [Cue("memo", number=str(i), name=f"Nota {i}") for i in range(300)]
+    w._set_show(sh)
+    assert wait_until(lambda: rt.gc_stats()["frozen"] > 0, 3)
+    if hasattr(_gc, "freeze"):
+        assert _gc.get_freeze_count() > 0
+    rt.reset_gc_stats()
+    junk = [[i] for i in range(20000)]
+    junk.append(junk)
+    del junk
+    _gc.collect()
+    st = rt.gc_stats()
+    assert st["count"] >= 1 and st["max"] > 0, st
+    res = []
+    t = _th.Thread(target=lambda: res.append(rt.raise_thread_priority()))
+    t.start()
+    t.join(5)
+    ok, desc = res[0]
+    assert isinstance(ok, bool) and desc, res
+    assert 0 < sys.getswitchinterval() <= 0.0021
+    from cuestage.ui_diag import DiagnosticsDialog
+    d = DiagnosticsDialog(w)
+    d.refresh()
+    from cuestage.i18n import tr as _tr
+    assert _tr("Garbage collector") in d.info.text()
+    d.reset()
+    assert rt.gc_stats()["count"] == 0
+    d.close()
+
+
 def make_pdf(name, n=4):
     """PDF di prova: n pagine A4 orizzontali, ognuna di un colore diverso con il suo numero."""
     from PySide6.QtCore import QMarginsF, QRectF
@@ -4789,6 +4826,8 @@ if __name__ == "__main__":
     check("cue PDF: GO = pagina successiva, pagine scelte, crop e dimensione, ESC", lambda: t_pdf_cue(w))
     check("file mancanti: ricerca sul disco, percorso più simile, spostamento di cartella, ricollegamento",
           lambda: t_missing_files(w))
+    check("tempo reale: show congelato nel garbage collector, pause misurate, priorità del thread audio",
+          lambda: t_rt_gc(w))
     check("Normalizza: LUFS delle cue, correzione relativa del volume, misuratore in tempo reale", lambda: t_normalize(w))
     check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))

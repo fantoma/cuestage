@@ -783,6 +783,17 @@ only to display the image), *not used* (raster engine, with the model of the car
 when OpenGL is emulated by the processor (e.g. Mesa llvmpipe in a virtual machine or without drivers), shown in red. “Reset maxima” and
 “Copy to clipboard” (useful to send a report).
 
+**Real-time audio.** The thread that computes the audio blocks raises its own priority at the first block, and the
+**Audio thread** row of each card says what it got: on Linux *real time (SCHED_FIFO)* if the user may use it,
+otherwise *high priority (nice)* or *normal*; on Windows MMCSS “Pro Audio”; on macOS the CoreAudio thread is already
+real time. To allow real time on Linux, add the user to the `audio` group and give the group the right, e.g. a file
+`/etc/security/limits.d/audio.conf` with `@audio - rtprio 95` and `@audio - memlock unlimited`, then log out and in
+again. After a show is opened, Python's **garbage collector** frees the previous show and *freezes* the objects of the
+new one, so the collections during the show don't examine them again and stay short; the **Garbage collector** row
+shows how many objects are frozen, how many collections happened and the longest pause (red when it gets close to the
+card's latency, the audio already queued). The interpreter also hands over to the audio thread more often (every
+2 ms instead of 5).
+
 The **Performance** tab runs a short built-in benchmark on this computer (about 5 seconds; better with the show open
 and no cue playing): **timing accuracy** of the system (a thread woken every 2 ms: median, 99th percentile, worst
 case), the **cost of the audio mixer** (one voice, one voice with gate + EQ + compressor, one bus with reverb, measured

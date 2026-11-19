@@ -139,6 +139,16 @@ class FilesMixin:
         d = getattr(self, "_bus_dlg", None)
         if d is not None and d.isVisible():
             d.reload()
+        # garbage collector: libera lo show precedente e congela il nuovo (raccolte brevi durante lo show)
+        t = getattr(self, "_gc_timer", None)
+        if t is None:
+            from PySide6.QtCore import QTimer
+            from ..rt import gc_settle
+            t = self._gc_timer = QTimer(self)
+            t.setSingleShot(True)
+            t.setInterval(800)
+            t.timeout.connect(gc_settle)
+        t.start()
 
     def open_dialog(self):
         if not self._confirm_discard():

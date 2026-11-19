@@ -161,6 +161,8 @@ class DiagnosticsDialog(QDialog):
 
     def reset(self):
         self.mw.ctrl.audio.reset_diagnostics()
+        from .rt import reset_gc_stats
+        reset_gc_stats()
         out = getattr(self.mw, "output", None)
         st = getattr(out, "_diag", None) if out is not None else None
         if st:
@@ -236,6 +238,20 @@ class DiagnosticsDialog(QDialog):
                    d["max_ms"], d["peak_load"] * 100), _color(d["peak_load"]))
             row("&nbsp;&nbsp;&nbsp;&nbsp;" + tr("Buchi audio (underrun)") if html else "    " + tr("Buchi audio (underrun)"),
                 str(d["underruns"]), "#e05050" if d["underruns"] else None)
+            if not d["null"]:
+                pr = d.get("prio")
+                row("&nbsp;&nbsp;&nbsp;&nbsp;" + tr("Thread audio") if html else "    " + tr("Thread audio"),
+                    tr("in attesa del primo blocco") if pr is None else pr[1],
+                    None if pr is None else ("#50c070" if pr[0] else "#e0b040"))
+        from .rt import gc_stats
+        g = gc_stats()
+        # una pausa più lunga della latenza della scheda (l'audio già pronto) può causare un buco
+        blk = min([d["latency_ms"] or d["block_ms"] for d in eng.diagnostics() if not d["null"]] or [0.0])
+        gmax = g["max"] * 1000
+        row(tr("Garbage collector"),
+            tr("{0} oggetti congelati · {1} raccolte, pausa massima {2:.1f} ms (gen. {3}), ultima "
+               "{4:.2f} ms", g["frozen"], g["count"], gmax, g["max_gen"], g["last"] * 1000),
+            _color(gmax / blk) if blk else None)
         try:
             from .media import audio_memory
             with mw.loader.lock:
