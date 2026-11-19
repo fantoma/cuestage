@@ -982,6 +982,15 @@ control the projector while it is off, network standby must be enabled in its me
 numeric values and keyboard nudge (1–4 = corner, arrows, Shift ×10). The correction is a perspective
 transformation applied to all layers, saved in the show.
 
+**The chosen screen is recognised by what it is, not by its place in the list**: the show saves its manufacturer,
+model and serial number (read from the EDID), the port (HDMI-1, DP-2…) and its size, so the output finds the same
+projector even if the screens come up in a different order or the cable goes into another port. With two identical
+projectors without a serial number the port decides. If the chosen screen is not connected, the output goes to the
+last screen (windowed if only the control screen is left), the menu shows which one is missing and the Diagnostics
+log says so once. **Screens connected or unplugged while CueStage is open** are written in the log and the visible
+output moves at once: back onto the projector when it comes back, off it when it goes away. Shows saved before this
+version keep using the position until a screen is chosen again.
+
 ### Video engine (GPU or classic)
 
 **Video output › Video engine** chooses how the output is drawn:

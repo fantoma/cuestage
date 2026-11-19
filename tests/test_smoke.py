@@ -4017,6 +4017,82 @@ def t_newer_show(w):
     w.show_data.dirty = False
 
 
+def t_screen_identity(w):
+    """Schermo di uscita riconosciuto per identità (produttore, modello, n. di serie, porta) anche se cambia
+    l'ordine; schermo non collegato: ultimo schermo e avviso; schermi collegati e staccati nel registro."""
+    from PySide6.QtCore import QRect
+    from cuestage import screens as scr
+
+    class Fake:
+        def __init__(self, name, man, model, serial, x=0, w=1920, h=1080):
+            self._d = (name, man, model, serial)
+            self._g = QRect(x, 0, w, h)
+
+        def name(self):
+            return self._d[0]
+
+        def manufacturer(self):
+            return self._d[1]
+
+        def model(self):
+            return self._d[2]
+
+        def serialNumber(self):
+            return self._d[3]
+
+        def geometry(self):
+            return self._g
+    lap = Fake("eDP-1", "BOE", "0x0BCA", "", 0, 1366, 768)
+    epson = Fake("HDMI-1", "Epson", "EB-X41", "X5KK123", 1366, 1024, 768)
+    led = Fake("DP-2", "Samsung", "LED", "", 2390)
+    ident = scr.identity(epson)
+    assert "Epson EB-X41" in scr.describe(ident) and "1024×768" in scr.describe(ident)
+    st = {"output_screen": 1, "output_screen_id": ident}
+    assert scr.resolve(st, [lap, epson, led]) == (1, "ok")
+    assert scr.resolve(st, [lap, led, Fake("HDMI-2", "Epson", "EB-X41", "X5KK123", 3000, 1024, 768)]) == (2, "ok")
+    assert scr.resolve(st, [lap, led, Fake("HDMI-1", "Epson", "EB-X41", "ALTRO", 1366, 1024, 768)])[1] == "missing"
+    assert scr.resolve(st, [lap, led]) == (None, "missing")
+    # due proiettori uguali senza numero di serie: decide la porta
+    p1, p2 = Fake("HDMI-1", "NEC", "P502", ""), Fake("HDMI-2", "NEC", "P502", "", 1920)
+    st2 = {"output_screen": 0, "output_screen_id": scr.identity(p2)}
+    assert scr.resolve(st2, [p1, p2]) == (1, "ok") and scr.resolve(st2, [p2, p1]) == (0, "ok")
+    assert scr.resolve({"output_screen": 1}, [lap, epson]) == (1, "index")        # show precedenti
+    assert scr.resolve({"output_screen": -1}, [lap, epson]) == (None, "auto")
+    assert scr.score(scr.identity(Fake("", "", "", "", 0, 1920, 1080)), led) == 0   # la sola misura non basta
+    # nella finestra (offscreen: un solo schermo)
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    w._set_show(sh)
+    w._set_screen(0)
+    assert w.show_data.settings["output_screen_id"]["name"] == QApplication.screens()[0].name()
+    assert w._out_screen()[0] == 0          # («index» se lo schermo non dà la sua identità, come offscreen)
+    w._set_screen(-1)
+    assert "output_screen_id" not in w.show_data.settings and w._out_screen() == (None, "auto")
+    w.show_data.settings["output_screen"] = 1
+    w.show_data.settings["output_screen_id"] = ident                  # il proiettore non è collegato
+    n0 = len(w.ctrl.log)
+    w.show_output()
+    run(0.2)
+    assert w.output.isVisible()
+    logs = [m for _t, m in list(w.ctrl.log)[n0:]]
+    assert sum("Epson" in m for m in logs) == 1, logs
+    w.show_output()                                                   # l'avviso non si ripete
+    run(0.1)
+    assert sum("Epson" in m for m in [m for _t, m in list(w.ctrl.log)[n0:]]) == 1
+    w._fill_screens()
+    texts = [a.text() for a in w.screens_menu.actions()]
+    assert any("Epson" in t and "⚠" in t for t in texts), texts
+    w._screens_seen = w._screen_names() + ["Epson EB-X41 · HDMI-1"]   # come se fosse appena stato staccato
+    n1 = len(w.ctrl.log)
+    w._screens_changed()
+    assert any("Epson EB-X41 · HDMI-1" in m for _t, m in list(w.ctrl.log)[n1:])
+    w.toggle_output()
+    run(0.1)
+    w.show_data.settings.pop("output_screen_id", None)
+    w.show_data.settings["output_screen"] = -1
+    w.show_data.dirty = False
+
+
 def make_pdf(name, n=4):
     """PDF di prova: n pagine A4 orizzontali, ognuna di un colore diverso con il suo numero."""
     from PySide6.QtCore import QMarginsF, QRectF
@@ -4965,6 +5041,8 @@ if __name__ == "__main__":
           lambda: t_marker_jumps(w))
     check("show di una versione più recente: avviso, tipi sconosciuti come Memo, campi sconosciuti conservati",
           lambda: t_newer_show(w))
+    check("schermo di uscita per identità (EDID, porta), non collegato, collegato e staccato",
+          lambda: t_screen_identity(w))
     check("Normalizza: LUFS delle cue, correzione relativa del volume, misuratore in tempo reale", lambda: t_normalize(w))
     check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))

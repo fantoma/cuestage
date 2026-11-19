@@ -59,12 +59,21 @@ class VideoMixin:
         if vis:
             self.show_output()
 
+    def _out_screen(self):
+        """(indice dello schermo di uscita o None = automatico, stato): lo schermo scelto si cerca per identità
+        (produttore, modello, numero di serie, porta), non per posizione nell'elenco (vedi screens.py)."""
+        from ..screens import resolve
+        return resolve(self.show_data.settings, QApplication.screens())
+
+    def _out_qscreen(self):
+        screens = QApplication.screens()
+        i, _st = self._out_screen()
+        return screens[i] if i is not None and 0 <= i < len(screens) else screens[-1]
+
     def _output_aspect(self):
         if self.output is not None and self.output.isVisible() and self.output.height():
             return self.output.width() / self.output.height()
-        screens = QApplication.screens()
-        i = self.show_data.settings.get("output_screen", -1)
-        scr = screens[i] if 0 <= i < len(screens) else screens[-1]
+        scr = self._out_qscreen()
         g = scr.geometry()
         return g.width() / g.height() if g.height() else 16 / 9
 
@@ -73,9 +82,7 @@ class VideoMixin:
         if self.output is not None and self.output.isVisible() and self.output.width() > 0:
             r = self.output.devicePixelRatioF()
             return int(round(self.output.width() * r)), int(round(self.output.height() * r))
-        screens = QApplication.screens()
-        i = self.show_data.settings.get("output_screen", -1)
-        scr = screens[i] if 0 <= i < len(screens) else screens[-1]
+        scr = self._out_qscreen()
         g, r = scr.geometry(), scr.devicePixelRatio()
         return int(round(g.width() * r)), int(round(g.height() * r))
 
@@ -86,13 +93,14 @@ class VideoMixin:
     def show_output(self):
         self._create_output()
         s = self.show_data.settings
-        scr = s.get("output_screen", -1)
+        scr, st = self._out_screen()
+        self._note_screen_missing(st)
         screens = QApplication.screens()
         full = bool(s.get("output_fullscreen", True))
-        if len(screens) == 1 and scr in (-1, 0) and full:
+        if len(screens) == 1 and scr in (None, 0) and full:
             # un solo schermo: evita di coprire la finestra di controllo
             full = False
-        self.output.place_on_screen(scr if scr >= 0 else None, full)
+        self.output.place_on_screen(scr, full)
         self.activateWindow()
         self.act_out_show.setText(tr("Nascondi finestra di uscita"))
 
@@ -109,10 +117,11 @@ class VideoMixin:
         finestra, sullo stesso schermo) oppure si nasconde. L'impostazione «Schermo intero» non cambia."""
         if what == "open":
             self._create_output()
-            scr = self.show_data.settings.get("output_screen", -1)
+            scr, st = self._out_screen()
+            self._note_screen_missing(st)
             screens = QApplication.screens()
-            full = not (len(screens) == 1 and scr in (-1, 0))
-            self.output.place_on_screen(scr if scr >= 0 else None, full)
+            full = not (len(screens) == 1 and scr in (None, 0))
+            self.output.place_on_screen(scr, full)
             self.act_out_show.setText(tr("Nascondi finestra di uscita"))
             self.status(tr("Schermo intero aperto") if full else tr("Finestra di uscita aperta (un solo schermo)"))
             return
@@ -123,8 +132,7 @@ class VideoMixin:
             out.hide()
             self.act_out_show.setText(tr("Mostra finestra di uscita"))
         elif out.isFullScreen():
-            scr = self.show_data.settings.get("output_screen", -1)
-            out.place_on_screen(scr if scr >= 0 else None, False)
+            out.place_on_screen(self._out_screen()[0], False)
         self.status(tr("Schermo intero chiuso") if what != "hide" else tr("Finestra di uscita nascosta"))
 
     def toggle_fullscreen(self):
@@ -134,13 +142,14 @@ class VideoMixin:
             self.show_output()
 
     def _fill_screens(self):
+        from ..screens import describe, identity
         self.screens_menu.clear()
         grp = QActionGroup(self.screens_menu)
-        cur = self.show_data.settings.get("output_screen", -1)
+        cur, st = self._out_screen()
+        cur = -1 if st == "auto" else cur
         screens = QApplication.screens()
         opts = [(-1, tr("Automatico (ultimo schermo)"))] + [
-            (i, tr("{0}: {1} {2}×{3}", i + 1, s.name(), s.geometry().width(), s.geometry().height()))
-            for i, s in enumerate(screens)]
+            (i, tr("{0}: {1}", i + 1, describe(identity(s)))) for i, s in enumerate(screens)]
         for i, label in opts:
             a = QAction(label, self.screens_menu)
             a.setCheckable(True)
@@ -148,12 +157,75 @@ class VideoMixin:
             grp.addAction(a)
             a.triggered.connect(lambda _=False, i=i: self._set_screen(i))
             self.screens_menu.addAction(a)
+        if st == "missing":                       # lo schermo scelto non c'è: si vede quale manca
+            ident = self.show_data.settings.get("output_screen_id") or {}
+            a = QAction(tr("⚠ {0} — non collegato (uso l'ultimo schermo)", describe(ident) or tr("schermo scelto")),
+                        self.screens_menu)
+            a.setEnabled(False)
+            self.screens_menu.addSeparator()
+            self.screens_menu.addAction(a)
 
     def _set_screen(self, i):
-        self.show_data.settings["output_screen"] = i
+        from ..screens import identity
+        s = self.show_data.settings
+        screens = QApplication.screens()
+        s["output_screen"] = i
+        if 0 <= i < len(screens):
+            s["output_screen_id"] = identity(screens[i])       # riconosciuto anche se cambia l'ordine
+        else:
+            s.pop("output_screen_id", None)
+        self._screen_missing_noted = False
         self.show_data.dirty = True
         if self.output is not None and self.output.isVisible():
             self.show_output()
+
+    def _note_screen_missing(self, st):
+        """Avviso (una volta per mancanza) se lo schermo scelto non è collegato."""
+        from ..screens import describe
+        if st != "missing":
+            self._screen_missing_noted = False
+            return
+        if getattr(self, "_screen_missing_noted", False):
+            return
+        self._screen_missing_noted = True
+        ident = self.show_data.settings.get("output_screen_id") or {}
+        msg = tr("Schermo di uscita «{0}» non collegato: uso l'ultimo schermo",
+                 describe(ident) or tr("n. {0}", int(self.show_data.settings.get("output_screen", -1)) + 1))
+        self.ctrl.message.emit(msg)
+        self.status(msg)
+
+    def _watch_screens(self):
+        """Schermi collegati o staccati mentre CueStage è aperto: l'uscita torna sullo schermo giusto."""
+        from PySide6.QtCore import QTimer
+        app = QApplication.instance()
+        self._screens_timer = QTimer(self)
+        self._screens_timer.setSingleShot(True)
+        self._screens_timer.setInterval(600)        # il sistema assesta gli schermi in più passi
+        self._screens_timer.timeout.connect(self._screens_changed)
+        self._screens_seen = self._screen_names()
+        app.screenAdded.connect(lambda _s: self._screens_timer.start())
+        app.screenRemoved.connect(lambda _s: self._screens_timer.start())
+
+    def _screen_names(self):
+        from ..screens import describe, identity
+        return [describe(identity(s)) for s in QApplication.screens()]
+
+    def _screens_changed(self):
+        now = self._screen_names()
+        before = getattr(self, "_screens_seen", [])
+        self._screens_seen = now
+        for name in now:
+            if name not in before:
+                self.ctrl.message.emit(tr("Schermo collegato: {0}", name))
+        for name in before:
+            if name not in now:
+                self.ctrl.message.emit(tr("Schermo scollegato: {0}", name))
+        out = self.output
+        if out is not None and out.isVisible():
+            self.show_output()                       # schermo scelto, oppure l'ultimo (in finestra se è uno solo)
+            _i, st = self._out_screen()
+            if st != "missing":
+                self.status(tr("Uscita video sullo schermo {0}", describe_current(self)))
 
     def geometry_dialog(self):
         self._ensure_output_visible()
@@ -182,3 +254,11 @@ class VideoMixin:
 
     def toggle_gl(self):        # compatibilità: OpenGL acceso = motore automatico, spento = raster
         self.set_video_engine("raster" if self.video_engine_setting() != "raster" else "auto")
+
+
+def describe_current(mw):
+    from ..screens import describe, identity
+    try:
+        return describe(identity(mw._out_qscreen()))
+    except Exception:
+        return ""

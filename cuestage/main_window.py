@@ -198,6 +198,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self._history_init()
         self._build_ui()
         self._build_menus()
+        self._watch_screens()                # proiettori collegati o staccati con CueStage aperto
         self._build_shortcuts()
         self._history_reset()
 
