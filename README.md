@@ -899,7 +899,12 @@ and audio keyframes (light blue ◆; hollow = “base”).
 - **While the cue plays** markers can be added (**M** with the waveform selected: at the point being played) and
   dragged. Right-click on a marker (or anywhere on the waveform) › **▶ Restart from here**: the cue plays from that
   point — it jumps there if it is playing, jumps and resumes if it is paused, starts from there if it is stopped;
-  the other cues keep playing.
+  the other cues keep playing. **Jumps don't fire the markers they skip** (forwards or backwards: a “Call cue” or
+  “Stop cue” marker between the old and the new point does nothing), while a marker exactly at the arrival point
+  does. The state of the **Recall Preset** markers is rebuilt as if the cue had played up to there: the last
+  preset marker already passed applies at once (with what is left of its fade), and jumping back before every
+  preset marker returns to the cue's own values. The same holds when an instance aligns to the master
+  (redundancy).
 - **Progress bars** during playback (“Status” column and “Active cues” panel): real cue time with the loop
   unrolled into its repetitions, fade ramps, curve and keyframes; with an infinite loop the cursor runs inside
   the loop region. Hovering a marker shows its description.

@@ -3884,6 +3884,82 @@ def t_rt_gc(w):
     d.close()
 
 
+def t_marker_jumps(w):
+    """Salti nella cue (Ricomincia da qui): i marker saltati non scattano, né in avanti né indietro; un marker
+    proprio sul punto d'arrivo sì; lo stato dei Recall Preset si ricostruisce (e si toglie tornando prima)."""
+    import wave as _wave
+    import numpy as _np
+    path = os.path.join(TMP, "jumps.wav")
+    x = (_np.sin(_np.arange(48000 * 20) / 48000 * 2 * _np.pi * 440) * 6000).astype(_np.int16)
+    with _wave.open(path, "wb") as wf:
+        wf.setnchannels(2)
+        wf.setsampwidth(2)
+        wf.setframerate(48000)
+        wf.writeframes(_np.repeat(x[:, None], 2, axis=1).tobytes())
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("audio", number="1", name="Base", file=path)
+    a.presets = {"audio": {"Basso": {"level_db": -20.0}}}
+    m1, m2 = Cue("memo", number="10", name="M1"), Cue("memo", number="11", name="M2")
+    a.markers = [{"t": 0.5, "name": "A", "action": "cue", "target": "10"},
+                 {"t": 2.0, "name": "P", "action": "preset", "preset": "Basso", "fade": 0.0},
+                 {"t": 8.0, "name": "B", "action": "cue", "target": "11"}]
+    sh.cues = [a, m1, m2]
+    w._set_show(sh)
+    run(0.3)
+    fired = []
+    orig = w.ctrl.trigger
+
+    def trig(c, *k, **kw):
+        fired.append(c.number)
+        return orig(c, *k, **kw)
+    w.ctrl.trigger = trig
+    try:
+        w.ctrl.start_cue(a)
+        inst = w.ctrl.instances[a.id]
+        lvl = lambda: inst._aud_override(inst.voice.n_out())[0] if inst._aud_override else a.level_db
+        assert wait_until(lambda: inst.position() > 2.3, 5)
+        assert fired == ["10"] and abs(lvl() + 20.0) < 0.1, (fired, lvl())   # marker eseguiti suonando
+        fired.clear()
+        w.ctrl.restart_from(a, 12.0)                     # avanti oltre il marker a 8 s: non scatta
+        run(0.4)
+        assert fired == [] and abs(lvl() + 20.0) < 0.1, (fired, lvl())
+        w.ctrl.restart_from(a, 1.0)                      # indietro: il marker a 0,5 s non riparte, il preset si toglie
+        run(0.3)
+        assert fired == [] and abs(lvl() - a.level_db) < 0.1 and "audio" not in inst._mk_applied, (fired, lvl())
+        assert wait_until(lambda: inst.position() > 2.3, 3)
+        assert abs(lvl() + 20.0) < 0.1                   # suonando ripassa dal marker: si riapplica
+        w.ctrl.restart_from(a, 5.0)                      # da fermo/avanti: stato ricostruito, nessuna cue
+        run(0.3)
+        assert fired == [] and abs(lvl() + 20.0) < 0.1
+        w.ctrl.restart_from(a, 8.0)                      # proprio sul marker: quello scatta
+        assert wait_until(lambda: fired == ["11"], 2), fired
+        fired.clear()
+        w.ctrl.stop_all(0)
+        run(0.2)
+        w.ctrl.restart_from(a, 9.0)                      # cue ferma: parte da 9 s senza i marker precedenti
+        run(0.4)
+        inst = w.ctrl.instances[a.id]
+        assert fired == [] and abs(lvl() + 20.0) < 0.1, (fired, lvl())
+        w.ctrl.stop_all(0)
+        run(0.2)
+        # video: preset d'immagine dal marker, tolto tornando prima del marker
+        v = Cue("video", number="5", name="Video", file=make_video("jumps.mp4", sec=6))
+        v.presets = {"visual": {"Piccolo": {"scale": 40.0}}}
+        v.markers = [{"t": 1.0, "name": "P", "action": "preset", "preset": "Piccolo", "fade": 0.0}]
+        w.show_data.cues.append(v)
+        w.ctrl.restart_from(v, 3.0)
+        iv = w.ctrl.instances[v.id]
+        assert wait_until(lambda: abs(float(iv.view.scale) - 40.0) < 0.5, 5), iv.view.scale
+        w.ctrl.restart_from(v, 0.3)
+        assert wait_until(lambda: abs(float(iv.view.scale) - float(v.scale)) < 0.5, 5), iv.view.scale
+        assert "visual" not in iv._mk_applied
+    finally:
+        w.ctrl.trigger = orig
+        w.ctrl.stop_all(0)
+        run(0.2)
+
+
 def make_pdf(name, n=4):
     """PDF di prova: n pagine A4 orizzontali, ognuna di un colore diverso con il suo numero."""
     from PySide6.QtCore import QMarginsF, QRectF
@@ -4828,6 +4904,8 @@ if __name__ == "__main__":
           lambda: t_missing_files(w))
     check("tempo reale: show congelato nel garbage collector, pause misurate, priorità del thread audio",
           lambda: t_rt_gc(w))
+    check("salti nella cue: marker saltati che non scattano, stato dei Recall Preset ricostruito",
+          lambda: t_marker_jumps(w))
     check("Normalizza: LUFS delle cue, correzione relativa del volume, misuratore in tempo reale", lambda: t_normalize(w))
     check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))

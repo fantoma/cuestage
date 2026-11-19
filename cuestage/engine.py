@@ -409,6 +409,8 @@ class KeyframeMixin:
         self._aud_override = None
         self._kf_T = 0.0
         self._mk_pos = None
+        self._mk_jump = None        # salto in corso: (posizione del file attesa, scadenza)
+        self._mk_applied = set()    # corsie («audio», «visual») cambiate da un marker Recall Preset
 
     def cue_time(self):
         return self.elapsed
@@ -422,12 +424,34 @@ class KeyframeMixin:
             pos = float(self.position())
         except Exception:
             return
-        prev = getattr(self, "_mk_pos", None)
+        jump = getattr(self, "_mk_jump", None)
+        if jump is not None:
+            # dopo un salto i marker saltati non scattano: si aspetta che la posizione arrivi al punto
+            # (il video ci mette qualche istante), poi si ricostruisce lo stato dei Recall Preset già passati
+            target, deadline = jump
+            near = abs(pos - target) <= 0.25
+            if not near and self.ctrl.clock < deadline:
+                self._mk_pos = None
+                return
+            self._mk_jump = None
+            arrive = min(pos, target) if near else pos
+            self._mk_pos = arrive - 0.001                      # un marker proprio sul punto di arrivo scatta
+            self._markers_rebuild(arrive)
+            prev = self._mk_pos
+        else:
+            prev = getattr(self, "_mk_pos", None)
         if prev is None:
             prev = float(self.cue.start or 0) - 0.001          # un marker sull'IN scatta all'avvio
         self._mk_pos = pos
-        from .markers import due_markers, marker_window
+        from .markers import due_markers
+        for m, dur in due_markers(self._marker_items(pos), prev, pos):
+            self._marker_action(m, dur)
+
+    def _marker_items(self, pos):
+        """[(inizio, durata, marker)] dei marker della cue, nel tempo del file."""
+        from .markers import marker_window
         c = self.cue
+        ms = getattr(c, "markers", None) or []
         start = float(c.start or 0)
         end = float(c.end) if c.end and c.end > 0 else float(
             (self.ctrl.loader.info.get(c.file) or {}).get("duration") or 0) or pos + 1e6
@@ -438,8 +462,67 @@ class KeyframeMixin:
             except (TypeError, ValueError, AttributeError):
                 continue
             items.append((at, dur, m))
-        for m, dur in due_markers(items, prev, pos):
-            self._marker_action(m, dur)
+        return items
+
+    def markers_jumped(self, file_pos=None):
+        """Chiamata dopo un salto (Ricomincia da qui, trascinamento, allineamento al master): i marker tra il
+        punto di partenza e quello di arrivo non scattano (né in avanti né indietro), e lo stato dei Recall
+        Preset si ricostruisce come se la cue avesse suonato fino a lì. file_pos: posizione del file attesa."""
+        if file_pos is None:
+            try:
+                file_pos = float(self.position())
+            except Exception:
+                return
+        self._mk_jump = (float(file_pos), self.ctrl.clock + 3.0)   # il video può metterci fino a 2,5 s
+        self._mk_pos = None
+
+    def _markers_rebuild(self, pos):
+        """Stato dei marker Recall Preset al tempo pos del file: per l'audio e per l'immagine vale l'ultimo
+        marker già passato (con la parte di sfumatura che resta); se non ce n'è nessuno e un marker aveva
+        cambiato qualcosa, si torna ai valori della cue (e ai keyframe)."""
+        c = self.cue
+        applied = getattr(self, "_mk_applied", None)
+        if applied is None:
+            applied = self._mk_applied = set()
+        last = {}
+        for at, dur, m in sorted(self._marker_items(pos), key=lambda x: x[0]):
+            if at >= pos - 0.001 or m.get("action") != "preset" or not m.get("preset"):
+                continue
+            n = m["preset"]
+            for kind in ("audio", "visual"):
+                if n in c.preset_dict(kind):
+                    last[kind] = (at, dur, m)
+        for kind in ("audio", "visual"):
+            if kind in last:
+                at, dur, m = last[kind]
+                rest = max(0.0, at + dur - pos)
+                start_preset(self, c, m["preset"] if kind == "visual" else "",
+                             m["preset"] if kind == "audio" else "", rest, m.get("shape") or "scurve")
+                applied.add(kind)
+            elif kind in applied:
+                self._markers_revert(kind)
+                applied.discard(kind)
+
+    def _markers_revert(self, kind):
+        """Toglie l'effetto dei Recall Preset dei marker su una corsia: tornano i valori della cue."""
+        c = self.cue
+        if kind == "audio":
+            self.kf_aud_off = False
+            self._aud_override = None
+            self._fx_override = None
+            self._sends_morph = None
+            if getattr(self, "voice", None) is None and c.type == "video":
+                self.fade_to(db_to_lin(c.level_db), None, 0.0, "linear", False)
+        else:
+            self.morph = None
+            self.kf_vis_off = False
+            view = getattr(self, "view", None)
+            if view is not None:
+                ov = view.__dict__["_ov"]
+                for k in list(VIS_MORPH) + ["warp", "fit"]:
+                    ov.pop(k, None)
+            self.kf_op_ratio = 1.0
+            self.fade_to(None, float(c.opacity), 0.0, "linear", False)
 
     def _marker_action(self, m, dur=None):
         if dur is None:
@@ -452,6 +535,10 @@ class KeyframeMixin:
             vis = n if n in c.preset_dict("visual") else ""
             if aud or vis:
                 start_preset(self, c, vis, aud, dur, m.get("shape") or "scurve")
+                applied = getattr(self, "_mk_applied", None)
+                if applied is None:
+                    applied = self._mk_applied = set()
+                applied.update(k for k, v in (("audio", aud), ("visual", vis)) if v)
             else:
                 self.ctrl.message.emit(tr("Marker «{0}»: la cue non ha il preset «{1}»", m.get("name") or "M", n))
         elif act == "stop":
@@ -702,6 +789,7 @@ class AudioInstance(RoutedVoice, KeyframeMixin, Instance):
     def seek_to(self, t):
         self.ctrl.audio.seek(self.key, max(0.0, float(t)))
         self.elapsed = self.voice.played / SR
+        self.markers_jumped()
 
     def tick(self, now, dt):
         v = self.voice
@@ -963,11 +1051,14 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
         if self.voice is not None:
             if not self.synced:
                 self._seek_pending = (t, self.ctrl.clock)
+                self.markers_jumped(float(self.cue.start or 0.0) + t)
                 return
             self.ctrl.audio.seek(self.key, t)
             self._seek_video(self.voice.pos / SR)
+            self.markers_jumped(self.voice.pos / SR)
         elif getattr(self, "player", None) is not None:
             self._seek_video(float(self.cue.start or 0.0) + t)
+            self.markers_jumped(float(self.cue.start or 0.0) + t)
 
     def _sync(self, now):
         v = self.voice
@@ -988,6 +1079,7 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
                     self.ctrl.audio.seek(self.key, t)
                     self.elapsed = t
                     self._seek_video(v.pos / SR)
+                    self.markers_jumped(v.pos / SR)
             return
         if v.wraps != self.wraps:             # l'audio è ripartito dall'inizio del loop
             self.wraps = v.wraps
