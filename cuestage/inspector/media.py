@@ -825,6 +825,8 @@ class MediaTabsMixin:
                                "vuoto = tutte. Una pagina può anche ripetersi."))
         f.addRow(tr("Pagine"), pages_ed)
         f.addRow(tr("Dissolvenza tra le pagine"), self._dspin("pdf_fade", 0, 10, 0.1, 2))
+        f.addRow(self._check("pdf_stop_next", tr("Ferma il PDF quando il GO passa alla cue successiva (con il "
+                                                 "fade out della cue)")))
         v.addLayout(f)
         lw = QListWidget()
         lw.setViewMode(QListView.IconMode)

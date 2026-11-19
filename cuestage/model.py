@@ -198,6 +198,8 @@ class Cue:
         "text_fit": "shrink", "text_max_lines": 2, "text_spacing": 100.0, "text_fade": 0.3,
         # cue PDF: pagine mostrate (indici da 0, nell'ordine; vuoto = tutte) e dissolvenza tra le pagine (s)
         "pdf_pages": [], "pdf_fade": 0.3,
+        # cue PDF: dopo l'ultima pagina il GO che passa alla cue successiva la ferma (con il suo fade out)
+        "pdf_stop_next": False,
         # cue MIDI out: porta (vuota = predefinita delle impostazioni) e messaggi, uno per riga
         "mo_port": "", "mo_msgs": "",
         # osc

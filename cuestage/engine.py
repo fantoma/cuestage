@@ -2448,6 +2448,9 @@ class Controller(QObject):
         for t in [i for i in self.instances.values() if isinstance(i, TextInstance) and not i.done
                   and i.cue.text_mode == "sequence" and i.lst is lst]:
             t.stop(float(t.cue.text_fade or 0))   # dopo l'ultima frase il GO successivo esce dal testo
+        for pd in [i for i in self.instances.values() if isinstance(i, PdfInstance) and not i.done
+                   and not i.user_stopped and i.lst is lst and getattr(i.cue, "pdf_stop_next", False)]:
+            pd.stop(float(pd.cue.fade_out or 0))  # PDF con «Ferma alla cue successiva»: esce con il GO che va avanti
         i = self.playhead_of(lst)
         if not (0 <= i < len(cues)):
             return

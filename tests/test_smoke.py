@@ -3610,9 +3610,9 @@ def t_markers_live(w):
     assert w.inspector.cue is a
     mt = a.markers[0]["t"]
     pos = lambda: w.ctrl.instances[a.id].position()
+    run(0.5)                                           # (le modifiche della cue in riproduzione si applicano dopo)
     tl.restart_fn(mt)                                  # suona: salta al marker
-    run(0.2)
-    assert abs(pos() - mt) < 0.5, (pos(), mt)
+    assert wait_until(lambda: abs(pos() - mt) < 0.5, 2), (pos(), mt)
     w.ctrl.pause_cue(a.id, True)
     run(0.2)
     tl.restart_fn(mt - 3.0)                            # in pausa: salta e riparte
@@ -3797,6 +3797,21 @@ def t_pdf_cue(w):
     ins.pdf_pages_edit.editingFinished.emit()
     run(0.1)
     assert c.pdf_pages == [3, 1] and inst.pages == [3, 1]
+    w.ctrl.stop_all(0)
+    run(0.2)
+    # «Ferma il PDF quando il GO passa alla cue successiva»
+    c.pdf_pages, c.pdf_stop_next, c.fade_out = [0, 1], True, 0.0
+    w.ctrl.set_playhead(0)
+    w.go()
+    run(0.2)
+    w.go()                                                                 # pagina 2 (ultima): il PDF resta
+    run(0.2)
+    pi = w.ctrl.instances[c.id]
+    assert pi.idx == 1 and not pi.done
+    w.go()                                                                 # il GO va avanti: il PDF si ferma
+    run(0.3)
+    assert c.id not in w.ctrl.instances or w.ctrl.instances[c.id].done
+    c.pdf_stop_next = False
     w.ctrl.stop_all(0)
     run(0.2)
     # ESC esce dal PDF mentre usa il GO

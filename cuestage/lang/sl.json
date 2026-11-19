@@ -2261,6 +2261,7 @@
   "Web ← {0}": "Splet ← {0}",
   "Angoli (web): {0}": "Koti (splet): {0}",
   "{0} (web · {1})": "{0} (splet · {1})",
-  " (questa regia)": " (ta režija)"
+  " (questa regia)": " (ta režija)",
+  "Ferma il PDF quando il GO passa alla cue successiva (con il fade out della cue)": "Ustavi PDF, ko GO preide na naslednjo iztočnico (z odtekanjem iztočnice)"
  }
 }
