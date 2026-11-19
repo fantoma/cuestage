@@ -578,6 +578,15 @@ created; if it already exists CueStage asks before overwriting), extracts it (ne
 the show. Hardware settings (sound cards, MIDI ports, mixers…) travel with the show: check them on the new
 computer.
 
+**Missing files.** When a show is opened and some cue files are not at their saved path (show copied without a
+bundle, external drive with another letter or mount point, renamed folder), the **Find missing files** window opens
+(also **File › Find missing files…**). It lists each missing file with its cues; **Search in a folder…** looks for
+them by name (case-insensitive) in a folder and its subfolders, in the background, and when several files have the
+same name it picks the one whose path is most similar to the original; **Search everywhere** looks in the show folder
+and its parent, the home folder and the external drives. **Locate file…** (or a double-click on the row) lets you
+point to one file by hand, and the same folder move is then tried on all the other missing files. **Relink found
+files** updates the cues (all versions); undo works as for any other change.
+
 ## Master volume, last project and autosave
 
 - The **master volume** (at the top, before “Pause”) acts on audio and video; double-click = 0 dB.

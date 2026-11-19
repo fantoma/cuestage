@@ -625,6 +625,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         m.addSeparator()
         add(m, tr("Export bundle…"), lambda: self.export_bundle())
         add(m, tr("Import bundle…"), lambda: self.import_bundle())
+        add(m, tr("Trova file mancanti…"), lambda: self.missing_files_dialog())
         m.addSeparator()
         add(m, tr("Versioni dello show…"), self.versions_dialog, "Ctrl+Alt+V")
         m.addSeparator()

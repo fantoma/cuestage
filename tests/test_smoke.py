@@ -3775,6 +3775,78 @@ def t_normalize(w):
     assert w.ctrl.instances.get(a.id) is None or w.ctrl.instances[a.id].voice.loud_tap is None
 
 
+def t_missing_files(w):
+    """File › Trova file mancanti: all'apertura compare l'elenco; ricerca per nome in una cartella (vince il
+    percorso più simile), file indicato a mano con lo stesso spostamento provato sugli altri, ricollegamento."""
+    import wave as _wave
+    from cuestage.ui_missing import best_match, default_roots, missing_cues, relocate
+
+    def wav(path):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with _wave.open(path, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(48000)
+            wf.writeframes(b"\0\0" * 4800)
+        return path
+    base = os.path.join(TMP, "missing")
+    old = os.path.join(base, "vecchio", "Suoni")
+    new = os.path.join(base, "nuovo", "Suoni")
+    wav(os.path.join(new, "Tuono.wav"))
+    wav(os.path.join(base, "nuovo", "Altro", "tuono.wav"))       # stesso nome, percorso meno simile
+    wav(os.path.join(new, "Pioggia.wav"))
+    wav(os.path.join(base, "spostati", "Musica", "Intro.wav"))
+    wav(os.path.join(base, "spostati", "Musica", "Finale.wav"))
+    assert best_match(os.path.join(old, "Tuono.wav"), [os.path.join(base, "nuovo", "Altro", "tuono.wav"),
+                                                       os.path.join(new, "Tuono.wav")]) == os.path.join(new, "Tuono.wav")
+    assert best_match("D:\\Show\\Suoni\\Tuono.wav", [os.path.join(new, "Tuono.wav")])   # percorsi Windows
+    assert default_roots(os.path.join(base, "show.cueshow"))
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("audio", number="1", name="Tuono", file=os.path.join(old, "Tuono.wav"))
+    a2 = Cue("audio", number="1.5", name="Tuono bis", file=os.path.join(old, "Tuono.wav"))   # stesso file
+    b = Cue("audio", number="2", name="Pioggia", file=os.path.join(old, "pioggia.WAV"))
+    c = Cue("audio", number="3", name="Intro", file=os.path.join(base, "vecchio", "Musica", "Intro.wav"))
+    d = Cue("audio", number="4", name="Finale", file=os.path.join(base, "vecchio", "Musica", "Finale.wav"))
+    sh.cues = [a, a2, b, c, d]
+    path = os.path.join(base, "show.cueshow")
+    sh.save(path)
+    w.show_data.dirty = False
+    w.open_show(path)
+    run(0.2)
+    dlg = w._missing_dlg
+    assert dlg.isVisible() and len(dlg.paths) == 4, dlg.paths                # 5 cue, 4 file diversi
+    assert len(missing_cues(w.show_data)) == 5
+    dlg.start_search([os.path.join(base, "nuovo")])
+    dlg.wait()
+    f = dlg.found
+    ca = w.show_data.by_id(a.id)
+    assert f[ca.file] == os.path.join(new, "Tuono.wav"), f                   # il percorso più simile
+    cb = w.show_data.by_id(b.id)
+    assert f[cb.file] == os.path.join(new, "Pioggia.wav")                    # maiuscole indifferenti
+    cc, cd = w.show_data.by_id(c.id), w.show_data.by_id(d.id)
+    assert cc.file not in f and cd.file not in f
+    dlg.locate(dlg.paths.index(cc.file), os.path.join(base, "spostati", "Musica", "Intro.wav"))
+    assert f[cd.file] == os.path.join(base, "spostati", "Musica", "Finale.wav")   # stesso spostamento
+    assert relocate(os.path.join(base, "vecchio", "Musica", "Intro.wav"),
+                    os.path.join(base, "spostati", "Musica", "Intro.wav"),
+                    os.path.join(base, "vecchio", "Musica", "Manca.wav")) is None   # non c'è: niente
+    assert dlg.apply_btn.isEnabled()
+    dlg.apply_btn.click()
+    assert w.show_data.by_id(a2.id).file == os.path.join(new, "Tuono.wav")
+    assert cd.file == os.path.join(base, "spostati", "Musica", "Finale.wav")
+    assert not missing_cues(w.show_data) and w.show_data.dirty and dlg.paths == []
+    assert "Nessun" in dlg.state.text() or dlg.state.text()
+    w.undo()                                                                 # si annulla come ogni modifica
+    run(0.3)
+    assert missing_cues(w.show_data)
+    w.redo()
+    run(0.3)
+    assert not missing_cues(w.show_data)
+    dlg.close()
+    w.show_data.dirty = False
+
+
 def make_pdf(name, n=4):
     """PDF di prova: n pagine A4 orizzontali, ognuna di un colore diverso con il suo numero."""
     from PySide6.QtCore import QMarginsF, QRectF
@@ -4715,6 +4787,8 @@ if __name__ == "__main__":
     check("motori video: GPU / classico, fotogrammi convertiti solo se servono, stessa geometria", lambda: t_video_engines(w))
     check("valutazione delle prestazioni e buffer consigliato", lambda: t_perf_eval(w))
     check("cue PDF: GO = pagina successiva, pagine scelte, crop e dimensione, ESC", lambda: t_pdf_cue(w))
+    check("file mancanti: ricerca sul disco, percorso più simile, spostamento di cartella, ricollegamento",
+          lambda: t_missing_files(w))
     check("Normalizza: LUFS delle cue, correzione relativa del volume, misuratore in tempo reale", lambda: t_normalize(w))
     check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))

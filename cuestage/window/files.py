@@ -248,11 +248,23 @@ class FilesMixin:
         self.qs.setValue("last_show_dir", os.path.dirname(path))
         self._remember_last(path)
         self._set_show(show)
-        missing = [c for c in show.all_cues() if c.is_media() and c.file and not os.path.exists(c.file)]
-        if missing:
-            QMessageBox.warning(self, tr("File mancanti"),
-                                tr("File non trovati:\n") + "\n".join(c.file for c in missing[:15]))
+        from ..ui_missing import missing_cues
+        if missing_cues(show):
+            self.missing_files_dialog()            # elenco dei file mancanti, con la ricerca sul disco
         self.status(tr("Aperto {0}", path))
+
+    def missing_files_dialog(self):
+        """File › Trova file mancanti: cerca sul disco i file delle cue che non ci sono più e li ricollega."""
+        from ..ui_missing import MissingFilesDialog
+        d = getattr(self, "_missing_dlg", None)
+        if d is None or d.mw is not self:
+            d = self._missing_dlg = MissingFilesDialog(self)
+        else:
+            d.reload()
+        d.show()
+        d.raise_()
+        d.activateWindow()
+        return d
 
     def save(self):
         if not self.show_data.path:
