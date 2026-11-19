@@ -127,4 +127,3 @@ def cue_pages(cue):
     n = page_count(cue.file)
     sel = [int(p) for p in (getattr(cue, "pdf_pages", None) or []) if 0 <= int(p) < n]
     return sel or list(range(n))
-
