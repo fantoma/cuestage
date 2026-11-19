@@ -929,6 +929,9 @@ class AudioEngine:
         pre = src.copy() if any(s[2] for s in sends) else None
         src = src.astype(np.float32, copy=False)
         src *= g[:, None]
+        tap = getattr(v, "loud_tap", None)
+        if tap is not None:                  # misuratore LUFS: copia del suono della cue (dopo volume e fade)
+            tap.append(src.copy())
         for bid, m2, is_pre in sends:        # mandate ai bus effetti (pre o post volume/fade)
             dst = bus_in.get(bid)
             if dst is not None and m2.shape[0] == src.shape[1]:
@@ -1003,6 +1006,7 @@ class Voice:
         self.sends = []        # mandate ai bus: [(id bus, matrice n_src × 2 lineare, pre)]
         self.send_meter = {}   # id bus -> picchi (L, R) di quanto la voce manda al bus (vumeter delle sorgenti)
         self.src_id = ""       # id della cue che suona (per i vumeter delle sorgenti del bus)
+        self.loud_tap = None   # collections.deque per il misuratore LUFS in tempo reale (Normalizza › Misuratore)
         # routing
         self.gains_fn = gains_fn or (lambda n_out: build_gains(None, None, self.n_src, n_out))
         self.out_req = ""

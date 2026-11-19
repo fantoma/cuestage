@@ -676,6 +676,10 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         add(m, tr("Testo: frase successiva"), lambda: self.text_step(1), "Alt+Right")
         add(m, tr("Testo: frase precedente"), lambda: self.text_step(-1), "Alt+Left")
 
+        m = mb.addMenu(tr("&Normalizza"))
+        add(m, tr("Normalizza il volume delle cue (LUFS)…"), self.normalize_dialog)
+        add(m, tr("Misuratore LUFS in tempo reale…"), self.loudness_meter)
+
         m = mb.addMenu(tr("&Uscita video"))
         self.act_out_show = add(m, tr("Mostra finestra di uscita"), self.toggle_output, "Ctrl+Shift+O")
         self.act_full = add(m, tr("Schermo intero"), self.toggle_fullscreen)
@@ -1100,6 +1104,33 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         d.show()
         d.raise_()
         d.activateWindow()
+
+    def normalize_dialog(self):
+        """Normalizza › analisi LUFS delle cue con audio e correzione del volume."""
+        from .ui_loudness import NormalizeDialog
+        d = getattr(self, "_norm_dlg", None)
+        if d is None or d.mw is not self:
+            d = self._norm_dlg = NormalizeDialog(self)
+        else:
+            d.reload()
+        d.show()
+        d.raise_()
+        d.activateWindow()
+        return d
+
+    def loudness_meter(self):
+        """Normalizza › misuratore LUFS in tempo reale (stile Youlean) della cue scelta."""
+        from .ui_loudness import LoudnessMeterWindow
+        d = getattr(self, "_lufs_win", None)
+        if d is None or d.mw is not self:
+            d = self._lufs_win = LoudnessMeterWindow(self)
+        else:
+            d.fill_cues()
+            d.timer.start()
+        d.show()
+        d.raise_()
+        d.activateWindow()
+        return d
 
     def bus_dialog(self):
         """Finestra dei bus effetti (riverbero, delay…): rack, matrice d'uscita, volume e preset."""

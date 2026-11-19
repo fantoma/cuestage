@@ -838,6 +838,29 @@ send only the effect to the PA.
 - Requires the `scipy` library (included in the AppImage and in the installers; `pip install scipy` otherwise):
   without it the effects are shown with a warning and the sound passes through unchanged.
 
+## Normalize (LUFS)
+
+The **Normalize** menu helps all the cues play at the same perceived loudness.
+
+- **Normalize cue volume (LUFS)…** lists every cue with audio (audio and video cues, all lists). Tick the ones to
+  analyse and press **Analyze selected**: the integrated loudness (ITU-R BS.1770-4 / EBU R128: K-weighting, 400 ms
+  blocks, absolute and relative gates — same result as ffmpeg's `ebur128`) of the stretch between IN and OUT is
+  measured in the background, together with the sample peak. Mono files are measured as dual mono (they normally go
+  to left and right). With the **target** (e.g. −14 LUFS for music streaming, −16 podcasts, −23 broadcast) each cue
+  shows its **correction** (e.g. cue 1 −2.0 dB, cue 2 +3.0 dB) and the resulting volume.
+  After the analysis the selection can be changed: **Apply volume to selected** adds the correction to the
+  **Volume** already set in each ticked cue (Audio tab, next to the matrix), so a cue deliberately set 3 dB lower
+  stays 3 dB below the others; optionally the cue's audio presets get the same correction. Applying twice does
+  nothing more; changing the target afterwards applies only the difference. A ⚠ marks a cue that would exceed
+  +12 dB or whose expected peak goes above −1 dBFS. Undo works as for any other change.
+- **Real-time LUFS meter…** measures a cue while it plays, in the style of Youlean Loudness Meter: momentary
+  (400 ms), short term (3 s), integrated, loudness range (LRA), peak and the difference from the target, with a
+  history graph (short term as coloured area — green on target, blue below, yellow/red above — and momentary as a
+  line) and M/S bars. A selector chooses the cue; with **Follow the playing cue** (on by default) the meter moves by
+  itself to the cue that is playing when the chosen one is stopped, or it can follow the cue selected in the list.
+  It measures the cue's sound after its volume, curve and fades, before the master. “Reset at every start” clears
+  the integrated value when the cue starts again.
+
 ## Markers
 
 All the markers of a cue are visible everywhere, with the same colours: IN (green), OUT (red), loop (yellow, with

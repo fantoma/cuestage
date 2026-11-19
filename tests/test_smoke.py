@@ -3631,6 +3631,83 @@ def t_markers_live(w):
     run(0.2)
 
 
+def t_normalize(w):
+    """Menu Normalizza: analisi LUFS delle cue con audio (BS.1770, come ffmpeg ebur128), correzioni rispetto al
+    riferimento, applicazione relativa al Volume già impostato solo sulle cue spuntate (anche ai preset), niente
+    doppia applicazione; misuratore in tempo reale della cue scelta."""
+    import math as _m
+    import wave as _wave
+    import numpy as _np
+    from cuestage import loudness
+
+    def wav(name, amp, sec=6):
+        path = os.path.join(TMP, name)
+        t = _np.arange(int(48000 * sec)) / 48000
+        x = (_np.sin(2 * _np.pi * 997 * t) * amp * 32767).astype(_np.int16)
+        with _wave.open(path, "wb") as wf:
+            wf.setnchannels(2)
+            wf.setsampwidth(2)
+            wf.setframerate(48000)
+            wf.writeframes(_np.repeat(x[:, None], 2, axis=1).tobytes())
+        return path
+    # riferimento: seno 997 Hz a −20 dBFS su due canali = −20 LUFS
+    sr = 48000
+    tt = _np.arange(sr * 5) / sr
+    s1 = (0.1 * _np.sin(2 * _np.pi * 997 * tt)).astype(_np.float32)
+    lufs, peak = loudness.measure(_np.stack([s1, s1], 1))
+    assert abs(lufs + 20.0) < 0.05 and abs(peak + 20.0) < 0.05, (lufs, peak)
+    assert abs(loudness.measure(s1[:, None])[0] + 20.0) < 0.05          # mono = doppio mono
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("audio", number="1", name="Forte", file=wav("nloud.wav", 0.5))      # ≈ −6 LUFS
+    b = Cue("audio", number="2", name="Piano", file=wav("nsoft.wav", 0.05))     # ≈ −26 LUFS
+    b.level_db = -3.0
+    b.presets = {"audio": {"P": {"level_db": -10.0}}}
+    m = Cue("memo", number="3", name="Nota")
+    sh.cues = [a, b, m]
+    w._set_show(sh)
+    run(0.2)
+    d = w.normalize_dialog()
+    assert [c.id for _l, c in d.cues] == [a.id, b.id]                   # solo le cue con audio
+    d.target.setValue(-14.0)
+    d.analyze()
+    d.wait()
+    ra, rb = d.results[a.id], d.results[b.id]
+    assert abs(ra["lufs"] - (-20 + 20 * _m.log10(5))) < 0.1, ra           # 0,5 = −6 dBFS → −6 LUFS
+    assert abs(rb["lufs"] - (-20 + 20 * _m.log10(0.5))) < 0.1, rb
+    pa, pb = d.pending(a), d.pending(b)
+    assert abs(pa - (-14 - ra["lufs"])) < 0.11 and 11 < pb < 13, (pa, pb)
+    d.set_checked([b.id])                                                  # solo «Piano»
+    d.apply()
+    assert a.level_db == 0.0 and abs(b.level_db - (-3.0 + pb)) < 0.06, (a.level_db, b.level_db)   # relativo
+    assert abs(b.presets["audio"]["P"]["level_db"] - (-10.0 + pb)) < 0.06
+    lvl = b.level_db
+    d.apply()                                                              # niente doppia applicazione
+    assert b.level_db == lvl and d.pending(b) == 0.0
+    d.target.setValue(-16.0)                                               # nuovo riferimento: solo la differenza
+    assert abs(d.pending(b) + 2.0) < 0.05
+    d.apply()
+    assert abs(b.level_db - (lvl - 2.0)) < 0.06
+    d.close()
+    # misuratore in tempo reale: la cue «Forte» suona a ≈ −6 LUFS (volume 0 dB)
+    mw_ = w.loudness_meter()
+    mw_.select_cue(a)
+    w.ctrl.start_cue(a)
+    assert wait_until(lambda: mw_.meter.seconds() > 1.5, 6)
+    assert abs(mw_.meter.momentary() - ra["lufs"]) < 1.0, mw_.meter.momentary()
+    assert abs(mw_.meter.integrated() - ra["lufs"]) < 1.0
+    assert "LUFS" in mw_.vals["int"].text()
+    w.ctrl.stop_all(0)
+    run(0.2)
+    w.ctrl.start_cue(b)                                  # «Forte» ferma, suona «Piano»: il misuratore passa a quella
+    assert wait_until(lambda: mw_.combo.currentData() == b.id, 3)
+    assert wait_until(lambda: mw_.meter.seconds() > 0.8, 4)
+    w.ctrl.stop_all(0)
+    run(0.2)
+    mw_.close()
+    assert w.ctrl.instances.get(a.id) is None or w.ctrl.instances[a.id].voice.loud_tap is None
+
+
 def t_memo_skip(w):
     """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
     sh = Show()
@@ -4451,6 +4528,7 @@ if __name__ == "__main__":
     check("audio letto dal disco (cache float32, anche 24 bit)", t_audio_cache)
     check("motori video: GPU / classico, fotogrammi convertiti solo se servono, stessa geometria", lambda: t_video_engines(w))
     check("valutazione delle prestazioni e buffer consigliato", lambda: t_perf_eval(w))
+    check("Normalizza: LUFS delle cue, correzione relativa del volume, misuratore in tempo reale", lambda: t_normalize(w))
     check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))
     check("Controllo bus sovrapposti: voci proprie, vince la più recente; mandate che sfumano col preset", lambda: t_bus_control_overlap(w))
