@@ -119,16 +119,15 @@ class PlaybackMixin:
         idx = self.ctrl.playhead              # playhead della lista visualizzata
         self.model.refresh()
         self._update_standby()
-        # la selezione segue il playhead (con una sola cue il playhead non si muove,
-        # quindi la selezione resta e GO la ripete)
-        if self._select_guard:
+        # la selezione (e quindi l'ispettore) resta sulla cue scelta dall'utente anche quando il playhead si sposta
+        # (GO, avanti / indietro, OSC): si può continuare a lavorare sulla cue che suona (marker, «Ricomincia da
+        # qui»). Il playhead si vede nella lista e in «In attesa». Solo senza nessuna cue selezionata la selezione
+        # va sul playhead.
+        if self._select_guard or self._current_cue() is not None:
             return
         self._select_guard = True
         if 0 <= idx < len(self.show_data.cues):
-            if self._current_row() != idx or len(self._selected_rows()) != 1:
-                self._select_rows([idx])
-        else:
-            self.table.clearSelection()
+            self._select_rows([idx])
         self._select_guard = False
 
     def _ctrl_changed(self):

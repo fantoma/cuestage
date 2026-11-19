@@ -406,8 +406,10 @@ All the columns of the list (#, Type, Name, Target, …) can be **resized** by d
 (double-click the edge: fit to the content); the last column fills the remaining space and the widths are kept
 from one start to the next.
 
-After a GO the playhead (and the selection) jumps to the next manual cue; if the list has only one cue it stays
-on it, so GO restarts it. A click on a row always puts it in standby. The state of each cue (waiting, progress,
+After a GO the playhead jumps to the next manual cue; if the list has only one cue it stays on it, so GO restarts
+it. The **selection — and therefore the inspector — stays on the cue you chose**: you can keep working on the cue
+that is playing (markers, “Restart from here”) while the standby moves on (it is shown in the list and in “In
+standby”). A click on a row always puts it in standby. The state of each cue (waiting, progress,
 elapsed/remaining time) is visible in the *Status* column and in the *Active cues* panel, where cues can be
 paused or stopped one by one. Next to the bar of each cue with audio there is a small **meter** (one bar for mono
 cues, two for stereo and multichannel; scale −60…0 dBFS, green / yellow above −9 dB / red above −1 dB): it
@@ -844,6 +846,10 @@ and audio keyframes (light blue ◆; hollow = “base”).
 
 - **Waveform** (“Times and loop” tab): IN/OUT, loop, fades, curve and also the keyframes, placed at the
   file position (a keyframe that falls in a loop repetition is marked as such).
+- **While the cue plays** markers can be added (**M** with the waveform selected: at the point being played) and
+  dragged. Right-click on a marker (or anywhere on the waveform) › **▶ Restart from here**: the cue plays from that
+  point — it jumps there if it is playing, jumps and resumes if it is paused, starts from there if it is stopped;
+  the other cues keep playing.
 - **Progress bars** during playback (“Status” column and “Active cues” panel): real cue time with the loop
   unrolled into its repetitions, fade ramps, curve and keyframes; with an infinite loop the cursor runs inside
   the loop region. Hovering a marker shows its description.

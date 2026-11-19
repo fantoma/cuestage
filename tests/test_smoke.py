@@ -3573,6 +3573,64 @@ def t_small_screen(w):
     w._update_compact()
 
 
+def t_markers_live(w):
+    """Durante il play: l'ispettore resta sulla cue selezionata anche se il GO sposta il playhead; marker creati
+    (tasto M al punto che suona) e spostati mentre la cue suona; «Ricomincia da qui» da un marker: salta se suona,
+    riparte se è in pausa, parte se è ferma (anche con altre cue che suonano)."""
+    from PySide6.QtCore import QPoint, Qt as _Qt
+    from PySide6.QtTest import QTest
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("audio", number="1", name="Lunga", file=tone("mlive.wav", sec=12))
+    b = Cue("audio", number="2", name="Altra", file=tone("mlive2.wav", sec=12))
+    sh.cues = [a, b]
+    w._set_show(sh)
+    run(0.3)
+    w._select_rows([0])
+    run(0.2)
+    w.go()
+    run(0.5)
+    assert w.ctrl.playhead == 1 and w.inspector.cue is a and w._current_cue() is a   # l'ispettore resta su «Lunga»
+    w.inspector.tabs.setCurrentIndex(w.inspector._tab_keys.index("Tempi e loop"))
+    run(0.2)
+    tl = w.inspector.timeline
+    assert wait_until(lambda: tl.playhead is not None and tl.playhead > 0.2, 3)
+    tl.setFocus()
+    QTest.keyClick(tl, _Qt.Key_M)                     # marker al punto che suona
+    assert len(a.markers) == 1 and abs(a.markers[0]["t"] - tl.playhead) < 0.6, (a.markers, tl.playhead)
+    # spostato con il mouse mentre suona
+    tl.repaint()
+    i, x, box = tl._umark_hits[0]
+    y = int(box.center().y())
+    QTest.mousePress(tl, _Qt.LeftButton, _Qt.NoModifier, QPoint(int(x), y))
+    QTest.mouseMove(tl, QPoint(int(tl.t2x(6.0)), y))
+    QTest.mouseRelease(tl, _Qt.LeftButton, _Qt.NoModifier, QPoint(int(tl.t2x(6.0)), y))
+    run(0.2)
+    assert abs(a.markers[0]["t"] - 6.0) < 0.3, a.markers
+    assert w.inspector.cue is a
+    mt = a.markers[0]["t"]
+    pos = lambda: w.ctrl.instances[a.id].position()
+    tl.restart_fn(mt)                                  # suona: salta al marker
+    run(0.2)
+    assert abs(pos() - mt) < 0.5, (pos(), mt)
+    w.ctrl.pause_cue(a.id, True)
+    run(0.2)
+    tl.restart_fn(mt - 3.0)                            # in pausa: salta e riparte
+    run(0.4)
+    inst = w.ctrl.instances[a.id]
+    assert not inst.paused and mt - 3.0 < pos() < mt - 2.0, (inst.paused, pos())
+    w.ctrl.stop_cue(a.id, 0)
+    run(0.2)
+    w.ctrl.start_cue(b)
+    run(0.2)
+    tl.restart_fn(mt)                                  # ferma, con un'altra cue che suona: parte dal marker
+    run(0.4)
+    assert a.id in w.ctrl.instances and b.id in w.ctrl.instances
+    assert mt - 0.1 < pos() < mt + 1.0, pos()
+    w.ctrl.stop_all(0)
+    run(0.2)
+
+
 def t_memo_skip(w):
     """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
     sh = Show()
@@ -4393,6 +4451,7 @@ if __name__ == "__main__":
     check("audio letto dal disco (cache float32, anche 24 bit)", t_audio_cache)
     check("motori video: GPU / classico, fotogrammi convertiti solo se servono, stessa geometria", lambda: t_video_engines(w))
     check("valutazione delle prestazioni e buffer consigliato", lambda: t_perf_eval(w))
+    check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))
     check("Controllo bus sovrapposti: voci proprie, vince la più recente; mandate che sfumano col preset", lambda: t_bus_control_overlap(w))
     check("bus dal vivo: valori in uso nelle finestre, modifiche che valgono subito; preset con le mandate", lambda: t_bus_live_edit(w))

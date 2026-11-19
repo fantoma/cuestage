@@ -41,6 +41,7 @@ class TimelineEditor(QWidget):
         self.drag = None          # ("marker", nome) | ("point", indice) | ("pan", x0, v0, v1)
         self.playhead = None
         self.cursor_t = None          # cursore della timeline dei keyframe (tempo del file)
+        self.restart_fn = None        # «Ricomincia da qui»: funzione(tempo del file), impostata dall'ispettore
         self.thumbs = None            # (QImage striscia, n) miniature del video
         self.point_mode = "volume"    # doppio clic / Ctrl+clic: punto di «volume» o di «opacity» (video)
         self.snap = True              # trascinando un punto si aggancia a quelli delle altre curve e ai marker
@@ -701,6 +702,13 @@ class TimelineEditor(QWidget):
             c.markers = []
         return c.markers
 
+    def marker_time(self):
+        """Tempo per un marker nuovo (tasto M): mentre la cue suona il punto che sta suonando, altrimenti il
+        cursore della timeline (o l'IN)."""
+        if self.playhead is not None:
+            return self.playhead
+        return self.cursor_t if self.cursor_t is not None else float(self.cue.start or 0)
+
     def add_marker(self, t, name=None):
         """Nuovo marker al tempo t del file (nome automatico «M1», «M2»…)."""
         ms = self._user_markers()
@@ -790,8 +798,7 @@ class TimelineEditor(QWidget):
 
     def keyPressEvent(self, e):
         if self.cue is not None and e.key() == Qt.Key_M and not e.modifiers():
-            t = self.cursor_t if self.cursor_t is not None else (self.playhead or float(self.cue.start or 0))
-            self.add_marker(t)
+            self.add_marker(self.marker_time())
             return
         super().keyPressEvent(e)
 
@@ -1122,6 +1129,9 @@ class TimelineEditor(QWidget):
             a = QAction(label, m)
             a.triggered.connect(lambda: (fn(), self.changed.emit(), self.update()))
             m.addAction(a)
+        if self.restart_fn is not None:
+            m.addAction(tr("▶ Ricomincia da qui"), lambda: self.restart_fn(t))
+            m.addSeparator()
         m.addAction(tr("Rinomina…"), lambda: self.rename_marker(i))
         act(tr("Imposta IN qui"), lambda: setattr(c, "start", t))
         act(tr("Imposta OUT qui"), lambda: setattr(c, "end", t))
@@ -1161,6 +1171,9 @@ class TimelineEditor(QWidget):
             a.triggered.connect(lambda: (fn(), self.changed.emit(), self.update()))
             m.addAction(a)
 
+        if self.restart_fn is not None:
+            m.addAction(tr("▶ Ricomincia da qui"), lambda: self.restart_fn(t))
+            m.addSeparator()
         m.addAction(tr("Aggiungi marker qui (M)"), lambda: self.add_marker(t))
         kinds = ["audio"] if c.type == "audio" else ["visual", "audio"]
         from .keyframes import KIND_LABELS as KL

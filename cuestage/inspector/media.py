@@ -530,17 +530,19 @@ class MediaTabsMixin:
         self.timeline = TimelineEditor()
         self.timeline.setFixedHeight(114)
         self.timeline.changed.connect(self._timeline_changed)
+        self.timeline.restart_fn = lambda ft, c=cue: self._restart_from(c, ft)
         v.addWidget(self.timeline)
         v.addWidget(self._timeline_scrollbar(self.timeline))
         if cue.type == "video":
             hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · quadratini arancioni = fade in e fade out · linea "
-                             "arancione = {0} · clic o trascina = cursore · tasto destro: marker e keyframe · M = marker al "
-                             "cursore · doppio clic o Ctrl+clic: {1} · rotella: zoom · Maiusc+rotella o tasto "
+                             "arancione = {0} · clic o trascina = cursore · tasto destro: marker, keyframe e «Ricomincia da qui» · M = marker "
+                             "al cursore (mentre suona: al punto che suona) · doppio clic o Ctrl+clic: {1} · rotella: zoom · Maiusc+rotella o tasto "
                              "centrale: scorri", tr("opacità (trasparenza)"), tr("punto di opacità (Maiusc: di volume)")))
         else:
             hint = QLabel(tr("Trascina IN/OUT e i marcatori del loop · linea rosa = volume (con i fade; trascina un tratto "
                              "per alzarlo o abbassarlo con i suoi due punti) · quadratini = fade in e fade out · clic o "
-                             "trascina = cursore · tasto destro: marker e keyframe · M = marker al cursore · doppio clic "
+                             "trascina = cursore · tasto destro: marker, keyframe e «Ricomincia da qui» · M = marker al cursore "
+                             "(mentre suona: al punto che suona) · doppio clic "
                              "o Ctrl+clic: punto di volume · rotella: zoom · Maiusc+rotella o tasto centrale: scorri"))
         hint.setStyleSheet("color:#888; font-size:10px;")
         hint.setWordWrap(True)
@@ -1348,6 +1350,14 @@ class MediaTabsMixin:
         self._emit()
         if self.timeline:
             self.timeline.update()
+
+    def _restart_from(self, cue, ft):
+        """«Ricomincia da qui» dalla timeline: la cue suona dal punto ft del file (anche se è in pausa, ferma o se
+        stanno suonando altre cue)."""
+        tl = self.timeline
+        cue_t = tl._cue_time_of(ft) if tl is not None else max(0.0, ft - float(cue.start or 0))
+        if self.ctrl.restart_from(cue, cue_t):
+            self.ctrl.message.emit(tr("▶ {0} da {1}", cue.label(), fmt_time(ft)))
 
     def _update_playhead(self):
         if self.timeline is None or self.cue is None:

@@ -2713,6 +2713,21 @@ class Controller(QObject):
                 inst.stop(fade)
         self.changed.emit()
 
+    def restart_from(self, cue, cue_t):
+        """«Ricomincia da qui»: la cue suona da «cue_t» secondi del suo percorso (loop compresi). Se sta suonando
+        salta lì, se è in pausa salta lì e riparte, se è ferma parte da lì (le altre cue continuano)."""
+        inst = self.instances.get(cue.id)
+        if inst is None or inst.done:
+            self.start_cue(cue, cascade=False)
+            inst = self.instances.get(cue.id)
+            if inst is None:
+                return False
+        elif inst.paused:
+            inst.pause(False)
+        inst.seek_to(max(0.0, float(cue_t)))
+        self.changed.emit()
+        return True
+
     def pause_cue(self, cue_id, on):
         inst = self.instances.get(cue_id)
         if inst:
