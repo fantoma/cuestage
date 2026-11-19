@@ -17,7 +17,7 @@ MIN_DB = -60.0
 
 
 def lanes_for(cue):
-    return {"video": ["visual", "audio"], "image": ["visual"], "audio": ["audio"]}.get(cue.type, [])
+    return {"video": ["visual", "audio"], "image": ["visual"], "pdf": ["visual"], "audio": ["audio"]}.get(cue.type, [])
 
 
 def migrate_points(points):

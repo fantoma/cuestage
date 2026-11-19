@@ -126,7 +126,7 @@ class MidiFeedback:
         for c in sh.all_cues():
             if c.midi_vol and c.type in ("audio", "video"):
                 add(normalize_control(c.midi_vol), level(c))
-            if c.midi_op and c.type in ("video", "image"):
+            if c.midi_op and c.type in ("video", "image", "pdf"):
                 add(normalize_control(c.midi_op), opacity(c))
             if c.midi:
                 sp = normalize_spec(c.midi)
@@ -137,7 +137,7 @@ class MidiFeedback:
         if cur is not None:
             if mc.get("vol_selected") and cur.type in ("audio", "video"):
                 add(normalize_control(mc["vol_selected"]), level(cur))
-            if mc.get("op_selected") and cur.type in ("video", "image"):
+            if mc.get("op_selected") and cur.type in ("video", "image", "pdf"):
                 add(normalize_control(mc["op_selected"]), opacity(cur))
         if mc.get("xfade") and ctrl.xf_manual is None:
             add(normalize_control(mc["xfade"]), float(ctrl.xf_rest or 0.0))

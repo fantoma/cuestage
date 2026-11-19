@@ -14,7 +14,8 @@ import subprocess
 import sys
 
 KEEP = {"QtCore", "QtGui", "QtWidgets", "QtMultimedia", "QtMultimediaWidgets", "QtNetwork",
-        "QtOpenGL", "QtOpenGLWidgets", "QtSvg", "QtSvgWidgets", "QtDBus", "QtQml", "QtQuick", "QtQuickWidgets"}
+        "QtOpenGL", "QtOpenGLWidgets", "QtSvg", "QtSvgWidgets", "QtDBus", "QtQml", "QtQuick", "QtQuickWidgets",
+        "QtPdf"}                                  # QtPdf: cue PDF
 # moduli QML per l'uscita video su GPU (video_quick.py): di QtQuick solo la cartella principale, senza sottomoduli
 KEEP_QML = {"QtQml": True, "QtMultimedia": True, "QtQuick": False}
 KEEP_PLUGINS = {"platforms", "platformthemes", "platforminputcontexts", "xcbglintegrations", "egldeviceintegrations",

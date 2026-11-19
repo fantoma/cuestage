@@ -75,7 +75,7 @@ class EditingMixin:
 
     def add_cue(self, ctype, row=None, group=None):
         """Nuova cue (dopo la selezione). row/group: posizione e gruppo imposti (GRID, gruppo aperto)."""
-        if ctype in ("audio", "video", "image"):
+        if ctype in ("audio", "video", "image", "pdf"):
             from ..model import MEDIA_EXT
             pat = " ".join("*" + e for e in sorted(MEDIA_EXT[ctype]))
             start = self.qs.value("last_dir", os.path.expanduser("~"))
@@ -279,7 +279,7 @@ class EditingMixin:
         """Dimensioni del sorgente di una cue visiva non in riproduzione."""
         if not cue.file:
             return None
-        if cue.type == "image":
+        if cue.type in ("image", "pdf"):
             img = self.ctrl.image(cue.file)
             return (img.width(), img.height()) if img is not None and not img.isNull() else None
         info = self.loader.get_info(cue.file)
@@ -313,7 +313,7 @@ class EditingMixin:
         self._update_standby()
 
     def _preload(self, cue):
-        if cue.file and cue.is_media():
+        if cue.file and cue.is_media() and cue.type != "pdf":      # i PDF non passano da ffprobe
             self.loader.get_info(cue.file)
             if cue.type == "audio" or (cue.type == "video" and cue.video_audio != "system"):
                 self.loader.preload_audio(cue.file)   # i file senza audio non occupano memoria

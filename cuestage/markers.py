@@ -77,7 +77,7 @@ def cue_axis(cue, duration):
         else:
             ax.total = ax.first
         return ax
-    if cue.type == "image":
+    if cue.type in ("image", "pdf"):
         d = float(cue.duration or 0)
         kf_last = max([float(p.get("t", 0)) for p in (cue.preset_points or [])] or [0])
         return Axis(offset=0.0, first=d if d > 0 else max(10.0, kf_last + 5), total=d if d > 0 else None,

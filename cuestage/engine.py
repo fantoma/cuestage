@@ -1237,6 +1237,125 @@ class ImageInstance(KeyframeMixin, Instance):
         self.ctrl.comp.remove(self.key, getattr(self, "layer", None))
 
 
+class PdfInstance(ImageInstance):
+    """Cue PDF: mostra le pagine scelte una alla volta, come un'immagine (crop, dimensione, posizione, prospettiva,
+    opacità, fade dell'intera cue). Come un gruppo in sequenza: ogni GO passa alla pagina successiva (dissolvenza
+    pdf_fade); dopo l'ultima il GO va alla cue seguente e l'ultima pagina resta. Alt+→ / Alt+← avanti e indietro,
+    ESC esce (la cue sfuma)."""
+
+    def start(self, silent=False):
+        from . import pdf_doc
+        c = self.cue
+        self.lst, _i = self.ctrl.show.list_of(c.id)
+        self.pages = pdf_doc.cue_pages(c) if c.file else []
+        if not self.pages:
+            self.ctrl.message.emit(tr("Impossibile aprire il PDF '{0}'", c.file))
+            self.finish()
+            return
+        self.view = CueView(c)
+        self._init_kf()
+        self.env_op = Envelope(float(c.opacity))
+        if silent:
+            self.env_op.set(0.0)
+        elif c.fade_in > 0:
+            self.env_op.set(0.0)
+            self.env_op.ramp_to(self.ctrl.clock, float(c.opacity), c.fade_in)
+        self.layers = []          # [(layer, chiave, inviluppo della pagina)]
+        self.n = 0
+        self.idx = -1
+        self._show(0, 0.0)
+
+    def page_image(self, i):
+        from . import pdf_doc
+        W, H = self.ctrl.comp.out_size
+        k = 1.5                                   # margine per crop e ingrandimenti
+        return pdf_doc.render(self.cue.file, self.pages[i], min(4096, int(W * k)), min(4096, int(H * k)))
+
+    def _show(self, idx, fade):
+        ctrl = self.ctrl
+        now = ctrl.clock
+        for _lay, _key, env in self.layers:      # la pagina precedente sfuma
+            env.ramp_to(now, 0.0, fade)
+        self.n += 1
+        key = f"{self.key}#p{self.n}"
+        lay = ctrl.comp.add(key, int(self.cue.layer), self.cue.fit, cue=self.view)
+        lay.image = self.page_image(idx)
+        env = Envelope(0.0 if fade > 0 else 1.0)
+        if fade > 0:
+            env.ramp_to(now, 1.0, fade)
+        self.layers.append((lay, key, env))
+        self.layer = lay
+        self.idx = idx
+        self._apply_opacity(now)
+        ctrl.comp.changed()
+        ctrl.changed.emit()
+
+    @property
+    def captures_go(self):
+        return not self.done and not self.user_stopped and self.idx < len(self.pages) - 1
+
+    def page_label(self):
+        return tr("pagina {0} di {1}", self.idx + 1, len(self.pages)) if self.pages else ""
+
+    def next(self):
+        if self.idx < len(self.pages) - 1:
+            self._show(self.idx + 1, float(self.cue.pdf_fade or 0))
+
+    def prev(self):
+        if self.idx > 0:
+            self._show(self.idx - 1, float(self.cue.pdf_fade or 0))
+
+    def goto(self, idx):
+        if 0 <= idx < len(self.pages) and idx != self.idx:
+            self._show(idx, float(self.cue.pdf_fade or 0))
+
+    def refresh(self):
+        """Pagine scelte cambiate durante la riproduzione: la pagina mostrata resta se c'è ancora."""
+        from . import pdf_doc
+        cur = self.pages[self.idx] if 0 <= self.idx < len(self.pages) else None
+        self.pages = pdf_doc.cue_pages(self.cue) or self.pages
+        idx = self.pages.index(cur) if cur in self.pages else min(self.idx, len(self.pages) - 1)
+        if self.layers:
+            self.layers[-1][0].image = self.page_image(idx)
+            self.idx = idx
+            self.ctrl.comp.changed()
+
+    def _apply_opacity(self, now, fo=1.0):
+        base = min(1.0, self.env_op.get(now) * fo * self.kf_op_ratio * self.trim_op)
+        for lay, _key, env in self.layers:
+            lay.opacity = base * env.get(now)
+            lay.z = int(self.cue.layer)
+            lay.fit = self.cue.fit
+
+    def tick(self, now, dt):
+        if self.done:
+            return
+        if not self.paused:
+            self.elapsed += dt
+            self._tick_kf(dt)
+        d = float(self.cue.duration or 0)
+        fo = 1.0
+        if d > 0:
+            if self.cue.fade_out > 0:
+                fo = max(0.0, min(1.0, (d - self.elapsed) / self.cue.fade_out))
+            if self.elapsed >= d:
+                self.finish()
+                return
+        keep = []
+        for lay, key, env in self.layers:        # pagine finite di sfumare: tolte
+            if env.get(now) <= 0.001 and (lay, key, env) is not self.layers[-1]:
+                self.ctrl.comp.remove(key, lay)
+            else:
+                keep.append((lay, key, env))
+        self.layers = keep
+        self._apply_opacity(now, fo)
+
+    def cleanup(self):
+        for lay, key, _env in getattr(self, "layers", []):
+            self.ctrl.comp.remove(key, lay)
+        self.layers = []
+
+
 # ------------------------------------------------------------------ altre
 
 class WaitInstance(Instance):
@@ -2167,7 +2286,7 @@ class MemoInstance(Instance):
 
 
 INSTANCE_CLASSES = {
-    "audio": AudioInstance, "video": VideoInstance, "image": ImageInstance,
+    "audio": AudioInstance, "video": VideoInstance, "image": ImageInstance, "pdf": PdfInstance,
     "wait": WaitInstance, "fade": FadeInstance, "preset": PresetInstance, "control": ControlInstance,
     "osc": OscInstance, "projector": ProjectorInstance, "mixer": MixerInstance, "switcher": SwitcherInstance,
     "memo": MemoInstance, "buscontrol": BusControlInstance, "fullscreen": FullscreenInstance,
@@ -2266,6 +2385,12 @@ class Controller(QObject):
 
     def image(self, path):
         img = self._images.get(path)
+        if img is None and str(path).lower().endswith(".pdf"):
+            from . import pdf_doc                 # PDF: la prima pagina (anteprime, crop, dimensioni)
+            W, H = self.comp.out_size
+            img = pdf_doc.render(path, 0, int(W), int(H)) if pdf_doc.page_count(path) else QImage()
+            self._images[path] = img
+            return img
         if img is None:
             img = QImage(path)
             if not img.isNull():
@@ -2290,9 +2415,10 @@ class Controller(QObject):
         return None
 
     def text_instance(self, lst=None):
-        """Cue di testo in sequenza attiva (la più recente) nella lista."""
-        ts = [i for i in self.instances.values() if isinstance(i, TextInstance) and not i.done
-              and i.cue.text_mode == "sequence" and (lst is None or i.lst is lst)]
+        """Cue di testo in sequenza o cue PDF attiva (la più recente) nella lista: Alt+→ / Alt+← e il GO la fanno
+        avanzare."""
+        ts = [i for i in self.instances.values() if not i.done and (lst is None or getattr(i, "lst", None) is lst)
+              and ((isinstance(i, TextInstance) and i.cue.text_mode == "sequence") or isinstance(i, PdfInstance))]
         return max(ts, key=lambda i: i.started_at) if ts else None
 
     def exit_captured_groups(self):
@@ -2300,9 +2426,9 @@ class Controller(QObject):
         gs = [g for g in self.group_instances() if g.captures_go]
         for g in gs:
             g.exit()
-        ts = [i for i in self.instances.values() if isinstance(i, TextInstance) and i.captures_go]
+        ts = [i for i in self.instances.values() if isinstance(i, (TextInstance, PdfInstance)) and i.captures_go]
         for t in ts:
-            t.stop(float(t.cue.text_fade or 0))
+            t.stop(float(t.cue.text_fade or 0) if isinstance(t, TextInstance) else float(t.cue.fade_out or 0))
         gs += ts
         if gs:
             self.changed.emit()
@@ -2314,7 +2440,7 @@ class Controller(QObject):
         cues = lst.cues
         cap = self.captured_group(lst)
         if cap is not None:                       # random loop / testo: il GO passa all'elemento successivo
-            if isinstance(cap, TextInstance):
+            if isinstance(cap, (TextInstance, PdfInstance)):
                 cap.next()
             else:
                 cap.advance()
@@ -2367,14 +2493,14 @@ class Controller(QObject):
 
     def set_live_opacity(self, cue, op):
         inst = self.instances.get(cue.id)
-        if inst is None or inst.done or cue.type not in ("video", "image"):
+        if inst is None or inst.done or cue.type not in ("video", "image", "pdf"):
             return False
         base = float(cue.opacity)
         inst.live_op = op / base if base > 1e-3 else op
         return True
 
     # ---------------------------------------------------- crossfade tra cue corrente e successiva
-    XF_TYPES = ("audio", "video", "image")
+    XF_TYPES = ("audio", "video", "image", "pdf")
 
     def current_scene(self, lst=None, exclude=()):
         """Cue «corrente»: le cue audio/video/immagine della lista partite per ultime (insieme)."""
@@ -2532,7 +2658,7 @@ class Controller(QObject):
         else:
             self.start_cue(cue, cascade, depth=depth)
 
-    SOLO_TYPES = ("audio", "video", "image", "text", "group")
+    SOLO_TYPES = ("audio", "video", "image", "pdf", "text", "group")
 
     def _grid_solo(self, cue):
         """GRID in modalità Solo: una cue che parte (audio, video, immagine, testo o gruppo) ferma con il fade

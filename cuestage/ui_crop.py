@@ -754,7 +754,7 @@ class CropPanel(QWidget):
             self.view.set_source(c, None, 0, 0)
             self._set_range()
             return
-        if c.type == "image":
+        if c.type in ("image", "pdf"):
             img = self.image_fn(c.file)
             if img is None or img.isNull():
                 self.view.message = tr("Immagine non leggibile")

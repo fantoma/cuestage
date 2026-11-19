@@ -323,16 +323,18 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         t = cue.type
         # video: la scheda Video / Immagine si costruisce prima, perché la sua timeline dei keyframe serve
         # anche alle schede Tempi e loop (cursore sulle miniature) e Audio (matrice al tempo del cursore)
-        visual = self._tab_visual() if t in ("video", "image") else None
+        visual = self._tab_visual() if t in ("video", "image", "pdf") else None
         if t in ("audio", "video"):
             add(self._tab_media_time(), tr("Tempi e loop"), key="Tempi e loop")
             add(self._tab_audio(), tr("Audio"), key="Audio")
             add(self._tab_effects(), tr("Effetti"), key="Effetti")
-        if t == "image":
+        if t == "pdf":
+            add(self._tab_pdf(), tr("Pagine"), key="Pagine")
+        if t in ("image", "pdf"):
             add(self._tab_image_time(), tr("Tempi"), key="Tempi e loop")
         if visual is not None:
             add(visual, tr("Video / Immagine"), scroll=False, key="Video / Immagine")
-        if t in ("audio", "video", "image"):
+        if t in ("audio", "video", "image", "pdf"):
             # preset della cue (audio e video insieme), sulla riga dei tab
             self.preset_bar = self._preset_bar()
             self._compact_preset_bar()
@@ -544,7 +546,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         midi_row.addWidget(lb)
         f.addRow(tr("Trigger MIDI"), midi_row)
         for field, label, types in (("midi_vol", tr("Fader MIDI volume"), ("audio", "video")),
-                                    ("midi_op", tr("Fader MIDI trasparenza"), ("video", "image"))):
+                                    ("midi_op", tr("Fader MIDI trasparenza"), ("video", "image", "pdf"))):
             if cue.type not in types:
                 continue
             row = QHBoxLayout()

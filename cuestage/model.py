@@ -7,10 +7,10 @@ import uuid
 
 from .system import local_path, portable_rel
 
-CUE_TYPES = ["audio", "video", "image", "text", "group", "groupexit", "fade", "preset", "control", "stoppanel",
+CUE_TYPES = ["audio", "video", "image", "pdf", "text", "group", "groupexit", "fade", "preset", "control", "stoppanel",
              "osc", "midiout", "projector", "mixer", "switcher", "buscontrol", "fullscreen", "wait", "memo"]
 TYPE_LABELS = {
-    "audio": tr("Audio"), "video": tr("Video"), "image": tr("Immagine"), "fade": tr("Fade"),
+    "audio": tr("Audio"), "video": tr("Video"), "image": tr("Immagine"), "pdf": tr("PDF"), "fade": tr("Fade"),
     "preset": tr("Cambia preset"), "control": tr("Comando"), "osc": "OSC", "projector": tr("Proiettore"), "mixer": tr("Mixer"),
     "switcher": tr("Regia video"),
     "group": tr("Gruppo"), "groupexit": tr("Esci dal gruppo"), "text": tr("Testo"), "midiout": tr("MIDI out"),
@@ -18,7 +18,7 @@ TYPE_LABELS = {
     "fullscreen": tr("Schermo intero"), "buscontrol": tr("Controllo bus"),
 }
 TYPE_ICONS = {
-    "audio": "♪", "video": "▶", "image": "▣", "fade": "◢", "preset": "⇢", "control": "⌘", "projector": "⌖",
+    "audio": "♪", "video": "▶", "image": "▣", "pdf": "▤", "fade": "◢", "preset": "⇢", "control": "⌘", "projector": "⌖",
     "osc": "⇄", "wait": "⧗", "memo": "✎", "mixer": "≣", "group": "◫", "groupexit": "⇥", "text": "T", "midiout": "♫",
     "stoppanel": "⊠", "switcher": "◧", "fullscreen": "⛶", "buscontrol": "⇶",
 }
@@ -48,7 +48,7 @@ EVENT_LABELS = {
 TRIGGER_SHORT = {"manual": "GO", "with_prev": tr("⇉ con prec."), "after_prev": tr("↳ dopo prec."),
                  "trigger": tr("T solo trigger")}
 # preset di una cue: tipi di valori salvati insieme in ogni preset (audio e/o video)
-PRESET_KINDS_FOR = {"audio": ("audio",), "video": ("audio", "visual"), "image": ("visual",)}
+PRESET_KINDS_FOR = {"audio": ("audio",), "video": ("audio", "visual"), "image": ("visual",), "pdf": ("visual",)}
 
 CONTROL_ACTIONS = ["start", "stop", "pause", "resume", "exit_loop", "stop_all", "playhead"]
 CONTROL_LABELS = {
@@ -69,6 +69,7 @@ MEDIA_EXT = {
     "audio": {".wav", ".mp3", ".flac", ".ogg", ".oga", ".aif", ".aiff", ".m4a", ".aac", ".opus", ".wma"},
     "video": {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v", ".mpg", ".mpeg", ".wmv", ".ogv"},
     "image": {".png", ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff", ".webp"},
+    "pdf": {".pdf"},
 }
 
 
@@ -195,6 +196,8 @@ class Cue:
         "text_color": "#ffffff", "text_outline": 2.0, "text_outline_color": "#000000",
         "text_bg": "", "text_bg_opacity": 60.0, "text_bg_mode": "block", "text_padding": 12.0,
         "text_fit": "shrink", "text_max_lines": 2, "text_spacing": 100.0, "text_fade": 0.3,
+        # cue PDF: pagine mostrate (indici da 0, nell'ordine; vuoto = tutte) e dissolvenza tra le pagine (s)
+        "pdf_pages": [], "pdf_fade": 0.3,
         # cue MIDI out: porta (vuota = predefinita delle impostazioni) e messaggi, uno per riga
         "mo_port": "", "mo_msgs": "",
         # osc
@@ -216,10 +219,10 @@ class Cue:
         return f"{n}{self.name or TYPE_LABELS.get(self.type, self.type)}"
 
     def is_media(self):
-        return self.type in ("audio", "video", "image")
+        return self.type in ("audio", "video", "image", "pdf")
 
     def is_visual(self):
-        return self.type in ("video", "image", "text")
+        return self.type in ("video", "image", "pdf", "text")
 
     def to_dict(self, base_dir=None):
         d = {"id": self.id, "type": self.type}
@@ -644,7 +647,7 @@ class Show:
                 pass
         return str(best + 1)
 
-    PRESET_TYPES = {"audio": ("audio", "video"), "visual": ("video", "image")}
+    PRESET_TYPES = {"audio": ("audio", "video"), "visual": ("video", "image", "pdf")}
 
     def _migrate_global_presets(self, legacy):
         """Show salvati con i preset globali (versione precedente): ogni preset va nelle cue

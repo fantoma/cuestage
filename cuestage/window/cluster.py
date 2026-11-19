@@ -477,7 +477,7 @@ class ClusterMixin:
         self._redundancy_align(st, run)
 
     SEEK_TOL = 0.3          # scarto (s) oltre il quale la ridondanza si riallinea al punto del master
-    SEEK_TYPES = ("audio", "video", "image", "wait", "text")
+    SEEK_TYPES = ("audio", "video", "image", "pdf", "wait", "text")
 
     def _redundancy_align(self, st, run):
         """Ridondanza: fa esattamente quello che fa il master. Le cue che suonano sul master partono qui al

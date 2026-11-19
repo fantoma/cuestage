@@ -3708,6 +3708,110 @@ def t_normalize(w):
     assert w.ctrl.instances.get(a.id) is None or w.ctrl.instances[a.id].voice.loud_tap is None
 
 
+def make_pdf(name, n=4):
+    """PDF di prova: n pagine A4 orizzontali, ognuna di un colore diverso con il suo numero."""
+    from PySide6.QtCore import QMarginsF, QRectF
+    from PySide6.QtGui import QColor, QFont, QPageLayout, QPageSize, QPainter, QPdfWriter
+    path = os.path.join(TMP, name)
+    wr = QPdfWriter(path)
+    wr.setPageLayout(QPageLayout(QPageSize(QPageSize.A4), QPageLayout.Landscape, QMarginsF(0, 0, 0, 0)))
+    wr.setResolution(72)
+    p = QPainter(wr)
+    cols = ["#d03030", "#30a040", "#3050d0", "#d0a020", "#a030a0", "#20a0a0"]
+    for i in range(n):
+        if i:
+            wr.newPage()
+        r = QRectF(0, 0, wr.width(), wr.height())
+        p.fillRect(r, QColor(cols[i % len(cols)]))
+        f = QFont()
+        f.setPointSize(120)
+        p.setFont(f)
+        p.setPen(QColor("white"))
+        p.drawText(r, 0x84, str(i + 1))
+    p.end()
+    return path
+
+
+def t_pdf_cue(w):
+    """Cue PDF: pagine come un gruppo in sequenza (GO = pagina successiva, poi la cue seguente), pagine scelte anche
+    singolarmente e in un ordine qualsiasi, Alt+→/← e doppio clic, crop e dimensione dell'intero file, ESC esce."""
+    from cuestage import pdf_doc
+    if not pdf_doc.available():
+        return
+    path = make_pdf("prova.pdf", 4)
+    assert pdf_doc.page_count(path) == 4
+    assert pdf_doc.parse_pages("1-2, 4", 4) == [0, 1, 3] and pdf_doc.parse_pages("3-", 4) == [2, 3]
+    assert pdf_doc.parse_pages("4-2", 4) == [3, 2, 1] and pdf_doc.format_pages([0, 1, 3]) == "1-2, 4"
+    img = pdf_doc.render(path, 2, 400, 400)
+    assert img.width() == 400 and img.height() < 400                      # A4 orizzontale
+    assert img.pixelColor(10, 10).blue() > 150                            # pagina 3 blu
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    c = Cue("pdf", number="1", name="Slide", file=path)
+    nxt = Cue("memo", number="2", name="Dopo")
+    after = Cue("wait", number="3", name="Attesa")
+    after.duration = 0.2
+    sh.cues = [c, nxt, after]
+    w._set_show(sh)
+    run(0.2)
+    from cuestage.model import type_for_file
+    assert type_for_file(path) == "pdf" and c.is_visual()
+    c.pdf_pages = [0, 2, 3]                                                # pagine scelte: 1, 3, 4
+    c.pdf_fade = 0.0
+    c.crop_l, c.scale = 50, 80.0                                           # crop e dimensione dell'intero file
+    w.ctrl.set_playhead(0)
+    w.go()
+    run(0.3)
+    inst = w.ctrl.instances[c.id]
+    assert inst.pages == [0, 2, 3] and inst.idx == 0
+    lay = inst.layers[-1][0]
+    assert lay.cue is inst.view and inst.view.crop_l == 50 and inst.view.scale == 80.0
+    col = lambda: inst.layers[-1][0].image.pixelColor(20, 20)
+    assert col().red() > 150 and col().blue() < 100                       # pagina 1 rossa
+    assert "pagina 3 di 3" in w.standby.text() or "3" in w.standby.text()
+    w.go()                                                                 # GO = pagina successiva
+    run(0.2)
+    assert inst.idx == 1 and col().blue() > 150                            # pagina 3 blu
+    w.text_step(-1)                                                        # Alt+←
+    run(0.1)
+    assert inst.idx == 0
+    w.text_step(1)
+    w.go()
+    run(0.2)
+    assert inst.idx == 2 and not inst.captures_go                          # ultima pagina: il GO va avanti
+    w.go()
+    run(0.3)
+    assert w.ctrl.instances.get(after.id) is not None or w.ctrl.playhead == 3   # GO alla cue seguente (memo saltata)
+    assert not inst.done and inst.idx == 2                                 # l'ultima pagina resta
+    # inspector: scheda Pagine, doppio clic su una pagina = vai a quella
+    ins = w.inspector
+    ins.set_cue(None)
+    ins.set_cue(c)
+    ins.tabs.setCurrentIndex(ins._tab_keys.index("Pagine"))
+    run(0.2)
+    assert ins.pdf_list.count() == 4
+    ins.pdf_list.itemDoubleClicked.emit(ins.pdf_list.item(2))
+    run(0.1)
+    assert inst.idx == 1
+    ins.pdf_pages_edit.setText("4, 2")                                     # ordine qualsiasi
+    ins.pdf_pages_edit.editingFinished.emit()
+    run(0.1)
+    assert c.pdf_pages == [3, 1] and inst.pages == [3, 1]
+    w.ctrl.stop_all(0)
+    run(0.2)
+    # ESC esce dal PDF mentre usa il GO
+    c.pdf_pages = []
+    w.ctrl.set_playhead(0)
+    w.go()
+    run(0.2)
+    assert w.ctrl.instances[c.id].pages == [0, 1, 2, 3]
+    assert w.ctrl.exit_captured_groups()
+    run(0.3)
+    assert c.id not in w.ctrl.instances or w.ctrl.instances[c.id].done or w.ctrl.instances[c.id].user_stopped
+    w.ctrl.stop_all(0)
+    run(0.2)
+
+
 def t_memo_skip(w):
     """Le cue Memo sono solo note: il GO le salta (playhead e avvio) come le «Solo trigger»."""
     sh = Show()
@@ -4528,6 +4632,7 @@ if __name__ == "__main__":
     check("audio letto dal disco (cache float32, anche 24 bit)", t_audio_cache)
     check("motori video: GPU / classico, fotogrammi convertiti solo se servono, stessa geometria", lambda: t_video_engines(w))
     check("valutazione delle prestazioni e buffer consigliato", lambda: t_perf_eval(w))
+    check("cue PDF: GO = pagina successiva, pagine scelte, crop e dimensione, ESC", lambda: t_pdf_cue(w))
     check("Normalizza: LUFS delle cue, correzione relativa del volume, misuratore in tempo reale", lambda: t_normalize(w))
     check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))

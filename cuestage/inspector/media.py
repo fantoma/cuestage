@@ -793,6 +793,140 @@ class MediaTabsMixin:
         v.addStretch(1)
         return w
 
+    def _tab_pdf(self):
+        """Cue PDF: pagine da mostrare (tutte, scelte con le miniature o scritte come «1-3, 5»), dissolvenza tra
+        le pagine e, mentre la cue è in uscita, pagina precedente / successiva (doppio clic = vai a quella)."""
+        from PySide6.QtCore import QSize
+        from PySide6.QtGui import QIcon, QPixmap
+        from PySide6.QtWidgets import QLineEdit, QListView, QListWidget, QListWidgetItem
+        from .. import pdf_doc
+        cue = self.cue
+        w = QWidget()
+        v = QVBoxLayout(w)
+        n = pdf_doc.page_count(cue.file) if cue.file else 0
+        info = QLabel()
+        info.setWordWrap(True)
+        v.addWidget(info)
+        if not pdf_doc.available():
+            info.setText(tr("Qt PDF non è installato: le cue PDF non si possono mostrare (pip install PySide6)."))
+            info.setStyleSheet("color:#e0b040;")
+            v.addStretch(1)
+            return w
+        if not n:
+            info.setText(tr("Scegli un file PDF nella scheda Base.") if not cue.file else
+                         tr("Il file non si apre come PDF."))
+            info.setStyleSheet("color:#e0b040;")
+            v.addStretch(1)
+            return w
+        f = QFormLayout()
+        pages_ed = QLineEdit()
+        pages_ed.setPlaceholderText(tr("tutte ({0})", n))
+        pages_ed.setToolTip(tr("Pagine nell'ordine in cui si mostrano: «1-3, 5, 8-» (8- = dalla 8 alla fine); "
+                               "vuoto = tutte. Una pagina può anche ripetersi."))
+        f.addRow(tr("Pagine"), pages_ed)
+        f.addRow(tr("Dissolvenza tra le pagine"), self._dspin("pdf_fade", 0, 10, 0.1, 2))
+        v.addLayout(f)
+        lw = QListWidget()
+        lw.setViewMode(QListView.IconMode)
+        lw.setIconSize(QSize(90, 120))
+        lw.setResizeMode(QListView.Adjust)
+        lw.setMovement(QListView.Static)
+        lw.setSpacing(6)
+        lw.setMinimumHeight(170)
+        lw.setToolTip(tr("Spunta le pagine da mostrare (nessuna spunta = tutte) · doppio clic mentre la cue è in "
+                         "uscita = vai a quella pagina"))
+        for i in range(min(n, 500)):
+            it = QListWidgetItem(QIcon(QPixmap.fromImage(pdf_doc.thumb(cue.file, i, 90, 120))), str(i + 1))
+            it.setFlags(it.flags() | Qt.ItemIsUserCheckable)
+            it.setData(Qt.UserRole, i)
+            lw.addItem(it)
+        v.addWidget(lw, 1)
+        row = QHBoxLayout()
+        all_b = QPushButton(tr("Tutte"))
+        row.addWidget(all_b)
+        row.addStretch(1)
+        prev_b = QPushButton(tr("◀ Precedente"))
+        next_b = QPushButton(tr("Successiva ▶"))
+        live = QLabel()
+        live.setStyleSheet("color:#50c8ff;")
+        row.addWidget(prev_b)
+        row.addWidget(live)
+        row.addWidget(next_b)
+        v.addLayout(row)
+        self.pdf_list = lw
+        self.pdf_pages_edit = pages_ed
+
+        def inst():
+            i = self.ctrl.instances.get(cue.id)
+            return i if i is not None and not i.done and hasattr(i, "pages") else None
+
+        def sync():
+            sel = [int(p) for p in (cue.pdf_pages or []) if 0 <= int(p) < n]
+            pages_ed.blockSignals(True)
+            pages_ed.setText(pdf_doc.format_pages(sel))
+            pages_ed.blockSignals(False)
+            lw.blockSignals(True)
+            chosen = set(sel)
+            for k in range(lw.count()):
+                it = lw.item(k)
+                it.setCheckState(Qt.Checked if it.data(Qt.UserRole) in chosen else Qt.Unchecked)
+            lw.blockSignals(False)
+            shown = len(sel) if sel else n
+            info.setText(tr("{0} pagine nel file · se ne mostrano {1} · GO = pagina successiva", n, shown))
+
+        def changed():
+            sync()
+            i = inst()
+            if i is not None:
+                i.refresh()
+            self._emit()
+
+        def typed():
+            cue.pdf_pages = pdf_doc.parse_pages(pages_ed.text(), n)
+            changed()
+        pages_ed.editingFinished.connect(typed)
+
+        def ticked(_it):
+            cue.pdf_pages = [lw.item(k).data(Qt.UserRole) for k in range(lw.count())
+                             if lw.item(k).checkState() == Qt.Checked]
+            changed()
+        lw.itemChanged.connect(ticked)
+        all_b.clicked.connect(lambda: (setattr(cue, "pdf_pages", []), changed()))
+
+        def go_page(it):
+            i = inst()
+            if i is None:
+                return
+            page = it.data(Qt.UserRole)
+            if page in i.pages:
+                i.goto(i.pages.index(page))
+        lw.itemDoubleClicked.connect(go_page)
+
+        def step(d):
+            i = inst()
+            if i is not None:
+                (i.next if d > 0 else i.prev)()
+
+        prev_b.clicked.connect(lambda: step(-1))
+        next_b.clicked.connect(lambda: step(1))
+
+        def poll():
+            i = inst()
+            try:
+                live.setText(i.page_label() if i is not None else tr("non in uscita"))
+                prev_b.setEnabled(i is not None and i.idx > 0)
+                next_b.setEnabled(i is not None and i.idx < len(i.pages) - 1)
+            except RuntimeError:
+                timer.stop()
+        timer = QTimer(w)
+        timer.setInterval(200)
+        timer.timeout.connect(poll)
+        timer.start()
+        poll()
+        sync()
+        self.bound.append((lw, sync))
+        return w
+
     def _tab_image_time(self):
         w = QWidget()
         f = QFormLayout(w)

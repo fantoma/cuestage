@@ -100,6 +100,12 @@ class PlaybackMixin:
             self.standby_notes.setText(tr("GO = frase successiva · Alt+← precedente · ESC = esci dal testo"))
             self.go_btn.setEnabled(True)
             return
+        if cap is not None and hasattr(cap, "pages"):          # cue PDF: GO = pagina successiva
+            self.standby.setText(tr("{0}▤ {1}: pagina {2} di {3}", where, cap.cue.label(), cap.idx + 2,
+                                    len(cap.pages)))
+            self.standby_notes.setText(tr("GO = pagina successiva · Alt+← precedente · ESC = esci dal PDF"))
+            self.go_btn.setEnabled(True)
+            return
         if cap is not None:
             self.standby.setText(tr("{0}◫ {1}: GO = cue a caso successiva", where, cap.cue.label()))
             self.standby_notes.setText(tr("ESC = esci dal gruppo (poi ESC = STOP TUTTO)"))

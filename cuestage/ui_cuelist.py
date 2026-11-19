@@ -136,7 +136,7 @@ def cue_duration(cue, loader):
             le = cue.loop_end if cue.loop_end > 0 else end
             base += (int(cue.loop_count) - 1) * max(0.0, le - ls)
         return base
-    if t == "image":
+    if t in ("image", "pdf"):
         return float(cue.duration) if cue.duration else float("inf")
     if t in ("fade", "preset"):
         return float(cue.fade_duration)
@@ -569,9 +569,9 @@ class CueTableModel(QAbstractTableModel):
 def _marker_bar_data(ctrl, cue, inst):
     """(asse, marcatori, posizione) per una cue in riproduzione, oppure None se non ha una timeline."""
     from .markers import cue_axis, cue_marks, display_pos
-    if cue.type not in ("audio", "video", "image"):
+    if cue.type not in ("audio", "video", "image", "pdf"):
         return None
-    dur = ctrl.loader.duration(cue.file) if cue.file and cue.type != "image" else 0
+    dur = ctrl.loader.duration(cue.file) if cue.file and cue.type not in ("image", "pdf") else 0
     if cue.type == "video" and not dur:
         dur = getattr(inst, "file_dur", 0)
     ax = cue_axis(cue, dur)

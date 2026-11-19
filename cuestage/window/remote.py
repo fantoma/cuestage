@@ -165,7 +165,7 @@ class RemoteMixin:
                     self.inspector.refresh_fields()
                 return tr("{0}: livello {1} dB", cue.label(), '-∞' if db <= MIN_DB else f'{db:+.1f}')
             return tr("{0}: volume dal vivo {1} dB", cue.label(), '-∞' if db <= MIN_DB else f'{db:+.1f}')
-        if cue.type not in ("video", "image"):
+        if cue.type not in ("video", "image", "pdf"):
             return None
         op = round(v, 3)
         if not self.ctrl.set_live_opacity(cue, op):

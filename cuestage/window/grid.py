@@ -114,7 +114,7 @@ class GridMixin:
         def own_fade(c):
             """Fade out della cue (per video e immagini anche quello del video), altrimenti quello del GRID."""
             f = float(getattr(c, "fade_out", 0) or 0)
-            if c.type in ("video", "image"):
+            if c.type in ("video", "image", "pdf"):
                 f = max(f, float(getattr(c, "v_fade_out", 0) or 0))
             return f if f > 0 else base
         inst = self.ctrl.instances.get(cue.id)
@@ -129,7 +129,7 @@ class GridMixin:
                 cc = self.show_data.by_id(k)
                 if ci is not None and not ci.done and cc is not None:
                     f = float(getattr(cc, "fade_out", 0) or 0)
-                    if cc.type in ("video", "image"):
+                    if cc.type in ("video", "image", "pdf"):
                         f = max(f, float(getattr(cc, "v_fade_out", 0) or 0))
                     ci.stop(f if f > 0 else (gf if gf > 0 else base))
             spawned.clear()                      # già fermate: il gruppo non le rifà sfumare
