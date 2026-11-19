@@ -62,7 +62,7 @@ class MediaTabsMixin:
         return w
 
     def _trim_knob(self):
-        """OUT TRIM della cue come manopola (−24…+24 dB): guadagno in più dopo volume, curva e fade, che riceve
+        """OUT TRIM della cue come manopola (−24…+24 dB, a destra della matrice): guadagno in più dopo volume, curva e fade, che riceve
         la correzione di Normalizza (LUFS). Rotella: ±0,5 dB (Maiusc: ±0,1) · doppio clic: 0 dB."""
         from PySide6.QtCore import QEvent, QObject
         from PySide6.QtWidgets import QDial
@@ -115,7 +115,12 @@ class MediaTabsMixin:
                         set_db(float(cue.out_trim_db or 0.0) + (step if d > 0 else -step))
                     return True
                 if e.type() == QEvent.MouseButtonDblClick:
-                    set_db(0.0)
+                    set_db(0.0)                    # a zero, in mezzo
+                    self_.dbl = True
+                    return True
+                if e.type() == QEvent.MouseButtonRelease and getattr(self_, "dbl", False):
+                    # QDial al rilascio prende il valore dal punto cliccato: dopo il doppio clic resta a zero
+                    self_.dbl = False
                     return True
                 return False
         flt = _F(dial)
@@ -243,8 +248,11 @@ class MediaTabsMixin:
             hh.addWidget(fader)
             knob = self._trim_knob()
             knob.setFixedHeight(hgt)
+            # la matrice prende solo lo spazio che le serve (scorre se non ci sta): l'OUT TRIM le sta subito a destra
+            sa.setMaximumWidth(max(mx.width(), mx.sizeHint().width()) + sa.verticalScrollBar().sizeHint().width() + 4)
+            hh.addWidget(sa, 100)
             hh.addWidget(knob)
-            hh.addWidget(sa, 1)
+            hh.addStretch(1)
             v.addLayout(hh)
             kbar.timeChanged.connect(lambda *_a: fader.sync())
             row = QHBoxLayout()

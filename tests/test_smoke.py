@@ -3720,6 +3720,7 @@ def t_normalize(w):
     assert abs(b.out_trim_db - (trim - 1.5)) < 0.06, (b.out_trim_db, trim)
     # la manopola OUT TRIM nell'inspector (scheda Audio) mostra il valore e si gira con la rotella
     w.inspector.set_cue(b)
+    w.inspector.tabs.setCurrentIndex(w.inspector._tab_keys.index("Audio"))
     run(0.2)
     dial = w.inspector.trim_dial
     assert dial.value() == int(round(b.out_trim_db * 10)), (dial.value(), b.out_trim_db)
@@ -3731,6 +3732,21 @@ def t_normalize(w):
     app.sendEvent(dial, QWheelEvent(c_, c_, QPoint(0, 0), QPoint(0, -120), Qt.NoButton, Qt.NoModifier,
                                     Qt.NoScrollPhase, False))
     assert abs(b.out_trim_db - t0) < 1e-6
+    from cuestage.ui_matrix import MatrixEditor
+    mxs = [x for x in w.inspector.findChildren(MatrixEditor) if x.isVisible()]
+    assert mxs                                               # la manopola sta a destra della matrice
+    mr = mxs[0].mapTo(w.inspector, QPoint(mxs[0].width(), 0)).x()
+    assert dial.mapTo(w.inspector, QPoint(0, 0)).x() >= mr - 2, (dial.mapTo(w.inspector, QPoint(0, 0)).x(), mr)
+    # doppio clic vero (pressione, rilascio, doppio clic, rilascio) fuori centro: torna a zero, in mezzo
+    off = QPointF(dial.width() * 0.85, dial.height() * 0.3)
+    for typ in (QMouseEvent.MouseButtonPress, QMouseEvent.MouseButtonRelease, QMouseEvent.MouseButtonDblClick,
+                QMouseEvent.MouseButtonRelease):
+        btns = Qt.NoButton if typ == QMouseEvent.MouseButtonRelease else Qt.LeftButton
+        app.sendEvent(dial, QMouseEvent(typ, off, dial.mapToGlobal(off), Qt.LeftButton, btns, Qt.NoModifier))
+    assert b.out_trim_db == 0.0 and dial.value() == 0, (b.out_trim_db, dial.value())
+    b.out_trim_db = t0
+    w.inspector.refresh_fields()
+    assert dial.value() == int(round(t0 * 10))
     d._refresh()
     assert abs(d.pending(b) - (d.new_trim(b) - t0)) < 0.06
     d.close()

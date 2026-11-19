@@ -637,7 +637,7 @@ All the audio handling of an audio or video cue is in the inspector's **Audio** 
   It works during playback too; it is disabled while a keyframe with an audio preset is in charge of the matrix.
   Beside it a **level meter** of the cue (one bar per channel of the file, on the fader's scale, with the 0 dB mark):
   the level going out, after the matrix and the master volume.
-- **OUT TRIM** (knob between the matrix fader and the matrix, −24…+24 dB): extra gain of the cue after volume,
+- **OUT TRIM** (knob right of the matrix, −24…+24 dB): extra gain of the cue after volume,
   curve and fades, applied to everything the cue sends out (outputs, effect-bus sends, meters). It is where
   **Normalize** puts its correction, so the cue's own Volume stays as you set it. Wheel ±0.5 dB (Shift ±0.1),
   drag to turn, double-click = 0 dB; it can be changed during playback too (with a short ramp, no clicks).
