@@ -587,6 +587,11 @@ and its parent, the home folder and the external drives. **Locate file…** (or 
 point to one file by hand, and the same folder move is then tried on all the other missing files. **Relink found
 files** updates the cues (all versions); undo works as for any other change.
 
+**Shows from a newer version.** The show file records the CueStage version that saved it. Opening a show saved
+by a newer CueStage (or containing data this version doesn't know) shows a warning: cues of an unknown type are
+shown as **Memo** (they don't start), and every unknown field — of the show, its settings, the cues, the PANELs and
+the versions — is **kept when saving**, so the show can go back to the newer CueStage without losing anything.
+
 ## Master volume, last project and autosave
 
 - The **master volume** (at the top, before “Pause”) acts on audio and video; double-click = 0 dB.

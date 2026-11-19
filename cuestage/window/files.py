@@ -258,10 +258,37 @@ class FilesMixin:
         self.qs.setValue("last_show_dir", os.path.dirname(path))
         self._remember_last(path)
         self._set_show(show)
+        self._warn_newer(show)
         from ..ui_missing import missing_cues
         if missing_cues(show):
             self.missing_files_dialog()            # elenco dei file mancanti, con la ricerca sul disco
         self.status(tr("Aperto {0}", path))
+
+    def _warn_newer(self, show):
+        """Show salvato da un CueStage più recente: avviso (le funzioni nuove qui non ci sono, i loro dati sì)."""
+        from .. import __version__
+        info = show.newer_info()
+        if not info:
+            return None
+        parts = []
+        if info["newer"]:
+            parts.append(tr("Questo show è stato salvato con CueStage {0}, più recente di questa versione ({1}).",
+                            info["app_version"] or "?", __version__))
+        else:
+            parts.append(tr("Questo show contiene dati che questa versione di CueStage ({0}) non conosce.",
+                            __version__))
+        if info["unknown_type_cues"]:
+            parts.append(tr("{0} cue di tipo sconosciuto ({1}) sono mostrate come Memo e non partono.",
+                            info["unknown_type_cues"], ", ".join(info["unknown_types"])))
+        if info["unknown_fields"]:
+            f = info["unknown_fields"]
+            parts.append(tr("Impostazioni sconosciute: {0}.", ", ".join(f[:8]) + (" …" if len(f) > 8 else "")))
+        parts.append(tr("Le funzioni nuove non sono disponibili qui, ma i loro dati vengono conservati quando "
+                        "salvi. Per usarle aggiorna CueStage."))
+        msg = "\n\n".join(parts)
+        self.ctrl.message.emit(msg.replace("\n\n", " "))
+        QMessageBox.warning(self, tr("Show di una versione più recente"), msg)
+        return msg
 
     def missing_files_dialog(self):
         """File › Trova file mancanti: cerca sul disco i file delle cue che non ci sono più e li ricollega."""

@@ -3960,6 +3960,63 @@ def t_marker_jumps(w):
         run(0.2)
 
 
+def t_newer_show(w):
+    """Show salvato da una versione più recente: avviso all'apertura; cue di tipo sconosciuto come Memo (non
+    partono); campi sconosciuti di show, impostazioni, cue, PANEL e versioni conservati quando si salva."""
+    import json as _json
+    from cuestage import __version__
+    from cuestage.model import _ver_tuple
+    assert _ver_tuple("1.0.13") < _ver_tuple("1.0.14") < _ver_tuple("1.1") and _ver_tuple("2.0b1") > _ver_tuple("1.9")
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    sh.cues = [Cue("memo", number="1", name="Nota")]
+    sh.add_panel("Effetti")
+    sh.add_version("Ridotta") if hasattr(sh, "add_version") else None
+    path = os.path.join(TMP, "newer.cueshow")
+    sh.save(path)
+    data = _json.load(open(path, encoding="utf-8"))
+    assert data["app_version"] == __version__
+    assert Show.load(path).newer_info() is None                         # stessa versione: nessun avviso
+    data["app_version"] = "99.0"
+    data["futuro"] = {"timecode": True}
+    data["settings"]["impostazione_futura"] = 7
+    data["cues"][0]["campo_futuro"] = [1, 2]
+    data["cues"].append({"id": "holo1", "type": "ologramma", "number": "2", "name": "Ologramma",
+                         "raggio": 3.5, "trigger": "manual"})
+    data["panels"][0]["colore_futuro"] = "blu"
+    data["versions"][0]["etichetta_futura"] = "x"
+    _json.dump(data, open(path, "w", encoding="utf-8"))
+    msgs = []
+    orig = QMessageBox.warning
+    QMessageBox.warning = staticmethod(lambda *a, **k: msgs.append(a[2]) or QMessageBox.Ok)
+    try:
+        w.show_data.dirty = False
+        w.open_show(path)
+        run(0.2)
+    finally:
+        QMessageBox.warning = orig
+    assert msgs and "99.0" in msgs[0] and "ologramma" in msgs[0], msgs
+    holo = w.show_data.by_id("holo1")
+    assert holo.type == "memo" and holo._orig_type == "ologramma"
+    w.ctrl.start_cue(holo)                                              # non parte e non dà errori
+    run(0.2)
+    w.inspector.set_cue(holo)
+    run(0.1)
+    w.inspector.set_cue(None)
+    out = os.path.join(TMP, "newer_saved.cueshow")
+    w.show_data.save(out)
+    d2 = _json.load(open(out, encoding="utf-8"))
+    assert d2["app_version"] == __version__ and d2["futuro"] == {"timecode": True}
+    assert d2["settings"]["impostazione_futura"] == 7
+    assert d2["cues"][0]["campo_futuro"] == [1, 2]
+    h = next(c for c in d2["cues"] if c["id"] == "holo1")
+    assert h["type"] == "ologramma" and h["raggio"] == 3.5 and h["name"] == "Ologramma"
+    assert d2["panels"][0]["colore_futuro"] == "blu" and d2["versions"][0]["etichetta_futura"] == "x"
+    info = Show.load(out).newer_info()
+    assert info and not info["newer"] and info["unknown_type_cues"] == 1   # ancora sconosciuti, ma non più nuovo
+    w.show_data.dirty = False
+
+
 def make_pdf(name, n=4):
     """PDF di prova: n pagine A4 orizzontali, ognuna di un colore diverso con il suo numero."""
     from PySide6.QtCore import QMarginsF, QRectF
@@ -4906,6 +4963,8 @@ if __name__ == "__main__":
           lambda: t_rt_gc(w))
     check("salti nella cue: marker saltati che non scattano, stato dei Recall Preset ricostruito",
           lambda: t_marker_jumps(w))
+    check("show di una versione più recente: avviso, tipi sconosciuti come Memo, campi sconosciuti conservati",
+          lambda: t_newer_show(w))
     check("Normalizza: LUFS delle cue, correzione relativa del volume, misuratore in tempo reale", lambda: t_normalize(w))
     check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))

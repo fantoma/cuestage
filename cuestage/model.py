@@ -87,6 +87,9 @@ def db_to_lin(db):
     return 10.0 ** (db / 20.0)
 
 
+LEGACY_TYPES = ("fsclose",)     # tipi di versioni precedenti, convertiti in from_dict
+
+
 class Cue:
     FIELDS = {
         # comuni
@@ -229,7 +232,7 @@ class Cue:
         return self.type in ("video", "image", "pdf", "text")
 
     def to_dict(self, base_dir=None):
-        d = {"id": self.id, "type": self.type}
+        d = {"id": self.id, "type": getattr(self, "_orig_type", None) or self.type}
         for k in self.FIELDS:
             d[k] = copy.deepcopy(getattr(self, k))
         if self.file and base_dir:
@@ -237,11 +240,22 @@ class Cue:
                 d["file_rel"] = portable_rel(os.path.relpath(self.file, base_dir))
             except ValueError:
                 pass
+        for k, v in (getattr(self, "_extra", None) or {}).items():   # campi di una versione più recente
+            d.setdefault(k, copy.deepcopy(v))
         return d
 
     @classmethod
     def from_dict(cls, d, base_dir=None):
-        c = cls(d.get("type", "memo"))
+        t = d.get("type", "memo")
+        known = t in CUE_TYPES or t in LEGACY_TYPES
+        c = cls(t if known else "memo")
+        if not known:
+            # tipo di una versione più recente: qui è un Memo (non parte), e si salva com'era
+            c._orig_type = t
+        extra = {k: copy.deepcopy(v) for k, v in d.items()
+                 if k not in cls.FIELDS and k not in ("id", "type", "file_rel")}
+        if extra:
+            c._extra = extra
         c.id = d.get("id") or c.id
         for k in cls.FIELDS:
             if k in d:
@@ -409,9 +423,15 @@ def copy_lists(lists):
 def lists_to_data(lists, base_dir):
     """MAIN e PANEL nel formato del file: (cue della MAIN, PANEL)."""
     main = lists[0] if lists else CueList("MAIN", list_id=MAIN_ID)
-    return ([c.to_dict(base_dir) for c in main.cues],
-            [dict({"id": l.id, "name": l.name, "cues": [c.to_dict(base_dir) for c in l.cues]}, **l.grid_data())
-             for l in lists[1:]])
+    return ([c.to_dict(base_dir) for c in main.cues], [panel_data(l, base_dir) for l in lists[1:]])
+
+
+def panel_data(lst, base_dir):
+    """Un PANEL nel formato del file (con i campi sconosciuti di una versione più recente)."""
+    d = copy.deepcopy(getattr(lst, "extra", None) or {})
+    d.update({"id": lst.id, "name": lst.name, "cues": [c.to_dict(base_dir) for c in lst.cues]})
+    d.update(lst.grid_data())
+    return d
 
 
 def lists_from_data(cues, panels, base):
@@ -422,6 +442,8 @@ def lists_from_data(cues, panels, base):
             lst = CueList(str(p.get("name") or "PANEL"), [Cue.from_dict(d, base) for d in p.get("cues", [])],
                           p.get("id") if p.get("id") != MAIN_ID else None)
             lst.set_grid_data(p)
+            lst.extra = {k: copy.deepcopy(v) for k, v in p.items()
+                         if k not in ("id", "name", "cues") and k not in CueList.GRID_DEFAULTS}
             out.append(lst)
     return out
 
@@ -439,9 +461,22 @@ class ShowVersion:
         self.created = created or _now()
         self.modified = modified or self.created
 
+    VERSION_KEYS = ("id", "name", "notes", "created", "modified", "cues", "panels")
+
     def meta(self):
-        return {"id": self.id, "name": self.name, "notes": self.notes,
-                "created": self.created, "modified": self.modified}
+        d = copy.deepcopy(getattr(self, "extra", None) or {})
+        d.update({"id": self.id, "name": self.name, "notes": self.notes,
+                  "created": self.created, "modified": self.modified})
+        return d
+
+
+def _ver_tuple(v):
+    """«1.0.13» → (1, 0, 13) per confrontare le versioni (le parti non numeriche valgono 0)."""
+    out = []
+    for p in str(v or "").split("."):
+        digits = "".join(ch for ch in p if ch.isdigit())
+        out.append(int(digits) if digits else 0)
+    return tuple(out)
 
 
 class Show:
@@ -551,6 +586,7 @@ class Show:
                             vid, None, d.get("created"), d.get("modified"))
             if v.id != active:
                 v.lists = lists_from_data(d.get("cues"), d.get("panels"), base)
+            v.extra = {k: copy.deepcopy(x) for k, x in d.items() if k not in ShowVersion.VERSION_KEYS}
             vs.append(v)
         if not vs or not any(v.id == active for v in vs):
             # nessuna versione salvata (show di una versione precedente) o attiva mancante
@@ -680,19 +716,29 @@ class Show:
         if legacy:
             self.dirty = True
 
+    TOP_KEYS = ("app", "version", "app_version", "settings", "original_path", "cues", "panels", "active_version",
+                "versions", "presets")
+
     def to_data(self, base_dir):
-        return {
-            "app": "CueStage", "version": self.VERSION,
+        from . import __version__
+        d = copy.deepcopy(getattr(self, "extra", None) or {})   # campi di una versione più recente
+        d.update({
+            "app": "CueStage", "version": self.VERSION, "app_version": __version__,
             "settings": self.settings,
             "original_path": self.path,
             "cues": [c.to_dict(base_dir) for c in self.main.cues],
-            "panels": [dict({"id": l.id, "name": l.name, "cues": [c.to_dict(base_dir) for c in l.cues]},
-                            **l.grid_data()) for l in self.panels],
+            "panels": [panel_data(l, base_dir) for l in self.panels],
             # le cue della versione attiva sono quelle qui sopra («cues» e «panels»): un CueStage
             # precedente apre la versione attiva e ignora le altre
             "active_version": self.active_version,
             "versions": self.versions_data(base_dir),
-        }
+        })
+        return d
+
+    def newer_info(self):
+        """Lo show viene da una versione più recente di CueStage? → {app_version, newer, unknown_types,
+        unknown_fields} (campi e tipi sconosciuti: si conservano salvando), oppure None se niente di nuovo."""
+        return getattr(self, "load_info", None)
 
     def save(self, path, copy_only=False):
         """Salva lo show. Con copy_only (autosave) non cambia percorso né stato «modificato»."""
@@ -733,4 +779,29 @@ class Show:
         s.set_versions_data(data.get("versions"), str(data.get("active_version") or ""), base)
         s._migrate_global_presets(data.get("presets") or {})
         s.original_path = data.get("original_path")
+        s.extra = {k: copy.deepcopy(v) for k, v in data.items() if k not in cls.TOP_KEYS}
+        s.load_info = s._check_newer(data)
         return s
+
+    def _check_newer(self, data):
+        from . import __version__
+        file_ver = str(data.get("app_version") or "")
+        newer = _ver_tuple(file_ver) > _ver_tuple(__version__) if file_ver else False
+        try:
+            newer = newer or int(data.get("version") or 0) > self.VERSION
+        except (TypeError, ValueError):
+            pass
+        cues = list(self.every_cue())
+        types = sorted({c._orig_type for c in cues if getattr(c, "_orig_type", None)})
+        n_types = sum(1 for c in cues if getattr(c, "_orig_type", None))
+        fields = set(self.extra)
+        for c in cues:
+            fields.update(getattr(c, "_extra", None) or {})
+        for lst in self.lists + [x for v in self.versions for x in (v.lists or [])]:
+            fields.update(getattr(lst, "extra", None) or {})
+        for v in self.versions:
+            fields.update(getattr(v, "extra", None) or {})
+        if not (newer or n_types or fields):
+            return None
+        return {"app_version": file_ver, "newer": newer, "unknown_types": types, "unknown_type_cues": n_types,
+                "unknown_fields": sorted(fields)}
