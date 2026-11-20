@@ -1399,12 +1399,14 @@ def t_roland_video(w):
         for _ in range(3):
             w.go()
         wait_until(lambda: len(sent) >= 8)
-        assert sent[0] == "F0 41 10 00 00 00 68 12 00 12 00 02 6C F7", sent
-        assert sent[1] == "F0 41 10 00 00 00 68 12 00 12 01 05 68 F7", sent
-        assert sent[2] == ("control_change", 0, 55, 127) and sent[3] == ("control_change", 0, 54, 127), sent
+        # ogni regia ha il suo thread: l'ordine vale per regia, non tra le due (V-8HD canale 1, V-1HD canale 2)
+        v8 = [m for m in sent if isinstance(m, str) or m[1] == 0]
+        v1 = [m for m in sent if not isinstance(m, str) and m[1] == 1]
+        assert v8 == ["F0 41 10 00 00 00 68 12 00 12 00 02 6C F7", "F0 41 10 00 00 00 68 12 00 12 01 05 68 F7",
+                      ("control_change", 0, 55, 127), ("control_change", 0, 54, 127)], sent
         # V-1HD sul canale 2: ingresso 4 sul bus B (fuori onda) e fader tutto su B
-        assert sent[4:8] == [("control_change", 1, 0, 1), ("control_change", 1, 32, 0), ("program_change", 1, 3),
-                             ("control_change", 1, 17, 127)], sent
+        assert v1 == [("control_change", 1, 0, 1), ("control_change", 1, 32, 0), ("program_change", 1, 3),
+                      ("control_change", 1, 17, 127)], sent
         sm = w.switchers
         done = []
         sm.read_controls("v8", lambda ok, res: done.append(ok))
