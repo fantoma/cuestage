@@ -76,12 +76,16 @@ def migrate_settings(app=None, legacy=None):
     from PySide6.QtCore import QSettings
     app = app or APP_NAME
     cur = QSettings(app, app)
+    # macOS: senza questo allKeys() comprende anche le preferenze globali del sistema (AppleLocale…) e le
+    # preferenze del programma non sembrano mai vuote
+    cur.setFallbacksEnabled(False)
     if cur.allKeys():
         return None
     for name, _slug, _env in (legacy if legacy is not None else _legacy()):
         if name == app:
             continue
         old = QSettings(name, name)
+        old.setFallbacksEnabled(False)
         keys = old.allKeys()
         if not keys:
             continue
