@@ -4166,6 +4166,56 @@ def t_rename_compat(w):
         assert appinfo.data_base() != appinfo.data_base(*appinfo.LEGACY[0][:2])
 
 
+def t_group_go_xfade(w):
+    """Gruppo Sequence con «GO esegue crossfade»: la cue che parte col GO sfuma le altre del gruppo con il suo
+    fade in; quelle «con la precedente» non fermano nulla; senza l'opzione le cue continuano."""
+    import wave as _wave
+    import numpy as _np
+    path = os.path.join(TMP, "goxf.wav")
+    x = (_np.sin(_np.arange(48000 * 20) / 48000 * 2 * _np.pi * 330) * 6000).astype(_np.int16)
+    with _wave.open(path, "wb") as wf:
+        wf.setnchannels(2)
+        wf.setsampwidth(2)
+        wf.setframerate(48000)
+        wf.writeframes(_np.repeat(x[:, None], 2, axis=1).tobytes())
+    from cuestage.engine import go_xfade_time
+    for on in (True, False):
+        sh = Show()
+        sh.settings["output_fullscreen"] = False
+        g = Cue("group", number="1", name="Scene", group_mode="sequence")
+        g.group_go_xfade = on
+        a = Cue("audio", number="1.1", name="A", file=path, group=g.id)
+        b = Cue("audio", number="1.2", name="B", file=path, group=g.id, fade_in=1.0)
+        c = Cue("audio", number="1.3", name="C", file=path, group=g.id, trigger="with_prev", fade_in=0.2)
+        d = Cue("audio", number="1.4", name="D", file=path, group=g.id, fade_in=0.0)
+        sh.cues = [g, a, b, c, d]
+        w._set_show(sh)
+        run(0.2)
+        assert go_xfade_time(b) == 1.0
+        alive = lambda cue: (w.ctrl.instances.get(cue.id) is not None and not w.ctrl.instances[cue.id].done
+                             and not w.ctrl.instances[cue.id].user_stopped)
+        w.go()                                    # il gruppo: parte A
+        assert wait_until(lambda: alive(a), 2)
+        run(0.3)
+        w.go()                                    # B (e C con la precedente)
+        assert wait_until(lambda: alive(b) and alive(c), 2)
+        if on:
+            ia = w.ctrl.instances.get(a.id)
+            assert ia is not None and ia.user_stopped           # A sfuma con il fade in di B (1 s)
+            run(0.4)
+            assert w.ctrl.instances.get(a.id) is not None       # ancora in dissolvenza
+            assert wait_until(lambda: w.ctrl.instances.get(a.id) is None, 2.5)
+            assert alive(b) and alive(c)                         # C «con la precedente» non ferma B
+            w.go()                                               # D, fade in 0: B e C si fermano subito
+            assert wait_until(lambda: alive(d), 2)
+            assert wait_until(lambda: w.ctrl.instances.get(b.id) is None and w.ctrl.instances.get(c.id) is None, 1.0)
+        else:
+            run(0.6)
+            assert alive(a) and alive(b) and alive(c)            # senza l'opzione: continuano tutte
+        w.ctrl.stop_all(0)
+        run(0.2)
+
+
 def make_pdf(name, n=4):
     """PDF di prova: n pagine A4 orizzontali, ognuna di un colore diverso con il suo numero."""
     from PySide6.QtCore import QMarginsF, QRectF
@@ -5118,6 +5168,7 @@ if __name__ == "__main__":
           lambda: t_screen_identity(w))
     check("cambio di nome: preferenze, dati, variabili, OSC e PIN web ripresi dal nome precedente",
           lambda: t_rename_compat(w))
+    check("gruppo Sequence con «GO esegue crossfade»", lambda: t_group_go_xfade(w))
     check("Normalizza: LUFS delle cue, correzione relativa del volume, misuratore in tempo reale", lambda: t_normalize(w))
     check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))

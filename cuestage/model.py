@@ -187,6 +187,9 @@ class Cue:
         "group_xfade": 2.0,         # loop: crossfade tra una cue e la successiva (s)
         "group_advance": "time",    # rloop: «time» avanzamento a tempo · «go» avanza col GO
         "group_loop": False,        # playlist / random playlist: ricomincia dopo l'ultima cue
+        # sequence: «GO esegue crossfade» — una cue del gruppo che parte col GO ferma le altre del gruppo
+        # ancora attive, sfumandole con il proprio tempo di ingresso (fade in)
+        "group_go_xfade": False,
         # Tap Tempo (sequence, loop, random loop): una cue ogni «div» battiti al tempo «bpm», come un GO;
         # il tempo si batte con un tasto, una nota/CC MIDI o un messaggio OSC
         "group_tap": False, "group_tap_div": 1.0, "group_bpm": 120.0,

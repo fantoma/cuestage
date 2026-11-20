@@ -378,6 +378,20 @@ def state_at(cue, T):
     return view
 
 
+def go_xfade_time(cue):
+    """Tempo di ingresso di una cue (per «GO esegue crossfade»): fade in dell'audio o dell'immagine, il più lungo;
+    per i testi la loro dissolvenza."""
+    if cue.type == "text":
+        return max(0.0, float(cue.text_fade or 0))
+    t = float(cue.fade_in or 0)
+    if cue.type == "video":
+        try:
+            t = max(t, float(cue.video_fades()[0] or 0))
+        except Exception:
+            pass
+    return max(0.0, t)
+
+
 def _goable(cue):
     """La cue parte con il GO? No per «Solo trigger», per quelle che seguono la precedente e per i Memo, che
     sono solo note per l'operatore (estetiche)."""
@@ -2811,6 +2825,7 @@ class Controller(QObject):
                     self.cueStarted.emit(cue.id)
                     if cue.is_visual() and self.visual_started:
                         self.visual_started()
+                    self._group_go_xfade(cue, inst)
             if cascade:
                 nxt = self._next(cue)
                 if nxt is not None and nxt.trigger == "with_prev":
@@ -2819,6 +2834,24 @@ class Controller(QObject):
             self._depth = prev_depth
         self.changed.emit()
         return inst if (inst is not None and not inst.done) else None
+
+    GO_XFADE_TYPES = ("audio", "video", "image", "pdf", "text")
+
+    def _group_go_xfade(self, cue, inst):
+        """Gruppo Sequence con «GO esegue crossfade»: la cue che parte (col GO, non «con/dopo la precedente»)
+        ferma le altre cue del gruppo ancora attive, sfumandole con il suo tempo di ingresso."""
+        if cue.trigger != "manual" or not cue.group or cue.type not in self.GO_XFADE_TYPES:
+            return
+        hdr = self.show.by_id(cue.group)
+        if hdr is None or hdr.type != "group" or hdr.group_mode != "sequence" \
+                or not getattr(hdr, "group_go_xfade", False):
+            return
+        t = go_xfade_time(cue)
+        for other in list(self.instances.values()):
+            if other is inst or other.done or other.user_stopped or other.cue.group != hdr.id \
+                    or other.cue.type not in self.GO_XFADE_TYPES:
+                continue
+            other.stop(t)
 
     def _finished(self, inst):
         if self.instances.get(inst.key) is inst:

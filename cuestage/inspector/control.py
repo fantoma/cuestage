@@ -182,6 +182,12 @@ class ControlTabsMixin:
         mc.currentIndexChanged.connect(mode_changed)
         f.addRow(tr("Tipo"), mc)
         m = cue.group_mode
+        if m == "sequence":
+            gx = self._check("group_go_xfade", tr("GO esegue crossfade"))
+            gx.setToolTip(tr("Ogni cue del gruppo che parte col GO ferma quelle del gruppo ancora attive, sfumandole "
+                             "con il proprio tempo di ingresso (fade in; per i video il più lungo tra audio e "
+                             "immagine). Le cue «con la precedente» partono insieme e non fermano nulla."))
+            f.addRow(tr("Crossfade"), gx)
         if m == "rloop":
             ac = QComboBox()
             ac.addItem(tr("A tempo (attesa + crossfade); il GO successivo esce"), "time")

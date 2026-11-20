@@ -320,7 +320,11 @@ them).
 
 The kind is chosen in the inspector's **Group** tab:
 - **Sequence** — GO on the group starts the first cue; the following GOs the others, in sequence (“With previous”
-  and “After previous” apply). After the last one, the following GO leaves the group.
+  and “After previous” apply). After the last one, the following GO leaves the group. With **“GO crossfades”**
+  each cue started by a GO stops the cues of the group still running, fading them out over its own fade-in time
+  (for a video the longer of audio and image fade-in; for a text cue its dissolve): a cue with a 2 s fade-in
+  replaces the previous one in a 2 s crossfade, one with no fade-in cuts. Cues “With previous” start together
+  and stop nothing; the pre-wait is respected (the crossfade starts when the cue actually starts).
 - **Random** — GO starts a random cue (never the same twice in a row). The following GO leaves.
 - **Loop** — the cues follow each other on their own forever: **hold** on each cue (0 = its duration) and
   **crossfade** to the next (audio at constant power, images and video with a dissolve). The following GO
