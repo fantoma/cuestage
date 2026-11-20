@@ -1,4 +1,4 @@
-"""Plugin CueStage — Optoma ZU506T / ZH506 / ZW506 (serie 506).
+"""Plugin Cuevivo — Optoma ZU506T / ZH506 / ZW506 (serie 506).
 
 Protocollo: i comandi RS232 Optoma inviati in rete via telnet (TCP 23).
   - Formato: "~" + ID proiettore (2 cifre, 00 = tutti) + comando + " " + valore + CR.

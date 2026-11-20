@@ -501,7 +501,7 @@ def install_show_keys(win):
 
 
 class FxWindow(QDialog):
-    """Finestra in sovrimpressione con i parametri di un effetto del rack: resta aperta sopra CueStage e le
+    """Finestra in sovrimpressione con i parametri di un effetto del rack: resta aperta sopra Cuevivo e le
     modifiche valgono subito (anche mentre la cue o il bus suona)."""
 
     def __init__(self, owner_key, fid, title, get_list, on_change, meter_fn=None, parent=None, live_fn=None):

@@ -1,18 +1,18 @@
-# CueStage su GitHub: pacchetti per Linux, Windows e macOS
+# Cuevivo su GitHub: pacchetti per Linux, Windows e macOS
 
-GitHub Actions costruisce e prova CueStage su macchine Linux, Windows e Mac messe a disposizione da GitHub.
+GitHub Actions costruisce e prova Cuevivo su macchine Linux, Windows e Mac messe a disposizione da GitHub.
 Tu carichi il progetto una volta. Poi, per ogni nuova versione, basta un comando: dopo circa mezz'ora la
 pagina **Releases** contiene:
 
 | File | Per chi |
 |---|---|
-| `CueStage-1.0.0-x86_64.AppImage` | Linux (Ubuntu/Xubuntu 22.04+, Debian 12+, Fedora 35+…) |
-| `CueStage-1.0.0-windows-setup.exe` | Windows 10/11, installatore |
-| `CueStage-1.0.0-windows-portable.zip` | Windows, senza installazione (anche da chiavetta) |
-| `CueStage-1.0.0-macos-arm64.dmg` | Mac Apple Silicon (M1, M2, M3, M4) |
-| `CueStage-1.0.0-macos-x86_64.dmg` | Mac Intel |
+| `Cuevivo-1.0.0-x86_64.AppImage` | Linux (Ubuntu/Xubuntu 22.04+, Debian 12+, Fedora 35+…) |
+| `Cuevivo-1.0.0-windows-setup.exe` | Windows 10/11, installatore |
+| `Cuevivo-1.0.0-windows-portable.zip` | Windows, senza installazione (anche da chiavetta) |
+| `Cuevivo-1.0.0-macos-arm64.dmg` | Mac Apple Silicon (M1, M2, M3, M4) |
+| `Cuevivo-1.0.0-macos-x86_64.dmg` | Mac Intel |
 
-Prima di creare ogni pacchetto, GitHub prova CueStage su quel sistema:
+Prima di creare ogni pacchetto, GitHub prova Cuevivo su quel sistema:
 - test di regressione;
 - `--self-test` del pacchetto finito: audio, ffmpeg, plugin, finestra.
 
@@ -42,20 +42,35 @@ gh auth login                            # GitHub.com › HTTPS › Login with a
 git config --global user.name  "Il tuo nome"
 git config --global user.email "la-tua-email@esempio.it"
 
-unzip cuestage.zip && cd cuestage        # la cartella del progetto che ti ho mandato
+unzip cuevivo.zip && cd cuevivo          # la cartella del progetto che ti ho mandato
 git init -b main
 git add .
-git commit -m "CueStage 1.0.0"
-gh repo create cuestage --private --source=. --push     # oppure --public
+git commit -m "Cuevivo 1.0.0"
+gh repo create cuevivo --private --source=. --push     # oppure --public
 ```
 
-Fatto: il progetto è su `https://github.com/<tuo-utente>/cuestage`. Nella scheda **Actions** vedrai partire
+Fatto: il progetto è su `https://github.com/<tuo-utente>/cuevivo`. Nella scheda **Actions** vedrai partire
 subito il primo «Build». È il test su Linux e dura circa 3 minuti; il segno verde ✔ vuol dire che è riuscito.
 
-> Se preferisci non usare la riga di comando: sul sito, *New repository* › nome `cuestage` › *Create*,
+> Se preferisci non usare la riga di comando: sul sito, *New repository* › nome `cuevivo` › *Create*,
 > poi *uploading an existing file* e trascina il **contenuto** della cartella. Attenzione: la cartella
 > nascosta `.github` deve esserci, altrimenti non parte nulla. Su Ubuntu, nel file manager, mostra i file
 > nascosti con Ctrl+H prima di trascinare.
+
+### Rinominare il repository (da cuestage a cuevivo)
+
+Se il progetto è già su GitHub come `cuestage`: sul sito *Settings* › *General* › **Repository name** →
+`cuevivo` › *Rename*. Issue, stelle e release restano; il vecchio indirizzo (pagina, `git clone`, `git push`)
+viene reindirizzato al nuovo. Non creare mai un nuovo repository chiamato `cuestage`: i reindirizzamenti
+smetterebbero di funzionare. Sul tuo computer, nella cartella del progetto:
+
+```bash
+git remote set-url origin https://github.com/<tuo-utente>/cuevivo.git
+git remote -v                            # controlla l'indirizzo
+```
+
+`release.sh` legge l'indirizzo dal remote, quindi dopo questo comando funziona come prima. Se vuoi, rinomina
+anche la cartella sul disco (`mv cuestage cuevivo`): non cambia nulla per git.
 
 ## 3. Pubblicare una versione (ogni volta)
 
@@ -75,8 +90,8 @@ subito il primo «Build». È il test su Linux e dura circa 3 minuti; il segno v
    - **Test** su Ubuntu, Windows e macOS (5–10 minuti);
    - **Prepara la Release**, che controlla che il tag corrisponda alla versione;
    - **Linux AppImage**, **Windows** e **macOS (arm64 / x86_64)**, in parallelo (10–25 minuti).
-4. A lavoro finito, su GitHub › **Releases** › *CueStage v1.0.1* trovi tutti i file. Puoi mandare quel link a
-   chi deve installare CueStage.
+4. A lavoro finito, su GitHub › **Releases** › *Cuevivo v1.0.1* trovi tutti i file. Puoi mandare quel link a
+   chi deve installare Cuevivo.
 
 Se il tag non corrisponde alla versione, il lavoro si ferma con un messaggio chiaro. Per riprovare,
 correggi la versione, poi cancella il tag e ricrealo:
@@ -109,7 +124,7 @@ Senza firme commerciali i pacchetti funzionano, ma i sistemi avvisano al primo a
 
 - **Windows**: «Windows ha protetto il PC» › *Ulteriori informazioni* › *Esegui comunque*.
   Per togliere l'avviso serve un certificato di firma del codice, a pagamento.
-- **macOS**: «CueStage non può essere aperto…» › tasto destro su CueStage › *Apri* › *Apri*
+- **macOS**: «Cuevivo non può essere aperto…» › tasto destro su Cuevivo › *Apri* › *Apri*
   (oppure Impostazioni di Sistema › Privacy e sicurezza › *Apri comunque*). Basta la prima volta.
   - Alla domanda sulla **rete locale** rispondi *Consenti*: senza, mixer, proiettori, OSC e istanze non
     funzionano.
@@ -121,7 +136,7 @@ Servono l'**Apple Developer Program** (99 $/anno) e un Mac per esportare il cert
 1. Su developer.apple.com crea un certificato **Developer ID Application**.
 2. Installalo sul Mac (doppio clic) e da *Accesso Portachiavi* esportalo come `.p12`, con una password.
 3. Converti il file per GitHub: `base64 -i certificato.p12 | pbcopy` (il testo finisce negli appunti).
-4. Su appleid.apple.com › *Password specifiche per le app* crea una password per «CueStage CI».
+4. Su appleid.apple.com › *Password specifiche per le app* crea una password per «Cuevivo CI».
 5. Su GitHub › repository › **Settings** › **Secrets and variables** › **Actions** › *New repository secret*,
    crea questi segreti:
 

@@ -8,10 +8,10 @@ from PySide6.QtWidgets import (
     QMessageBox, )
 
 
-FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
+FILE_FILTER = "Show Cuevivo (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 
 
-# impostazioni scritte da CueStage stesso (non sono modifiche dell'operatore della secondaria)
+# impostazioni scritte da Cuevivo stesso (non sono modifiche dell'operatore della secondaria)
 LOCAL_SKIP = ("mixer_names", "cluster_local_keys")
 
 
@@ -51,7 +51,7 @@ class ClusterMixin:
 
     def _cluster_upload_dir(self):
         p = self.show_data.path
-        base = os.path.dirname(os.path.abspath(p)) if p else os.path.expanduser("~/CueStage-master")
+        base = os.path.dirname(os.path.abspath(p)) if p else os.path.expanduser("~/Cuevivo-master")
         return os.path.join(base, "da_slave")
 
     def _cluster_hw(self):

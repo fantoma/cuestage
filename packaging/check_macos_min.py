@@ -1,6 +1,6 @@
-"""Controlla che ogni libreria e programma dentro CueStage.app giri sulla versione minima di macOS dichiarata.
+"""Controlla che ogni libreria e programma dentro Cuevivo.app giri sulla versione minima di macOS dichiarata.
 
-    python3 packaging/check_macos_min.py dist/CueStage.app 12.0
+    python3 packaging/check_macos_min.py dist/Cuevivo.app 12.0
 
 pip, su un Mac recente, sceglie le librerie compilate per quel macOS (es. numpy e scipy «macosx_14_0»,
 PySide6 6.10+ «macosx_13_0»): l'app si costruisce ma su un Mac più vecchio si chiude appena aperta, senza

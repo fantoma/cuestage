@@ -1,10 +1,10 @@
 #!/bin/sh
-# Avvio di CueStage dall'AppImage (la cartella di lavoro resta quella di partenza).
+# Avvio di Cuevivo dall'AppImage (la cartella di lavoro resta quella di partenza).
 HERE="$(dirname "$(readlink -f "$0")")"
 
 # ffmpeg e ffprobe inclusi hanno la precedenza; amixer di sistema, se c'è, è preferito a quello incluso
 export PATH="$HERE/usr/bin:$PATH:$HERE/usr/fallback-bin"
-export CUESTAGE_APPIMAGE_DIR="$HERE"
+export CUEVIVO_APPIMAGE_DIR="$HERE"
 export PYTHONNOUSERSITE=1 PYTHONDONTWRITEBYTECODE=1
 unset PYTHONHOME PYTHONPATH
 

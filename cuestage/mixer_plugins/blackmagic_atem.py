@@ -1,4 +1,4 @@
-"""Plugin CueStage — Blackmagic Design ATEM Mini, Mini Pro (e Pro ISO), Mini Extreme (e Extreme ISO).
+"""Plugin Cuevivo — Blackmagic Design ATEM Mini, Mini Pro (e Pro ISO), Mini Extreme (e Extreme ISO).
 
 Collegamento in rete (porta Ethernet dell'ATEM): protocollo ATEM su UDP porta 9910, lo stesso di ATEM Software
 Control. Blackmagic non lo documenta: qui è implementato come nelle librerie libere che lo usano da anni

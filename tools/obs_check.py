@@ -5,7 +5,7 @@
     (predefiniti: localhost 4455, nessuna password)
 
 Stampa cosa succede a ogni passo (TCP, handshake WebSocket, Hello, Identify, GetVersion): utile quando
-CueStage dice «collegamento a OBS non riuscito».
+Cuevivo dice «collegamento a OBS non riuscito».
 """
 import json
 import os

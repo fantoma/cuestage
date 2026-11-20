@@ -1,4 +1,4 @@
-"""Plugin CueStage — Behringer X32 e Midas M32 (OSC su UDP 10023).
+"""Plugin Cuevivo — Behringer X32 e Midas M32 (OSC su UDP 10023).
 
 Protocollo OSC del X32/M32 (lo stesso per le due famiglie):
   - ricerca: «/xinfo» in broadcast sulla porta 10023 → /xinfo ,ssss  IP, nome, modello, firmware

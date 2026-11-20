@@ -12,7 +12,7 @@ from .remote import MidiInput, normalize_control, normalize_spec
 from .system import IS_MAC, IS_WIN, OS_NAME, data_dir_label
 
 if IS_WIN:
-    AUTO_CH_NOTE = (tr("«auto»: tutti i canali della scheda. Su Windows CueStage usa WASAPI (o ASIO, se il driver "
+    AUTO_CH_NOTE = (tr("«auto»: tutti i canali della scheda. Su Windows Cuevivo usa WASAPI (o ASIO, se il driver "
                     "della scheda lo offre): per la latenza più bassa preferisci ASIO."))
 elif IS_MAC:
     AUTO_CH_NOTE = tr("«auto»: tutti i canali della scheda (Core Audio).")
@@ -78,7 +78,7 @@ class SettingsDialog(QDialog):
         cbl.addWidget(note)
         fa.addRow(chbox)
         rescan = QPushButton(tr("Rileggi le schede collegate"))
-        rescan.setToolTip(tr("Per una scheda USB collegata dopo l'avvio di CueStage"))
+        rescan.setToolTip(tr("Per una scheda USB collegata dopo l'avvio di Cuevivo"))
         rescan.clicked.connect(self._rescan)
         fa.addRow(rescan)
         self._fill_devices()
@@ -507,7 +507,7 @@ class SettingsDialog(QDialog):
         self.feedback = {k: v for k, v in (self.s.get("midi_feedback") or {}).items() if v}
         g.addWidget(QLabel(tr("Ritorno valori")), 5, 0)
         self.f_fb = QComboBox()
-        self.f_fb.setToolTip(tr("Porta MIDI in uscita verso questo controller: CueStage gli rimanda i valori "
+        self.f_fb.setToolTip(tr("Porta MIDI in uscita verso questo controller: Cuevivo gli rimanda i valori "
                                 "attuali (anelli LED, fader motorizzati, LED dei pulsanti), es. BCR2000 / BCF2000"))
         self.f_fb.currentIndexChanged.connect(self._store_feedback)
         g.addWidget(self.f_fb, 5, 1)

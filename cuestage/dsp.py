@@ -84,7 +84,7 @@ def db2lin(db):
 
 
 def _level(db):
-    """Livello d'uscita di un effetto: −60 dB (in fondo) = spento del tutto, come i fader di CueStage."""
+    """Livello d'uscita di un effetto: −60 dB (in fondo) = spento del tutto, come i fader di Cuevivo."""
     return 0.0 if float(db) <= -60.0 else db2lin(db)
 
 

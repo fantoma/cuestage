@@ -5,7 +5,7 @@ import traceback
 from PySide6.QtCore import QTimer
 
 
-FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
+FILE_FILTER = "Show Cuevivo (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 
 
 class HardwareMixin:

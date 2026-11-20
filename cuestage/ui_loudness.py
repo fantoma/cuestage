@@ -587,7 +587,7 @@ class LoudnessMeterWindow(QDialog):
         self.update_view()
 
     def playing_cue(self):
-        """L'ultima cue con audio partita che sta ancora suonando nel motore di CueStage, o None."""
+        """L'ultima cue con audio partita che sta ancora suonando nel motore di Cuevivo, o None."""
         ids = {c.id for _l, c in audio_cues(self.mw.show_data)}
         last = None
         for cid, inst in list(self.mw.ctrl.instances.items()):
@@ -629,7 +629,7 @@ class LoudnessMeterWindow(QDialog):
         elif inst is None:
             self.state.setText(tr("«{0}» è ferma: falla partire per misurarla", cue.label()))
         elif voice is None:
-            self.state.setText(tr("«{0}»: l'audio non passa dal motore di CueStage (video con il lettore di "
+            self.state.setText(tr("«{0}»: l'audio non passa dal motore di Cuevivo (video con il lettore di "
                                   "sistema): non si può misurare", cue.label()))
         else:
             self.state.setText(tr("Misura di «{0}»: {1:.0f} s · suono della cue dopo volume, curva e fade (prima "

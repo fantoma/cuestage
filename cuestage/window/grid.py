@@ -296,7 +296,7 @@ class GridMixin:
                 continue
             k = s.key()
             if not k.isEmpty():
-                out[k.toString(QKeySequence.PortableText)] = tr("comando di CueStage")
+                out[k.toString(QKeySequence.PortableText)] = tr("comando di Cuevivo")
         for k, why in (("Space", "GO"), ("Esc", tr("STOP / esci")), ("Return", "modifica"), ("Enter", "modifica"),
                        ("Del", "elimina"), ("Backspace", "elimina"), ("Tab", "navigazione")):
             out.setdefault(k, why)
@@ -405,8 +405,8 @@ class GridMixin:
         self._rebuild_hotkeys()
 
     def _confirm_hotkey_conflicts(self):
-        """Avvisa (una volta) se lo show usa scorciatoie che CueStage riserva."""
+        """Avvisa (una volta) se lo show usa scorciatoie che Cuevivo riserva."""
         bad = [c for c in self.show_data.all_cues() if c.hotkey and c.hotkey in self._reserved_keys()]
         if bad:
-            QMessageBox.information(self, tr("Scorciatoie"), tr("Queste scorciatoie sono usate da CueStage e sono state "
+            QMessageBox.information(self, tr("Scorciatoie"), tr("Queste scorciatoie sono usate da Cuevivo e sono state "
                                     "ignorate:\n") + "\n".join(f"{c.hotkey} → {c.label()}" for c in bad[:10]))

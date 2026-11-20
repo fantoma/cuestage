@@ -1,7 +1,7 @@
 """Loudness integrata (LUFS) secondo ITU-R BS.1770-4 / EBU R128, per il menu Normalizza.
 
 Filtro K (shelf acuti + passa-alto RLB), blocchi da 400 ms con passo di 100 ms, gate assoluto a −70 LUFS e gate
-relativo a −10 LU. I file mono si misurano come «doppio mono» (CueStage li manda di norma a sinistra e a destra):
+relativo a −10 LU. I file mono si misurano come «doppio mono» (Cuevivo li manda di norma a sinistra e a destra):
 così un mono e uno stereo con lo stesso segnale risultano uguali, come all'ascolto. Si legge l'audio dalla cache su
 disco a pezzi: la memoria usata resta piccola anche con file lunghi.
 """

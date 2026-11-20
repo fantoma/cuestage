@@ -1,4 +1,4 @@
-"""Toglie da PySide6 le parti che CueStage non usa (WebEngine, 3D, Designer, Controls di Qt Quick…).
+"""Toglie da PySide6 le parti che Cuevivo non usa (WebEngine, 3D, Designer, Controls di Qt Quick…).
 Di Qt Quick tiene solo il necessario per l'uscita video su GPU (QtQuick di base e QtMultimedia).
 
     python prune_qt.py <cartella del Python portabile>

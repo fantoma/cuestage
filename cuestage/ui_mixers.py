@@ -443,11 +443,11 @@ class ControlsBox(QWidget):
         hw = [c for c in ctls if re.match(r"Line Out \d+ Volume Control", c["name"]) and c.get("value") == 1
               and c["type"] == "enum" and (c.get("items") or [""])[1:2] == ["HW"]]
         if hw:
-            note = QLabel(tr("⚠ {0} uscite hanno il volume sulla manopola della scheda (HW): volume e mute di quelle uscite non si possono comandare da CueStage.", len(hw)))
+            note = QLabel(tr("⚠ {0} uscite hanno il volume sulla manopola della scheda (HW): volume e mute di quelle uscite non si possono comandare da Cuevivo.", len(hw)))
             note.setWordWrap(True)
             note.setStyleSheet("color:#e0b040;")
             v.addWidget(note)
-            sw = QPushButton(tr("Volume e mute delle uscite da CueStage (SW)…"))
+            sw = QPushButton(tr("Volume e mute delle uscite da Cuevivo (SW)…"))
             sw.setFocusPolicy(Qt.NoFocus)
             sw.clicked.connect(lambda: self._to_sw(hw))
             v.addWidget(sw, 0, Qt.AlignLeft)
@@ -507,7 +507,7 @@ class ControlsBox(QWidget):
     def _to_sw(self, hw):
         from PySide6.QtWidgets import QMessageBox
         if QMessageBox.question(self, tr("Volume delle uscite"), tr("Mettere le uscite su controllo software (SW)?\n\n"
-                                "Volume e mute di quelle uscite si comandano da CueStage (pannello e cue mute/fader); "
+                                "Volume e mute di quelle uscite si comandano da Cuevivo (pannello e cue mute/fader); "
                                 "la manopola Monitor della scheda non agisce più su di esse finché non le rimetti "
                                 "su HW.")) != QMessageBox.Yes:
             return

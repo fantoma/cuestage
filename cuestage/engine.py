@@ -847,7 +847,7 @@ def _bury(*objs):
 
 
 class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
-    """Video. Con l'audio nel motore CueStage (predefinito) l'audio del file passa dal mixer (scheda e
+    """Video. Con l'audio nel motore Cuevivo (predefinito) l'audio del file passa dal mixer (scheda e
     matrice della cue) e fa da orologio: l'immagine lo segue e viene riallineata se si scosta."""
     layer = None
     SYNC_TOL = 0.15      # scarto massimo video/audio prima di riallineare (s)

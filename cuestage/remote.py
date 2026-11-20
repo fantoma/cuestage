@@ -296,7 +296,7 @@ class MidiFilter:
         kind = {"note_on": "note", "note_off": "note", "control_change": "cc", "program_change": "pc",
                 "pitchwheel": "pb"}.get(t)
         if kind is None:
-            return True                # altri messaggi: CueStage li ignora comunque
+            return True                # altri messaggi: Cuevivo li ignora comunque
         if kind not in self.types:
             return False
         ch = getattr(msg, "channel", None)

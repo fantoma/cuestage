@@ -1,8 +1,8 @@
-"""Interfaccia web di CueStage: pagina per telefono/tablet con le liste (MAIN e PANEL), GO, STOP, pausa.
+"""Interfaccia web di Cuevivo: pagina per telefono/tablet con le liste (MAIN e PANEL), GO, STOP, pausa.
 
 Il server HTTP gira in un thread; lo stato è un JSON preparato dal thread di Qt (state_fn, ogni 0,25 s)
 e i comandi arrivano al thread di Qt tramite il segnale «command». Con un PIN impostato ogni richiesta
-deve portare l'intestazione «X-CueStage-Pin» (la pagina lo chiede una volta e lo ricorda).
+deve portare l'intestazione «X-Cuevivo-Pin» (la pagina lo chiede una volta e lo ricorda).
 """
 import hmac
 import json
@@ -224,7 +224,7 @@ class WebServer(QObject):
 PAGE = r"""<!doctype html>
 <html lang="it"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-<title>CueStage</title>
+<title>Cuevivo</title>
 <style>
 :root{--bg:#15161b;--panel:#20222a;--row:#262832;--line:#33363f;--text:#e9e9ee;--dim:#9a9caa;
 --go:#1f8f45;--go2:#2bc060;--stop:#a52a2a;--warn:#c99a2e;--sel:#2f4f7a;}
@@ -345,7 +345,7 @@ h3{font-size:13px;color:var(--dim);margin:16px 0 6px;text-transform:uppercase;le
  <div class="row"><select id="cto"></select></div>
  <div class="row"><input id="ctext" placeholder="Scrivi un messaggio…" autocomplete="off"><button id="csend">Invia</button></div>
 </div></div>
-<div id="pin"><div><b>PIN di CueStage</b><input id="pinin" type="password" inputmode="numeric" autocomplete="off"><button id="pinok">Entra</button></div></div>
+<div id="pin"><div><b>PIN di Cuevivo</b><input id="pinin" type="password" inputmode="numeric" autocomplete="off"><button id="pinok">Entra</button></div></div>
 <script>
 const $=id=>document.getElementById(id);
 let PIN=""; try{PIN=localStorage.getItem("cuestage_pin")||""}catch(e){}
@@ -362,7 +362,7 @@ let BASE="", fails=0, backups=[], switching=false, curName=null;
 function tfetch(url,o,ms){const c=new AbortController();const t=setTimeout(()=>c.abort(),ms||2000);
   return fetch(url,Object.assign({},o,{signal:c.signal})).finally(()=>clearTimeout(t))}
 async function api(path,body){
-  const o={headers:{"X-CueStage-Pin":PIN}};
+  const o={headers:{"X-Cuevivo-Pin":PIN}};
   if(body){o.method="POST";o.headers["Content-Type"]="application/json";o.body=JSON.stringify(body)}
   const r=await tfetch(BASE+path,o,2500);
   if(r.status===401){$("pin").style.display="flex";throw new Error("pin")}
@@ -513,7 +513,7 @@ async function failover(){
   if(BASE)cands.push({name:"",url:location.origin+"/"});        // anche il master originale, se torna
   for(const b of cands){
     try{
-      const r=await tfetch(b.url+"api/state",{headers:{"X-CueStage-Pin":PIN}},1500);
+      const r=await tfetch(b.url+"api/state",{headers:{"X-Cuevivo-Pin":PIN}},1500);
       if(!r.ok&&r.status!==401)continue;
       const lost=curName||"master"; BASE=b.url.replace(/\/$/,""); rev=null; fails=0;
       if(BASE===location.origin)BASE="";
@@ -534,7 +534,7 @@ async function poll(){
   try{
     st=await api("/api/state");
     if(st.lists_rev!==rev){lists=await api("/api/lists");rev=st.lists_rev;projBuilt=null}
-    document.title="CueStage · "+(st.show||"");
+    document.title="Cuevivo · "+(st.show||"");
     fails=0; curName=st.me||curName;
     if(st.failover&&st.failover.length)backups=st.failover;
     $("bk").textContent=backups.length?"Riserva: "+backups.map(b=>b.name).join(", "):"";

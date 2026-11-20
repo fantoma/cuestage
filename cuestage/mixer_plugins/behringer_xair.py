@@ -1,4 +1,4 @@
-"""Plugin CueStage — Behringer X Air: XR12, XR16, XR18 (e Midas MR18), OSC su UDP 10024.
+"""Plugin Cuevivo — Behringer X Air: XR12, XR16, XR18 (e Midas MR18), OSC su UDP 10024.
 
 Stesso linguaggio OSC del X32 ma con indirizzi propri (tabella «X-Air OSC» della comunità behringer.world;
 il protocollo non è documentato ufficialmente):

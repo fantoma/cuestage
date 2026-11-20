@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Costruisce CueStage-x86_64.AppImage: un unico file eseguibile che contiene Python, Qt (PySide6),
+# Costruisce Cuevivo-x86_64.AppImage: un unico file eseguibile che contiene Python, Qt (PySide6),
 # numpy, sounddevice + PortAudio, mido/rtmidi, ffmpeg/ffprobe e amixer.
 #
 #   packaging/build_appimage.sh            (dalla cartella del progetto, su Ubuntu/Debian x86_64)
@@ -14,10 +14,10 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 BUILD="$ROOT/build"
 CACHE="$BUILD/cache"
-APPDIR="$BUILD/CueStage.AppDir"
+APPDIR="$BUILD/Cuevivo.AppDir"
 VERSION="$(sed -n 's/^__version__ *= *"\(.*\)"/\1/p' "$ROOT/cuestage/__init__.py")"
 VERSION="${VERSION:-dev}"
-OUT="$ROOT/dist/CueStage-${VERSION}-x86_64.AppImage"
+OUT="$ROOT/dist/Cuevivo-${VERSION}-x86_64.AppImage"
 
 PY_URL="${PY_URL:-https://github.com/astral-sh/python-build-standalone/releases/download/20251014/cpython-3.12.12+20251014-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz}"
 FFMPEG_URL="${FFMPEG_URL:-https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-lgpl-shared.tar.xz}"
@@ -77,16 +77,16 @@ cp -a "$LIBS"/libjack.so.0* "$LIBS"/libdb-5.3.so "$APPDIR/usr/lib/fallback/jack/
 cp -a "$LIBS"/libxcb-cursor.so.0* "$APPDIR/usr/lib/fallback/xcb/"
 cp "$DEBS/usr/bin/amixer" "$APPDIR/usr/fallback-bin/"          # quello di sistema, se c'è, ha la precedenza
 
-# ---------------------------------------------------------------- CueStage
-say "CueStage $VERSION"
+# ---------------------------------------------------------------- Cuevivo
+say "Cuevivo $VERSION"
 cp -r "$ROOT/cuestage" "$APPDIR/usr/app/"
 cp "$ROOT/packaging/launch.py" "$APPDIR/usr/app/"
 find "$APPDIR" -name __pycache__ -prune -exec rm -rf {} +
 "$PY" -m compileall -q -j0 "$APPDIR/usr/app" "$APPDIR/usr/python/lib" >/dev/null || true
 cp "$ROOT/packaging/AppRun" "$APPDIR/AppRun" && chmod +x "$APPDIR/AppRun"
-cp "$ROOT/packaging/cuestage.desktop" "$APPDIR/"
-cp "$ROOT/packaging/cuestage.png" "$APPDIR/cuestage.png"
-ln -sf cuestage.png "$APPDIR/.DirIcon"
+cp "$ROOT/packaging/cuevivo.desktop" "$APPDIR/"
+cp "$ROOT/packaging/cuestage.png" "$APPDIR/cuevivo.png"
+ln -sf cuevivo.png "$APPDIR/.DirIcon"
 
 # ---------------------------------------------------------------- prova rapida dentro l'AppDir
 say "prova di avvio (senza schermo)"

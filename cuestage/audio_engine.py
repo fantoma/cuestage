@@ -60,7 +60,7 @@ def preview_matrix(n_src, n_out, ch_l, ch_r):
 
 
 def silence_alsa_messages():
-    """Le librerie ALSA scrivono «underrun occurred» sul terminale a ogni buco: li conta CueStage
+    """Le librerie ALSA scrivono «underrun occurred» sul terminale a ogni buco: li conta Cuevivo
     (barra di stato) e il terminale resta leggibile."""
     try:
         import ctypes

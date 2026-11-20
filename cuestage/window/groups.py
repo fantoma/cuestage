@@ -5,7 +5,7 @@ from ..i18n import tr
 from ..model import (
     Cue, )
 
-FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
+FILE_FILTER = "Show Cuevivo (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 
 
 class GroupsMixin:

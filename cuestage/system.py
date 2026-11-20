@@ -73,7 +73,7 @@ def find_tool(name):
 def install_hint(package):
     """Come installare un programma mancante su questo sistema."""
     if IS_WIN:
-        return tr("scarica {0} e aggiungilo al PATH (oppure usa il pacchetto di CueStage, che lo include)", package)
+        return tr("scarica {0} e aggiungilo al PATH (oppure usa il pacchetto di Cuevivo, che lo include)", package)
     if IS_MAC:
-        return tr("installalo con 'brew install {0}' (oppure usa CueStage.app, che lo include)", package)
+        return tr("installalo con 'brew install {0}' (oppure usa Cuevivo.app, che lo include)", package)
     return tr("installalo con 'sudo apt install {0}'", package)

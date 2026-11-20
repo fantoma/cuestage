@@ -1,4 +1,4 @@
-"""Plugin CueStage — Yamaha 01V96 (01V96, 01V96i, 01V96VCM) e 02R96, via MIDI (SysEx «Parameter Change»).
+"""Plugin Cuevivo — Yamaha 01V96 (01V96, 01V96i, 01V96VCM) e 02R96, via MIDI (SysEx «Parameter Change»).
 
 Formato (come nel progetto open source «01v96-remote», verificato sul 01V96):
   - Parameter Change:  F0 43 1n 3E 7F 01 <elemento> <indice> <canale> d1 d2 d3 d4 F7

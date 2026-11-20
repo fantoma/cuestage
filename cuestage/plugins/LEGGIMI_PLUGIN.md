@@ -1,9 +1,9 @@
 # Plugin per videoproiettori
 
 Un plugin è un file `.py` che definisce una classe derivata da `ProjectorDriver`.
-CueStage li carica da due cartelle:
+Cuevivo li carica da due cartelle:
 
-- `plugins/` dentro CueStage (plugin inclusi: PJLink è integrato, più Panasonic MZ880/MZ882 e Optoma 506);
+- `plugins/` dentro Cuevivo (plugin inclusi: PJLink è integrato, più Panasonic MZ880/MZ882 e Optoma 506);
 - `~/.local/share/cuestage/plugins/` — **i tuoi plugin**: non vengono sovrascritti dagli aggiornamenti.
   Un plugin utente con lo stesso `ID` di uno incluso lo sostituisce.
 
@@ -60,7 +60,7 @@ Il pannello «Proiettori» costruisce i comandi diretti da `CAPS`, `INPUTS`, `EX
 `EXTRA_PARAMS`, e «Leggi stato» mostra il dizionario restituito da `status()`.
 
 I comandi vengono eseguiti in un thread separato per ogni proiettore (in ordine, senza bloccare
-CueStage): un plugin può usare `time.sleep` e connessioni bloccanti. Ogni eccezione viene mostrata
+Cuevivo): un plugin può usare `time.sleep` e connessioni bloccanti. Ogni eccezione viene mostrata
 nella barra di stato e non interrompe lo spettacolo.
 
 

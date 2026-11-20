@@ -1,4 +1,4 @@
-"""Plugin CueStage — regie video Roland V-8HD e V-1HD, via MIDI (USB): Impostazioni › Regie video, cue «Regia video».
+"""Plugin Cuevivo — regie video Roland V-8HD e V-1HD, via MIDI (USB): Impostazioni › Regie video, cue «Regia video».
 
 Collegamento: cavo USB dal computer alla regia; la regia compare come porta MIDI (su Linux: «amidi -l»).
 
@@ -20,9 +20,9 @@ Control Guide»):
     50H/00 + 0–7 = memoria 1–8
   - CC10–15 livelli HDMI 1–4, AUDIO IN, MIC · CC16 master · CC17 fader A/B · CC19 transizione (WIPE, MIX, CUT)
   - CC23/24 EFFECTS A/B (0 = spento) · CC25 manopola OUTPUT FADE · CC26 FREEZE (0 spento, 127 acceso)
-  Il V-1HD non ha un comando MIDI per l'AUTO: CueStage lo esegue muovendo il fader A/B nel tempo scelto.
+  Il V-1HD non ha un comando MIDI per l'AUTO: Cuevivo lo esegue muovendo il fader A/B nel tempo scelto.
 
-Le regie non rimandano il loro stato: i valori mostrati sono gli ultimi inviati da CueStage.
+Le regie non rimandano il loro stato: i valori mostrati sono gli ultimi inviati da Cuevivo.
 """
 import time
 
@@ -195,7 +195,7 @@ class RolandV8HD(_RolandMidi):
     NO_STATE = ("cut_to", "auto_to")
     NOTES = tr("Collega la regia al computer con il cavo USB e scegli la sua porta MIDI. Canale MIDI fisso (1). "
                "«CUT a» / «AUTO a» mettono l'ingresso in preset e lo mandano in onda (taglio o dissolvenza). "
-               "La regia non rimanda il suo stato: i valori mostrati sono gli ultimi inviati da CueStage.")
+               "La regia non rimanda il suo stato: i valori mostrati sono gli ultimi inviati da Cuevivo.")
 
     def _controls(self):
         G = GROUPS
@@ -346,8 +346,8 @@ class RolandV1HD(_RolandMidi):
     NOTES = tr("Collega la regia al computer con il cavo USB e scegli la sua porta MIDI. Sulla regia: SETUP › "
                "MIDI › Rx SOURCE = USB e Rx CHANNEL uguale al canale scelto qui. Il fader A/B va da 0 (bus A) "
                "a 127 (bus B). «CUT a» / «AUTO a» mettono l'ingresso sul bus fuori onda e spostano il fader "
-               "(l'AUTO lo muove CueStage nel «Tempo AUTO»). La regia non rimanda il suo stato: i valori "
-               "mostrati sono gli ultimi inviati da CueStage.")
+               "(l'AUTO lo muove Cuevivo nel «Tempo AUTO»). La regia non rimanda il suo stato: i valori "
+               "mostrati sono gli ultimi inviati da Cuevivo.")
 
     def _controls(self):
         G = GROUPS
@@ -431,4 +431,4 @@ class RolandV1HD(_RolandMidi):
         self._take(v, int(self.state.get("auto_time") or 0) / 10)
 
     def _set_auto_time(self, v):
-        pass                                       # solo CueStage: durata dell'AUTO
+        pass                                       # solo Cuevivo: durata dell'AUTO

@@ -164,7 +164,7 @@ class MediaTabsMixin:
         engine_route = True
         if cue.type == "video":
             route = QComboBox()
-            route.addItem(tr("Motore CueStage (scheda e matrice di questa cue)"), "engine")
+            route.addItem(tr("Motore Cuevivo (scheda e matrice di questa cue)"), "engine")
             route.addItem(tr("Lettore di sistema (scheda predefinita, senza matrice)"), "system")
             route.setCurrentIndex(max(0, route.findData(cue.video_audio or "engine")))
 
@@ -862,7 +862,7 @@ class MediaTabsMixin:
         v.addWidget(sbox)
         if cue.type == "video" and (cue.video_audio or "engine") == "system":
             lab = QLabel(tr("Con il lettore di sistema l'audio del video non passa dagli effetti: scegli "
-                            "«Motore CueStage» nella scheda Audio."))
+                            "«Motore Cuevivo» nella scheda Audio."))
             lab.setWordWrap(True)
             lab.setStyleSheet("color:#e0b040;")
             v.addWidget(lab)

@@ -1,10 +1,10 @@
-"""Avvio di CueStage impacchettato (AppImage su Linux, PyInstaller su Windows e macOS).
+"""Avvio di Cuevivo impacchettato (AppImage su Linux, PyInstaller su Windows e macOS).
 
-    CueStage [show.cueshow]          avvia il programma
-    CueStage --version               versione
-    CueStage --self-test [file]      verifica che tutte le parti incluse funzionino
+    Cuevivo [show.cueshow]          avvia il programma
+    Cuevivo --version               versione
+    Cuevivo --self-test [file]      verifica che tutte le parti incluse funzionino
                                      (su Windows il risultato va anche in «file», perché non c'è console)
-    CueStage --python ARGS           esegue il Python incluso (solo AppImage: diagnosi)
+    Cuevivo --python ARGS           esegue il Python incluso (solo AppImage: diagnosi)
 """
 import ctypes.util
 import os
@@ -17,7 +17,7 @@ if not FROZEN:      # AppImage: cuestage/ accanto a questo file; sorgenti: nella
     sys.path.insert(0, HERE if os.path.isdir(os.path.join(HERE, "cuestage")) else os.path.dirname(HERE))
 
 # AppImage: sounddevice cerca PortAudio con ctypes.util.find_library, gli indichiamo quella inclusa
-_TOP = os.environ.get("CUESTAGE_APPIMAGE_DIR") or os.path.dirname(os.path.dirname(HERE))
+_TOP = os.environ.get("CUEVIVO_APPIMAGE_DIR") or os.path.dirname(os.path.dirname(HERE))
 PORTAUDIO = os.path.join(_TOP, "usr", "lib", "libportaudio.so.2")
 if not FROZEN and os.path.exists(PORTAUDIO):
     _find = ctypes.util.find_library
@@ -34,6 +34,11 @@ def _log_without_console():
     if sys.stdout is not None and sys.stderr is not None:
         return
     from cuestage.system import data_dir
+    try:
+        from cuestage.appinfo import migrate
+        migrate()                   # prima di creare la cartella dei dati: quella del nome precedente si copia
+    except Exception:
+        pass
     try:
         os.makedirs(data_dir(), exist_ok=True)
         f = open(data_dir("cuestage.log"), "a", encoding="utf-8", buffering=1)
@@ -68,7 +73,7 @@ def self_test(report=None):
                 + ("  (non disponibile su questo computer: il resto funziona)" if optional else ""))
 
     import cuestage
-    out(f"CueStage {cuestage.__version__} — {OS_NAME} — Python {sys.version.split()[0]}")
+    out(f"Cuevivo {cuestage.__version__} — {OS_NAME} — Python {sys.version.split()[0]}")
     step("PySide6", lambda: __import__("PySide6").__version__)
     step("Qt Multimedia", lambda: (__import__("PySide6.QtMultimedia", fromlist=["x"]), "ok")[1])
     step("numpy", lambda: __import__("numpy").__version__)
@@ -90,7 +95,7 @@ def self_test(report=None):
             r = subprocess.run([exe, arg], capture_output=True, text=True, check=True, timeout=30,
                                **subprocess_flags())
             return r.stdout.splitlines()[0]
-        step(tool, run, optional=(tool == "amixer" and not os.environ.get("CUESTAGE_APPIMAGE_DIR")))
+        step(tool, run, optional=(tool == "amixer" and not os.environ.get("CUEVIVO_APPIMAGE_DIR")))
 
     def decode():
         import tempfile
@@ -142,7 +147,7 @@ def main():
     args = sys.argv[1:]
     if args[:1] == ["--version"]:
         import cuestage
-        print("CueStage", cuestage.__version__)
+        print("Cuevivo", cuestage.__version__)
         return 0
     if args[:1] == ["--self-test"]:
         if sys.stdout is None:

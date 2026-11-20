@@ -1,4 +1,4 @@
-"""Plugin CueStage — schede audio con controlli ALSA: Focusrite Scarlett / Clarett (driver «scarlett2»)
+"""Plugin Cuevivo — schede audio con controlli ALSA: Focusrite Scarlett / Clarett (driver «scarlett2»)
 e qualsiasi altra scheda che espone controlli nel mixer ALSA.
 
 Su Linux il pannello «Focusrite Control» (solo Windows/macOS) non serve: dal kernel 6.7 il driver
@@ -173,7 +173,7 @@ class FocusriteScarlett(SchedaAudioAlsa):
             self._load()                       # forse è appena passata a SW
             c = self._ctl(c.key)
         if not c.writable:
-            raise MixerError(tr("uscita {0}: volume e mute sono sulla manopola della scheda (HW). Nel pannello mixer (F10): «Volume e mute delle uscite da CueStage (SW)», oppure «Line Out {1:02d} Volume Control» su SW", n, int(n)))
+            raise MixerError(tr("uscita {0}: volume e mute sono sulla manopola della scheda (HW). Nel pannello mixer (F10): «Volume e mute delle uscite da Cuevivo (SW)», oppure «Line Out {1:02d} Volume Control» su SW", n, int(n)))
         return c
 
     def set_mute(self, kind, n, muted):

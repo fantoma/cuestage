@@ -10,14 +10,14 @@ from ..system import data_dir
 from ..model import (
     Show, )
 
-FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
+FILE_FILTER = "Show Cuevivo (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 
 
 class FilesMixin:
     @staticmethod
     def _autosave_path(show_path):
         """File nascosto di autosave: accanto allo show (".nome.cueshow.autosave") oppure, per uno
-        show mai salvato, in ~/.local/share/cuestage/."""
+        show mai salvato, nella cartella dei dati (~/.local/share/cuevivo/ su Linux)."""
         if show_path:
             d, b = os.path.split(os.path.abspath(show_path))
             return os.path.join(d, f".{b}.autosave")
@@ -74,7 +74,7 @@ class FilesMixin:
         name = os.path.basename(orig) if orig else tr("show senza titolo")
         r = QMessageBox.question(
             self, tr("Recupero dopo chiusura imprevista"),
-            tr("CueStage non è stato chiuso correttamente.\n\nÈ disponibile un salvataggio automatico di «{0}» del {1}, con modifiche non salvate.\n\nRecuperarlo?", name, when),
+            tr("Cuevivo non è stato chiuso correttamente.\n\nÈ disponibile un salvataggio automatico di «{0}» del {1}, con modifiche non salvate.\n\nRecuperarlo?", name, when),
             QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes)
         if r != QMessageBox.Yes:
             self._discard_file(auto)
@@ -265,17 +265,17 @@ class FilesMixin:
         self.status(tr("Aperto {0}", path))
 
     def _warn_newer(self, show):
-        """Show salvato da un CueStage più recente: avviso (le funzioni nuove qui non ci sono, i loro dati sì)."""
+        """Show salvato da un Cuevivo più recente: avviso (le funzioni nuove qui non ci sono, i loro dati sì)."""
         from .. import __version__
         info = show.newer_info()
         if not info:
             return None
         parts = []
         if info["newer"]:
-            parts.append(tr("Questo show è stato salvato con CueStage {0}, più recente di questa versione ({1}).",
+            parts.append(tr("Questo show è stato salvato con Cuevivo {0}, più recente di questa versione ({1}).",
                             info["app_version"] or "?", __version__))
         else:
-            parts.append(tr("Questo show contiene dati che questa versione di CueStage ({0}) non conosce.",
+            parts.append(tr("Questo show contiene dati che questa versione di Cuevivo ({0}) non conosce.",
                             __version__))
         if info["unknown_type_cues"]:
             parts.append(tr("{0} cue di tipo sconosciuto ({1}) sono mostrate come Memo e non partono.",
@@ -284,7 +284,7 @@ class FilesMixin:
             f = info["unknown_fields"]
             parts.append(tr("Impostazioni sconosciute: {0}.", ", ".join(f[:8]) + (" …" if len(f) > 8 else "")))
         parts.append(tr("Le funzioni nuove non sono disponibili qui, ma i loro dati vengono conservati quando "
-                        "salvi. Per usarle aggiorna CueStage."))
+                        "salvi. Per usarle aggiorna Cuevivo."))
         msg = "\n\n".join(parts)
         self.ctrl.message.emit(msg.replace("\n\n", " "))
         QMessageBox.warning(self, tr("Show di una versione più recente"), msg)

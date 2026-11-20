@@ -1,4 +1,4 @@
-"""Plugin CueStage — OBS Studio: obs-websocket 5 (incluso in OBS dalla versione 28) e 4.x (plugin per OBS 27 e
+"""Plugin Cuevivo — OBS Studio: obs-websocket 5 (incluso in OBS dalla versione 28) e 4.x (plugin per OBS 27 e
 precedenti, o «4.x Compat»). Il protocollo si riconosce da solo: la 5 manda subito un Hello, la 4.x no.
 
 In OBS: Strumenti › Impostazioni del server WebSocket › «Abilita server WebSocket» (porta 4455, password

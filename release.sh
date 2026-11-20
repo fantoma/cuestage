@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pubblica una nuova versione di CueStage su GitHub.
+# Pubblica una nuova versione di Cuevivo su GitHub.
 #
 #   ./release.sh              chiede il numero di versione
 #   ./release.sh 1.0.1        usa quello indicato
@@ -99,7 +99,7 @@ echo
 
 # ---------------------------------------------------------------- test (facoltativi)
 PYBIN=""
-for p in .venv/bin/python "$HOME/.local/share/cuestage/.venv/bin/python" python3; do
+for p in .venv/bin/python "$HOME/.local/share/cuevivo/.venv/bin/python" "$HOME/.local/share/cuestage/.venv/bin/python" python3; do
     if [ -x "$p" ] || command -v "$p" >/dev/null 2>&1; then
         "$p" -c "import PySide6, numpy" 2>/dev/null && { PYBIN="$p"; break; }
     fi
@@ -131,7 +131,7 @@ if [ "$PROVA" = 1 ] || ! git diff --cached --quiet; then
 else
     warn "nessuna modifica da salvare (la versione era già $VERS)"
 fi
-run git tag -a "$TAG" -m "CueStage $VERS${NOTE:+ — $NOTE}"
+run git tag -a "$TAG" -m "Cuevivo $VERS${NOTE:+ — $NOTE}"
 
 say "invio a GitHub"
 run git push -q "$REMOTE" "$BRANCH"

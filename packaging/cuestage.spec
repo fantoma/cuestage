@@ -1,11 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller: CueStage per Windows (cartella con CueStage.exe) e macOS (CueStage.app).
+"""PyInstaller: Cuevivo per Windows (cartella con Cuevivo.exe) e macOS (Cuevivo.app).
 
     pyinstaller packaging/cuestage.spec --noconfirm        (dalla cartella del progetto)
 
 Variabili d'ambiente:
-    CUESTAGE_FFMPEG_DIR   cartella con ffmpeg/ffprobe (o .exe) da includere (facoltativa ma consigliata)
-    CUESTAGE_MAC_ARCH     arm64, x86_64 o universal2 (solo macOS; predefinita: quella del Python usato)
+    CUEVIVO_FFMPEG_DIR   cartella con ffmpeg/ffprobe (o .exe) da includere (facoltativa ma consigliata)
+    CUEVIVO_MAC_ARCH     arm64, x86_64 o universal2 (solo macOS; predefinita: quella del Python usato)
 Funziona anche su Linux (per prova), ma lì il pacchetto ufficiale è l'AppImage.
 """
 import ast
@@ -45,7 +45,7 @@ for path in glob.glob(os.path.join(PKG, "mixer_plugins", "*.py")) + glob.glob(os
 
 # ---- ffmpeg e ffprobe
 binaries = []
-ff = os.environ.get("CUESTAGE_FFMPEG_DIR")
+ff = os.environ.get("CUEVIVO_FFMPEG_DIR")
 if ff:
     for name in ("ffmpeg", "ffprobe"):
         for p in glob.glob(os.path.join(ff, name + (".exe" if IS_WIN else ""))):
@@ -71,36 +71,37 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="CueStage",
+    name="Cuevivo",
     console=False,                 # app a finestra (il log va in cuestage.log nella cartella dei dati)
     icon=os.path.join(SPECPATH, "cuestage.ico" if IS_WIN else "cuestage.icns"),
-    target_arch=os.environ.get("CUESTAGE_MAC_ARCH") or None,
-    codesign_identity=os.environ.get("CUESTAGE_CODESIGN_ID") or None,
+    target_arch=os.environ.get("CUEVIVO_MAC_ARCH") or None,
+    codesign_identity=os.environ.get("CUEVIVO_CODESIGN_ID") or None,
     entitlements_file=os.path.join(SPECPATH, "macos", "entitlements.plist") if IS_MAC else None,
     upx=False,
 )
-coll = COLLECT(exe, a.binaries, a.datas, name="CueStage", upx=False)
+coll = COLLECT(exe, a.binaries, a.datas, name="Cuevivo", upx=False)
 
 if IS_MAC:
     app = BUNDLE(
         coll,
-        name="CueStage.app",
+        name="Cuevivo.app",
         icon=os.path.join(SPECPATH, "cuestage.icns"),
+        # identificativo storico: macOS conserva permessi (rete locale, microfono) e associazioni dei file
         bundle_identifier="org.cuestage.CueStage",
         version=VERSION,
         info_plist={
-            "CFBundleName": "CueStage",
-            "CFBundleDisplayName": "CueStage",
+            "CFBundleName": "Cuevivo",
+            "CFBundleDisplayName": "Cuevivo",
             "CFBundleShortVersionString": VERSION,
             "CFBundleVersion": VERSION,
             "NSHighResolutionCapable": True,
             "LSMinimumSystemVersion": os.environ.get("MACOS_MIN", "12.0"),   # vedi build_macos.sh
             # macOS 15+: senza questa voce non si raggiungono mixer, proiettori, OSC e istanze in rete locale
-            "NSLocalNetworkUsageDescription": "CueStage comanda mixer, proiettori, luci (OSC) e altre istanze "
-                                              "di CueStage sulla rete locale.",
-            "NSMicrophoneUsageDescription": "CueStage apre le schede audio anche in ingresso per alcuni driver.",
+            "NSLocalNetworkUsageDescription": "Cuevivo comanda mixer, proiettori, luci (OSC) e altre istanze "
+                                              "di Cuevivo sulla rete locale.",
+            "NSMicrophoneUsageDescription": "Cuevivo apre le schede audio anche in ingresso per alcuni driver.",
             "CFBundleDocumentTypes": [{
-                "CFBundleTypeName": "Show CueStage",
+                "CFBundleTypeName": "Show Cuevivo",
                 "CFBundleTypeRole": "Editor",
                 "LSHandlerRank": "Owner",
                 "CFBundleTypeExtensions": ["cueshow"],

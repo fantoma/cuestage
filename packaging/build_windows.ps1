@@ -1,4 +1,4 @@
-# Costruisce CueStage per Windows 10/11 (64 bit): cartella portable (.zip) e installatore (setup.exe).
+# Costruisce Cuevivo per Windows 10/11 (64 bit): cartella portable (.zip) e installatore (setup.exe).
 #
 #   powershell -ExecutionPolicy Bypass -File packaging\build_windows.ps1      (dalla cartella del progetto)
 #
@@ -34,23 +34,23 @@ Get-ChildItem -Path $FfTmp -Recurse -Include ffmpeg.exe, ffprobe.exe, *.dll | Co
 & "$FfDir\ffprobe.exe" -version | Select-Object -First 1
 
 Say "PyInstaller"
-Remove-Item -Recurse -Force "dist\CueStage" -ErrorAction SilentlyContinue
-$env:CUESTAGE_FFMPEG_DIR = $FfDir
+Remove-Item -Recurse -Force "dist\Cuevivo" -ErrorAction SilentlyContinue
+$env:CUEVIVO_FFMPEG_DIR = $FfDir
 & "$Build\venv\Scripts\pyinstaller.exe" packaging\cuestage.spec --noconfirm --distpath dist --workpath "$Build\pyi"
 if ($LASTEXITCODE) { throw "PyInstaller non riuscito" }
 
 Say "prova di avvio"
 $Report = Join-Path $Build "self-test.txt"
 $env:QT_QPA_PLATFORM = "offscreen"
-$p = Start-Process -FilePath "dist\CueStage\CueStage.exe" -ArgumentList "--self-test", "`"$Report`"" -Wait -PassThru -NoNewWindow
+$p = Start-Process -FilePath "dist\Cuevivo\Cuevivo.exe" -ArgumentList "--self-test", "`"$Report`"" -Wait -PassThru -NoNewWindow
 Remove-Item Env:\QT_QPA_PLATFORM
 Get-Content $Report -Encoding UTF8
 if ($p.ExitCode -ne 0) { throw "la prova di avvio ha trovato problemi" }
 
 Say "zip portable"
-$Zip = "dist\CueStage-$Version-windows-portable.zip"
+$Zip = "dist\Cuevivo-$Version-windows-portable.zip"
 Remove-Item $Zip -ErrorAction SilentlyContinue
-Compress-Archive -Path "dist\CueStage" -DestinationPath $Zip -CompressionLevel Optimal
+Compress-Archive -Path "dist\Cuevivo" -DestinationPath $Zip -CompressionLevel Optimal
 
 $Iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", "$env:ProgramFiles\Inno Setup 6\ISCC.exe", "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe") |
         Where-Object { Test-Path $_ } | Select-Object -First 1
@@ -62,4 +62,4 @@ if ($Iscc) {
     Write-Warning "Inno Setup non trovato: creato solo lo zip portable"
 }
 Say "fatto:"
-Get-ChildItem dist\CueStage-$Version-windows-* | ForEach-Object { "  $($_.Name)  ($([math]::Round($_.Length / 1MB)) MB)" }
+Get-ChildItem dist\Cuevivo-$Version-windows-* | ForEach-Object { "  $($_.Name)  ($([math]::Round($_.Length / 1MB)) MB)" }

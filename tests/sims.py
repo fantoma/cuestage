@@ -1,4 +1,4 @@
-"""Simulatori dei mixer per i test di CueStage."""
+"""Simulatori dei mixer per i test di Cuevivo."""
 import os, socket, threading, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cuestage.mixers import osc_encode, osc_decode, NrpnParser

@@ -887,7 +887,7 @@ class HotkeyDialog(QDialog):
         self.others = others           # {testo: cue} già usate da altre cue
         self.result_key = None
         v = QVBoxLayout(self)
-        v.addWidget(QLabel(tr("Premi la combinazione di tasti per {0}«{1}»\n(es. F5, 1, Q, Ctrl+1). La scorciatoia funziona con la finestra di CueStage attiva,\nma non mentre stai scrivendo in un campo di testo.", purpose, cue.label())))
+        v.addWidget(QLabel(tr("Premi la combinazione di tasti per {0}«{1}»\n(es. F5, 1, Q, Ctrl+1). La scorciatoia funziona con la finestra di Cuevivo attiva,\nma non mentre stai scrivendo in un campo di testo.", purpose, cue.label())))
         self.edit = QKeySequenceEdit()
         if hasattr(self.edit, "setMaximumSequenceLength"):
             self.edit.setMaximumSequenceLength(1)
@@ -920,7 +920,7 @@ class HotkeyDialog(QDialog):
             ok.setEnabled(False)
             return
         if k in self.reserved:
-            self.msg.setText(tr("«{0}» è già usata da CueStage ({1}): scegline un'altra.", k, self.reserved[k]))
+            self.msg.setText(tr("«{0}» è già usata da Cuevivo ({1}): scegline un'altra.", k, self.reserved[k]))
             self.msg.setStyleSheet("color:#e66;")
             ok.setEnabled(False)
             return

@@ -1,4 +1,4 @@
-"""Plugin CueStage — Allen & Heath Qu e SQ (MIDI su TCP/IP, porta 51325).
+"""Plugin Cuevivo — Allen & Heath Qu e SQ (MIDI su TCP/IP, porta 51325).
 
 Qu (documento «Qu MIDI Protocol V1.9+»):
   - mute: Note On sul canale MIDI del mixer: 9N CH 7F 9N CH 00 = muto · 9N CH 3F 9N CH 00 = acceso

@@ -1,4 +1,4 @@
-"""Finestra principale di CueStage."""
+"""Finestra principale di Cuevivo."""
 from .i18n import tr
 from .appinfo import APP_NAME, settings as _app_settings
 import os
@@ -199,7 +199,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self._history_init()
         self._build_ui()
         self._build_menus()
-        self._watch_screens()                # proiettori collegati o staccati con CueStage aperto
+        self._watch_screens()                # proiettori collegati o staccati con Cuevivo aperto
         self._build_shortcuts()
         self._history_reset()
 
@@ -759,7 +759,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         from .ui_disclaimer import AUTHOR
         QMessageBox.about(
             self, APP_NAME,
-            tr("<b>CueStage</b><br>Sistema di cue per spettacolo: audio, video, immagini, "
+            tr("<b>Cuevivo</b><br>Sistema di cue per spettacolo: audio, video, immagini, "
                "fade, comandi, OSC e MIDI.<br>Python + Qt6 (PySide6) · motore audio PortAudio.")
             + f"<br><br>{tr('Versione {0}', __version__)}<br><b>{AUTHOR}</b><br><br>"
             + tr("⚠ Software sperimentale: non usarlo in produzione."))
@@ -958,7 +958,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         name = os.path.basename(self.show_data.path) if self.show_data.path else tr("Senza titolo")
         if len(self.show_data.versions) > 1:
             name += f" [{self.show_data.active.name}]"
-        self.setWindowTitle(tr("{0}{1} — CueStage", '● ' if self.show_data.dirty else '', name))
+        self.setWindowTitle(tr("{0}{1} — Cuevivo", '● ' if self.show_data.dirty else '', name))
 
     def _update_edit_overlay(self):
         """Con la scheda crop aperta (e non in blind) l'uscita mostra il fermo immagine in modifica."""
@@ -1092,8 +1092,8 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
     def _choose_language(self, code):
         from . import i18n
         i18n.save_language(code)
-        msg = "La nuova lingua sarà usata al prossimo avvio di CueStage."
-        txt = tr("La nuova lingua sarà usata al prossimo avvio di CueStage.")
+        msg = "La nuova lingua sarà usata al prossimo avvio di Cuevivo."
+        txt = tr("La nuova lingua sarà usata al prossimo avvio di Cuevivo.")
         other = i18n.load(code).get(msg, msg)
         if other != txt:
             txt += "\n\n" + other

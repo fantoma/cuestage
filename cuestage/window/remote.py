@@ -7,7 +7,7 @@ from ..model import (
 from ..remote import osc_send, spec_matches
 from ..ui_dialogs import MidiLearnDialog
 
-FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
+FILE_FILTER = "Show Cuevivo (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 
 
 class RemoteMixin:

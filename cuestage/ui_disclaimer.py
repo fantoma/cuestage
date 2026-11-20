@@ -1,4 +1,4 @@
-"""Finestra iniziale: CueStage è un software sperimentale (testo in tutte le lingue, non tradotto con tr)."""
+"""Finestra iniziale: Cuevivo è un software sperimentale (testo in tutte le lingue, non tradotto con tr)."""
 import os
 
 from PySide6.QtCore import Qt
@@ -12,17 +12,17 @@ AUTHOR = "Designed by Diego Fantoma"
 # un blocco per lingua: (codice, nome, titolo, testo, pulsante accetta, pulsante esci)
 NOTICE = [
     ("it", "Italiano", "Software sperimentale",
-     "CueStage è un software sperimentale, ancora in fase di sviluppo. <b>Non usarlo in produzione</b> "
+     "Cuevivo è un software sperimentale, ancora in fase di sviluppo. <b>Non usarlo in produzione</b> "
      "(spettacoli dal vivo, eventi, installazioni): può contenere errori e comportarsi in modo imprevisto, "
      "fermare o non avviare una cue, perdere modifiche. Lo usi a tuo rischio, senza alcuna garanzia.",
      "Ho capito", "Esci"),
     ("en", "English", "Experimental software",
-     "CueStage is experimental software, still under development. <b>Do not use it in production</b> "
+     "Cuevivo is experimental software, still under development. <b>Do not use it in production</b> "
      "(live shows, events, installations): it may contain bugs and behave unexpectedly, stop or fail to "
      "start a cue, or lose changes. You use it at your own risk, without any warranty.",
      "I understand", "Quit"),
     ("sl", "Slovenščina", "Preizkusna programska oprema",
-     "CueStage je preizkusna programska oprema, ki je še v razvoju. <b>Ne uporabljajte je v produkciji</b> "
+     "Cuevivo je preizkusna programska oprema, ki je še v razvoju. <b>Ne uporabljajte je v produkciji</b> "
      "(predstave v živo, prireditve, instalacije): lahko vsebuje napake in se obnaša nepričakovano, ustavi "
      "cue ali ga ne zažene ali izgubi spremembe. Uporabljate jo na lastno odgovornost, brez kakršnega koli "
      "jamstva.",
@@ -49,7 +49,7 @@ class DisclaimerDialog(QDialog):
         if not pm.isNull():
             icon.setPixmap(pm.scaled(64, 64, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         head.addWidget(icon)
-        title = QLabel(f"<span style='font-size:20pt;font-weight:bold'>CueStage</span>"
+        title = QLabel(f"<span style='font-size:20pt;font-weight:bold'>Cuevivo</span>"
                        f"{' &nbsp;' + version if version else ''}<br>"
                        f"<span style='color:#9aa'>{AUTHOR}</span>")
         head.addWidget(title, 1)

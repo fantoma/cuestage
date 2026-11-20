@@ -10,7 +10,7 @@ from ..model import (
     TYPE_LABELS, Cue, type_for_file,
 )
 
-FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
+FILE_FILTER = "Show Cuevivo (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 
 
 class EditingMixin:

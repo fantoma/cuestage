@@ -272,7 +272,7 @@ class _OutputMixin:
         self.comp = comp
         self.edit_mode = False
         self.drag = -1
-        self.setWindowTitle(tr("CueStage – Uscita video"))
+        self.setWindowTitle(tr("Cuevivo – Uscita video"))
         self.setMouseTracking(True)
         self.setMinimumSize(160, 90)          # mai una finestra di 1×1 (Wayland a volte la crea così)
         self.resize(960, 540)

@@ -1,4 +1,4 @@
-"""Plugin CueStage — Soundcraft Ui12 / Ui16 (WebSocket sulla porta 80).
+"""Plugin Cuevivo — Soundcraft Ui12 / Ui16 (WebSocket sulla porta 80).
 
 Protocollo come nella libreria open source «soundcraft-ui-connection» (F. Malcher):
   - WebSocket su ws://<ip>/ ; ogni messaggio ha il prefisso «3:::»; keepalive «3:::ALIVE» ogni secondo

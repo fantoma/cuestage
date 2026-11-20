@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QInputDialog, QMenu, QMessageBox, )
 
 
-FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
+FILE_FILTER = "Show Cuevivo (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 
 
 class ListsMixin:

@@ -79,7 +79,7 @@ class BecomeSlaveDialog(QDialog):
         self.copy.setChecked(self.qs.value("cluster/copy", "true") in (True, "true"))
         fs.addRow(self.copy)
         dr = QHBoxLayout()
-        self.dir = QLineEdit(self.qs.value("cluster/dir", "") or os.path.expanduser("~/CueStage-slave"))
+        self.dir = QLineEdit(self.qs.value("cluster/dir", "") or os.path.expanduser("~/Cuevivo-slave"))
         dr.addWidget(self.dir, 1)
         b = QPushButton(tr("Sfoglia…"))
         b.clicked.connect(self._browse)

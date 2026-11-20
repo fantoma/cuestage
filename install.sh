@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Installazione di CueStage su Ubuntu (22.04 e successive)
+# Installazione di Cuevivo su Ubuntu (22.04 e successive)
 set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
-APP="CueStage"                     # nome che si vede (come APP_NAME in cuestage/appinfo.py)
-SLUG="cuestage"                    # cartella, comando e voce di menu (come APP_SLUG)
-OLD_SLUGS=""                       # nomi precedenti: installazione e dati vengono spostati qui
+APP="Cuevivo"                      # nome che si vede (come APP_NAME in cuestage/appinfo.py)
+SLUG="cuevivo"                     # cartella, comando e voce di menu (come APP_SLUG)
+OLD_SLUGS="cuestage"               # nomi precedenti: installazione e dati vengono spostati qui
 DEST="$HOME/.local/share/$SLUG"
 
 for OLD in $OLD_SLUGS; do

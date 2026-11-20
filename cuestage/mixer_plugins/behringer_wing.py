@@ -1,4 +1,4 @@
-"""Plugin CueStage — Behringer WING (OSC su UDP 2223).
+"""Plugin Cuevivo — Behringer WING (OSC su UDP 2223).
 
 Dal documento «WING Remote Protocols» (Behringer / P.-G. Maillot):
   - ricerca: datagramma «WING?» sulla porta UDP 2222 → «WING,ip,nome,modello,seriale,firmware»

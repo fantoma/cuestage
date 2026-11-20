@@ -1,6 +1,6 @@
 """Controllo di videoproiettori via rete: comandi comuni, driver PJLink integrato e sistema di plugin.
 
-Un plugin è un file .py (nella cartella «plugins» di CueStage o in ~/.local/share/cuestage/plugins/)
+Un plugin è un file .py (nella cartella «plugins» di Cuevivo o in ~/.local/share/cuestage/plugins/)
 che definisce una o più sottoclassi di ProjectorDriver. Vedi plugins/LEGGIMI_PLUGIN.md.
 """
 from .i18n import tr
@@ -419,7 +419,7 @@ class ProjectorManager(QObject):
                 self.finished.emit(name, lab, True, msg)
             except ProjectorError as e:
                 self.finished.emit(name, lab, False, str(e))
-            except Exception as e:      # errore nel plugin: non deve fermare CueStage
+            except Exception as e:      # errore nel plugin: non deve fermare Cuevivo
                 traceback.print_exc()
                 self.finished.emit(name, lab, False, tr("errore nel driver: {0}", e))
         return self._pool(pid).submit(job)

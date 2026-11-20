@@ -1,4 +1,4 @@
-# Costruisce e prova CueStage su Linux, Windows e macOS.
+# Costruisce e prova Cuevivo su Linux, Windows e macOS.
 #
 #  push sul ramo main / pull request  → solo test su Linux (veloce, consuma pochi minuti)
 #  tag «v1.2.3»                       → test sui 3 sistemi + pacchetti allegati alla Release «v1.2.3»
@@ -79,7 +79,7 @@ jobs:
           fi
       - uses: softprops/action-gh-release@v3
         with:
-          name: CueStage ${{ github.ref_name }}
+          name: Cuevivo ${{ github.ref_name }}
           generate_release_notes: true
 
   # ------------------------------------------------------------------ Linux: AppImage
@@ -109,7 +109,7 @@ jobs:
         if: env.IS_TAG != 'true'
         uses: actions/upload-artifact@v6
         with:
-          name: CueStage-linux
+          name: Cuevivo-linux
           path: dist/*.AppImage
           retention-days: 3
 
@@ -146,7 +146,7 @@ jobs:
         if: env.IS_TAG != 'true'
         uses: actions/upload-artifact@v6
         with:
-          name: CueStage-windows
+          name: Cuevivo-windows
           path: |
             dist/*-windows-setup.exe
             dist/*-windows-portable.zip
@@ -172,7 +172,7 @@ jobs:
       # facoltativi: senza questi segreti l'app è firmata «ad hoc» (al primo avvio: tasto destro › Apri)
       MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
       MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-      CUESTAGE_CODESIGN_ID: ${{ secrets.MACOS_CODESIGN_ID }}
+      CUEVIVO_CODESIGN_ID: ${{ secrets.MACOS_CODESIGN_ID }}
       APPLE_ID: ${{ secrets.APPLE_ID }}
       APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
       APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
@@ -204,6 +204,6 @@ jobs:
         if: env.IS_TAG != 'true'
         uses: actions/upload-artifact@v6
         with:
-          name: CueStage-macos-${{ matrix.arch }}
+          name: Cuevivo-macos-${{ matrix.arch }}
           path: dist/*-macos-*
           retention-days: 3

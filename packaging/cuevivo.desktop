@@ -1,13 +1,13 @@
 [Desktop Entry]
 Type=Application
-Name=CueStage
+Name=Cuevivo
 GenericName=Show control
 Comment=Cue audio, video, luci e mixer per lo spettacolo
-Exec=cuestage %f
-Icon=cuestage
+Exec=cuevivo %f
+Icon=cuevivo
 Terminal=false
 StartupNotify=true
-StartupWMClass=CueStage
+StartupWMClass=Cuevivo
 Categories=AudioVideo;Audio;Video;
 MimeType=application/x-cuestage;
 Keywords=cue;show;theatre;teatro;qlab;

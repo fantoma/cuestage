@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (
 from ..ui_dialogs import GeometryDialog
 from ..video_output import make_output
 
-FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
+FILE_FILTER = "Show Cuevivo (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 
 
 class VideoMixin:
@@ -195,7 +195,7 @@ class VideoMixin:
         self.status(msg)
 
     def _watch_screens(self):
-        """Schermi collegati o staccati mentre CueStage è aperto: l'uscita torna sullo schermo giusto."""
+        """Schermi collegati o staccati mentre Cuevivo è aperto: l'uscita torna sullo schermo giusto."""
         from PySide6.QtCore import QTimer
         app = QApplication.instance()
         self._screens_timer = QTimer(self)

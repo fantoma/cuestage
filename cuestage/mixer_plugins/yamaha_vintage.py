@@ -1,4 +1,4 @@
-"""Plugin CueStage — Yamaha 01V e 02R (i modelli originali), via MIDI Control Change.
+"""Plugin Cuevivo — Yamaha 01V e 02R (i modelli originali), via MIDI Control Change.
 
 Questi mixer si comandano con i Control Change della loro «tabella di assegnazione» (MIDI › Control Change
 Assign); il plugin usa la tabella INIZIALE di fabbrica dei manuali:
@@ -15,7 +15,7 @@ Assign); il plugin usa la tabella INIZIALE di fabbrica dei manuali:
 Messaggio: Bn cc vv sul canale MIDI di ricezione del mixer (Rx CH); ON: 127 acceso, 0 spento (= muto).
 Sul mixer: MIDI Setup › Control Change Rx ON e canale Rx = quello indicato qui.
 Lettura dei livelli: il 01V trasmette i Control Change quando si muove un fader (Control Change Tx ON):
-CueStage ricorda l'ultimo valore ricevuto per ogni controllo. Il 02R NON trasmette Control Change, quindi
+Cuevivo ricorda l'ultimo valore ricevuto per ogni controllo. Il 02R NON trasmette Control Change, quindi
 non si può leggere il livello dal mixer (si imposta a mano nella cue).
 Se sul mixer la tabella è stata cambiata, correggere FADER_CC / ON_CC qui sotto.
 La scala 0…127 ↔ dB è approssimata (0 = −∞, 103 ≈ 0 dB, 127 = +6 dB).

@@ -119,7 +119,7 @@ class Cue:
         # uscita audio (audio e video): scheda ("" = predefinita), matrice sorgente×uscita in dB
         # (None = incrocio spento; lista vuota = routing predefinito), volume per uscita in dB
         "audio_device": "", "matrix": [], "out_levels": [],
-        "video_audio": "engine",   # video: "engine" = motore CueStage, "system" = lettore di sistema
+        "video_audio": "engine",   # video: "engine" = motore Cuevivo, "system" = lettore di sistema
         # video: tenuto pronto in anticipo (file aperto, fermo sul primo fotogramma) e loop senza attesa
         "preload": True,
         # ducking: riduzione in dB (positiva, 0 = spento) quando l'ingresso del ducking supera la soglia;
@@ -729,7 +729,7 @@ class Show:
             "original_path": self.path,
             "cues": [c.to_dict(base_dir) for c in self.main.cues],
             "panels": [panel_data(l, base_dir) for l in self.panels],
-            # le cue della versione attiva sono quelle qui sopra («cues» e «panels»): un CueStage
+            # le cue della versione attiva sono quelle qui sopra («cues» e «panels»): un Cuevivo
             # precedente apre la versione attiva e ignora le altre
             "active_version": self.active_version,
             "versions": self.versions_data(base_dir),
@@ -737,7 +737,7 @@ class Show:
         return d
 
     def newer_info(self):
-        """Lo show viene da una versione più recente di CueStage? → {app_version, newer, unknown_types,
+        """Lo show viene da una versione più recente di Cuevivo? → {app_version, newer, unknown_types,
         unknown_fields} (campi e tipi sconosciuti: si conservano salvando), oppure None se niente di nuovo."""
         return getattr(self, "load_info", None)
 

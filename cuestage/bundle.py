@@ -119,7 +119,7 @@ def bundle_info(zip_path):
             if not show or show not in names:
                 show = next((n for n in names if n.lower().endswith(".cueshow") and "/" not in n), None)
             if show is None:
-                raise BundleError(tr("nel file non c'è uno show CueStage"))
+                raise BundleError(tr("nel file non c'è uno show Cuevivo"))
             info["show"] = show
             return info
     except zipfile.BadZipFile as e:

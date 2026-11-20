@@ -1,4 +1,4 @@
-"""Test di regressione rapidi di CueStage (senza schede audio né rete esterna).
+"""Test di regressione rapidi di Cuevivo (senza schede audio né rete esterna).
 
     python3 tests/test_smoke.py          (dalla cartella del progetto)
 
@@ -412,7 +412,7 @@ def t_history_versions(w):
     assert not sh.dirty
     data = json.load(open(path, encoding="utf-8"))
     assert data["active_version"] == first.id and len(data["versions"]) == 2
-    assert [x.get("name") for x in data["cues"]] == ["Prima"]          # i CueStage precedenti aprono l'attiva
+    assert [x.get("name") for x in data["cues"]] == ["Prima"]          # le versioni precedenti aprono l'attiva
     back = Show.load(path)
     tour = next(x for x in back.versions if x.name == "Tournée")
     assert tour.notes == "Teatro piccolo: niente video" and tour.lists[0].cues[0].name == "Solo in tournée"
@@ -4159,6 +4159,9 @@ def t_rename_compat(w):
         appinfo.OSC_NAMESPACES = orig_ns
         _remote.osc_send_args = orig_send
     assert "X-CueStage-Pin" in appinfo.PIN_HEADERS and appinfo.PIN_HEADER in appinfo.PIN_HEADERS
+    if appinfo.APP_NAME != appinfo.LEGACY[0][0]:            # dopo il cambio di nome: i due spazi OSC
+        assert appinfo.OSC_NAMESPACES == ("/cuestage", "/" + appinfo.APP_SLUG)
+        assert appinfo.data_base() != appinfo.data_base(*appinfo.LEGACY[0][:2])
 
 
 def make_pdf(name, n=4):
@@ -4731,7 +4734,7 @@ def t_midi_feedback(w):
         assert (0xB0, 7, v10) in got and (0xB0, 20, 0) in got and (0xB0, 8, v10) in got, got
         assert (0x90, 40, 0) in got, got
         del got[:]
-        a.level_db = 0.0                                   # cambiato da CueStage: l'anello si aggiorna
+        a.level_db = 0.0                                   # cambiato da Cuevivo: l'anello si aggiorna
         run(0.2)
         assert (0xB0, 7, round(db_to_fader(0.0) * 127)) in got, got
         del got[:]

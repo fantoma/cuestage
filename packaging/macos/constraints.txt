@@ -1,4 +1,4 @@
-# Versioni massime per il pacchetto macOS (build_macos.sh): CueStage.app deve partire da macOS 12 Monterey.
+# Versioni massime per il pacchetto macOS (build_macos.sh): Cuevivo.app deve partire da macOS 12 Monterey.
 # Qt 6.10 e successivi richiedono macOS 13 Ventura: PySide6 resta alla 6.9.
 PySide6<6.10
 PySide6-Essentials<6.10

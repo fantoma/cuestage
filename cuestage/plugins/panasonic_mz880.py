@@ -1,4 +1,4 @@
-"""Plugin CueStage — Panasonic PT-MZ880 / PT-MZ882 (e serie MZ780/MZ680, MZ782/MZ682).
+"""Plugin Cuevivo — Panasonic PT-MZ880 / PT-MZ882 (e serie MZ780/MZ680, MZ782/MZ682).
 
 Protocollo: comandi di controllo Panasonic via LAN («NTCONTROL», TCP 1024).
   - Alla connessione il proiettore invia «NTCONTROL 0» (senza protezione) oppure

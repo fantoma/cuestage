@@ -1,4 +1,4 @@
-# CueStage
+# Cuevivo
 
 **Designed by Diego Fantoma**
 
@@ -7,17 +7,22 @@ QLab / Show Cue System. Written in Python with Qt 6 (PySide6); audio uses its ow
 (PipeWire/ALSA/JACK on Linux, WASAPI/ASIO on Windows, Core Audio on macOS), video uses the FFmpeg backend of
 Qt Multimedia.
 
-> ⚠ **Experimental software.** CueStage is still under development: do not use it in production (live shows,
+> ⚠ **Experimental software.** Cuevivo is still under development: do not use it in production (live shows,
 > events, installations). It may contain bugs and behave unexpectedly. You use it at your own risk, without any
-> warranty. At every start CueStage shows this notice (in Italian, English and Slovenian) and waits for you to
+> warranty. At every start Cuevivo shows this notice (in Italian, English and Slovenian) and waits for you to
 > accept it.
+
+> **Formerly CueStage.** The project was renamed *Cuevivo* (GitHub: `fantoma/cuevivo`; the old address redirects
+> here). Updating keeps everything: shows (`.cueshow`), settings, user data, plugins and profiles are taken over
+> automatically from CueStage, the old `cuestage` command still starts the program, `CUESTAGE_…` environment
+> variables still work and OSC programs may keep using `/cuestage/…`. See [Renamed from CueStage](#renamed-from-cuestage).
 
 ## Installation
 
 ```bash
-unzip cuestage.zip && cd cuestage
+unzip cuevivo.zip && cd cuevivo
 ./install.sh          # apt packages + isolated Python environment + menu entry
-cuestage              # or from the applications menu
+cuevivo               # or from the applications menu
 ```
 
 To try it without installing: `sudo apt install ffmpeg libportaudio2 python3-venv`, then
@@ -25,17 +30,17 @@ To try it without installing: `sudo apt install ffmpeg libportaudio2 python3-ven
 
 ### AppImage (a single file, nothing to install)
 
-`CueStage-<version>-x86_64.AppImage` contains everything: Python 3.12, Qt 6, numpy, PortAudio, mido/rtmidi,
+`Cuevivo-<version>-x86_64.AppImage` contains everything: Python 3.12, Qt 6, numpy, PortAudio, mido/rtmidi,
 ffmpeg/ffprobe and amixer. It works on any x86_64 distribution with glibc 2.34 or later
 (Ubuntu/Xubuntu/Kubuntu 22.04+, Linux Mint 21+, Debian 12+, Fedora 35+…) without extra packages.
 
 ```bash
-chmod +x CueStage-1.0.0-x86_64.AppImage
-./CueStage-1.0.0-x86_64.AppImage [show.cueshow]
-./CueStage-1.0.0-x86_64.AppImage --self-test     # checks audio, video, MIDI, ffmpeg, interface
+chmod +x Cuevivo-1.0.0-x86_64.AppImage
+./Cuevivo-1.0.0-x86_64.AppImage [show.cueshow]
+./Cuevivo-1.0.0-x86_64.AppImage --self-test     # checks audio, video, MIDI, ffmpeg, interface
 ```
 
-- Settings, user plugins (`~/.local/share/cuestage/…`) and shows are the same as the installed version's:
+- Settings, user plugins (`~/.local/share/cuevivo/…`) and shows are the same as the installed version's:
   you can switch from one to the other.
 - If the system has no FUSE the AppImage does not mount: start it with `--appimage-extract-and-run`.
 - For a menu entry: copy the file to `~/Applications` and use *Gear Lever* or *AppImageLauncher*,
@@ -46,7 +51,7 @@ chmod +x CueStage-1.0.0-x86_64.AppImage
 To rebuild it (on an Ubuntu/Debian x86_64 PC with an Internet connection, no root needed):
 
 ```bash
-packaging/build_appimage.sh        # -> dist/CueStage-<version>-x86_64.AppImage
+packaging/build_appimage.sh        # -> dist/Cuevivo-<version>-x86_64.AppImage
 ```
 
 The script downloads into `build/cache` a portable Python (python-build-standalone), the Python libraries
@@ -60,14 +65,14 @@ appimagetool; it strips the unused parts of Qt (`packaging/prune_qt.py`: from ~7
 The packages are downloaded from the *Releases* page of the GitHub repository (see `GITHUB.md` for how to
 get them): GitHub Actions builds them and also tests the program on each system.
 
-- **Windows 10/11 (64 bit)**: `CueStage-<version>-windows-setup.exe` (installer: Start menu, icon,
+- **Windows 10/11 (64 bit)**: `Cuevivo-<version>-windows-setup.exe` (installer: Start menu, icon,
   opening of `.cueshow` files, firewall rule for the network) or `…-windows-portable.zip`
-  (unzip it and start `CueStage.exe`, even from a USB stick). On the first start Windows SmartScreen may say
+  (unzip it and start `Cuevivo.exe`, even from a USB stick). On the first start Windows SmartScreen may say
   “Windows protected your PC”: *More info › Run anyway* (the program is not signed with a commercial
   certificate).
-- **macOS 12 or later** (12.3 or later on Apple Silicon): `CueStage-<version>-macos-arm64.dmg` for Apple Silicon Macs (M1, M2…),
-  `…-macos-x86_64.dmg` for Intel Macs. Open the .dmg and drag CueStage to Applications. If it is not
-  notarised, on the first start: right-click (or ctrl-click) on CueStage › *Open* › *Open*; or
+- **macOS 12 or later** (12.3 or later on Apple Silicon): `Cuevivo-<version>-macos-arm64.dmg` for Apple Silicon Macs (M1, M2…),
+  `…-macos-x86_64.dmg` for Intel Macs. Open the .dmg and drag Cuevivo to Applications. If it is not
+  notarised, on the first start: right-click (or ctrl-click) on Cuevivo › *Open* › *Open*; or
   System Settings › Privacy & Security › *Open Anyway*. When asked for access to the **local network**
   answer *Allow*: without it, mixers, projectors, OSC and secondary instances do not work.
 
@@ -76,7 +81,7 @@ Differences between the systems:
 | | Linux | Windows | macOS |
 |---|---|---|---|
 | Audio | PipeWire / ALSA / JACK | WASAPI (and ASIO if the driver offers it) | Core Audio |
-| User data (plugins, profiles, autosaves) | `~/.local/share/cuestage` | `%APPDATA%\CueStage` | `~/Library/Application Support/CueStage` |
+| User data (plugins, profiles, autosaves) | `~/.local/share/cuevivo` | `%APPDATA%\Cuevivo` | `~/Library/Application Support/Cuevivo` |
 | Sound card panel (Scarlett, ALSA) | yes | no (use Focusrite Control) | no (use Focusrite Control) |
 | Mixers, projectors, OSC, MIDI, web, master/slave | yes | yes | yes |
 
@@ -94,7 +99,7 @@ macOS:    packaging/build_macos.sh
 The macOS build installs the libraries compiled for **macOS 12** (not for the Mac that builds it: pip would
 otherwise pick numpy/scipy for macOS 14 and Qt 6.10+, which needs macOS 13, and the app would close right after
 opening on older systems). For the same reason PySide6 stays at 6.9 on macOS (`packaging/macos/constraints.txt`).
-After PyInstaller, `packaging/check_macos_min.py` checks every library inside CueStage.app and stops the build if one
+After PyInstaller, `packaging/check_macos_min.py` checks every library inside Cuevivo.app and stops the build if one
 needs a newer macOS. On Apple Silicon the minimum is **12.3**, because SciPy for arm64 is compiled for macOS 12.3
 (its package says 12.0, its libraries require 12.3); on Intel it is 12.0. `MACOS_MIN=13.0 packaging/build_macos.sh`
 raises the minimum.
@@ -102,8 +107,8 @@ raises the minimum.
 ## Interface language
 
 **Settings › Language**: Italiano, English, slovenščina. The choice belongs to the computer (not the show)
-and applies when CueStage is **restarted**. On the first start CueStage uses the system language if it is
-available, otherwise English. For a quick test: `CUESTAGE_LANG=en ./run.sh`.
+and applies when Cuevivo is **restarted**. On the first start Cuevivo uses the system language if it is
+available, otherwise English. For a quick test: `CUEVIVO_LANG=en ./run.sh`.
 
 The texts are in `cuestage/lang/<code>.json` (`it`, `en`, `sl`): every Italian text of the program with its
 translation. Translations must keep the placeholders `{0}`, `{1}`… (with their format, e.g. `{0:.1f}`), in any
@@ -222,7 +227,7 @@ PANEL › “Show as grid” (and “Show as list” to go back: the cues stay t
   inspector's “Base” tab (“Colour” button). The colour also tints the cue's row in the lists.
 - **Keyboard shortcuts**: right-click › “Learn keyboard shortcut…” (or “Learn…” in the Trigger tab) and press the
   key or combination (F5, 1, Q, Ctrl+1…). It works for any cue, also in the MAIN or in a list PANEL, while the
-  CueStage window is active but not while typing in a text field. Keys already used by CueStage (Space, Esc,
+  Cuevivo window is active but not while typing in a text field. Keys already used by Cuevivo (Space, Esc,
   menu commands…) cannot be assigned; if the key already belongs to another cue, it moves to the new one. The
   key appears in the top right corner of the tile.
 - **Local GO**: the GRID also has the PANEL's GO / STOP; GO advances tile by tile (page, row, column) and the
@@ -365,7 +370,7 @@ How it behaves (and where it makes no sense):
   would become a Loop: use Loop or Random loop).
 - Below 100 ms between one cue and the next (e.g. 1/16 at high tempos) the inspector warns you; the absolute
   minimum is 50 ms. Video and images cannot keep up at those speeds.
-- A TAP key that matches a CueStage command is not accepted; if it is already used by another cue it moves to
+- A TAP key that matches a Cuevivo command is not accepted; if it is already used by another cue it moves to
   the new one. If the same MIDI note is also the general GO, GO wins.
 
 **When leaving** a Loop/Random loop/Playlist: the current cue fades with the crossfade time, or it is left to
@@ -574,7 +579,7 @@ paths in the show become relative, so the ZIP works on any computer and system. 
 copy (it can be cancelled); at the end the folder containing the ZIP opens. Missing files are listed and left out.
 
 **File › Import bundle…** asks for the ZIP and the folder where to extract it (a subfolder with the bundle's name is
-created; if it already exists CueStage asks before overwriting), extracts it (never outside that folder) and opens
+created; if it already exists Cuevivo asks before overwriting), extracts it (never outside that folder) and opens
 the show. Hardware settings (sound cards, MIDI ports, mixers…) travel with the show: check them on the new
 computer.
 
@@ -587,19 +592,19 @@ and its parent, the home folder and the external drives. **Locate file…** (or 
 point to one file by hand, and the same folder move is then tried on all the other missing files. **Relink found
 files** updates the cues (all versions); undo works as for any other change.
 
-**Shows from a newer version.** The show file records the CueStage version that saved it. Opening a show saved
-by a newer CueStage (or containing data this version doesn't know) shows a warning: cues of an unknown type are
+**Shows from a newer version.** The show file records the Cuevivo version that saved it. Opening a show saved
+by a newer Cuevivo (or containing data this version doesn't know) shows a warning: cues of an unknown type are
 shown as **Memo** (they don't start), and every unknown field — of the show, its settings, the cues, the PANELs and
-the versions — is **kept when saving**, so the show can go back to the newer CueStage without losing anything.
+the versions — is **kept when saving**, so the show can go back to the newer Cuevivo without losing anything.
 
 ## Master volume, last project and autosave
 
 - The **master volume** (at the top, before “Pause”) acts on audio and video; double-click = 0 dB.
-- On start CueStage reopens **the last project** used (or the one given on the command line).
+- On start Cuevivo reopens **the last project** used (or the one given on the command line).
 - Every 5 seconds, if there are unsaved changes, a **hidden autosave** is written:
   `.name.cueshow.autosave` next to the show, or
-  `~/.local/share/cuestage/.senza-titolo.cueshow.autosave` for a show never saved.
-  After a crash, on reopening CueStage offers to recover it. The autosave is deleted when you save or close
+  `~/.local/share/cuevivo/.senza-titolo.cueshow.autosave` for a show never saved.
+  After a crash, on reopening Cuevivo offers to recover it. The autosave is deleted when you save or close
   normally.
 
 ## Undo, redo and history
@@ -636,7 +641,7 @@ the versions — is **kept when saving**, so the show can go back to the newer C
   (click it to open the versions).
 - Switching, creating or deleting a version or editing its notes can be undone with Ctrl+Z.
 - Secondary instances receive all the versions, with their media files.
-- A CueStage older than 1.0.6 opens the active version and ignores the others; if it saves, the other versions
+- A Cuevivo older than 1.0.6 opens the active version and ignores the others; if it saves, the other versions
   are lost.
 
 ## Sound cards and matrix
@@ -661,7 +666,7 @@ All the audio handling of an audio or video cue is in the inspector's **Audio** 
   the volume of each output. It can be changed during playback too. “Output volumes to 0 dB” resets the cue volume, the
   active crosspoints and the output volumes to 0 dB, keeping the routing (off crosspoints stay off). “Default routing”: mono → Out 1-2,
   stereo → Out 1/2, multichannel channel by channel, 5.1/7.1 to stereo as a downmix.
-- **Video**: by default the video's audio goes through the CueStage engine (card and matrix) and the picture
+- **Video**: by default the video's audio goes through the Cuevivo engine (card and matrix) and the picture
   locks to the audio (realigned if it drifts by more than 150 ms, loops included). Alternatively “System player”:
   default card, stereo, no matrix.
 
@@ -671,7 +676,7 @@ declare many channels even when they are stereo. “Rescan connected cards” is
 start-up. If a chosen card is not connected, the cue plays through the default one and a warning says so.
 
 **With PipeWire (Ubuntu default)**: an `hw:` device used by PipeWire may be busy. In that case PortAudio sees it
-without outputs: CueStage still shows it in the list, in grey, as “‹card› — busy with ‹program›” (usually
+without outputs: Cuevivo still shows it in the list, in grey, as “‹card› — busy with ‹program›” (usually
 `pipewire` or `wireplumber`). To use it directly (all channels, lowest latency) set the card's profile to “Off”
 in pavucontrol › Configuration, then “Rescan connected cards”; to see who keeps it open:
 `fuser -v /dev/snd/pcmC1D0p`. Two ways: choose the card's **Pro Audio** profile in Ubuntu's Settings › Sound and
@@ -691,14 +696,14 @@ the connected cards:
 
 On the bigger Scarletts (e.g. 18i20) the outputs may have their volume **on the card's knob (HW)**: in that case
 volume and mute of those outputs are read-only and the cues say so. In the mixer panel the **“Output volume and
-mute from CueStage (SW)…”** button switches them all to SW (or change the single “Line Out NN Volume Control”);
+mute from Cuevivo (SW)…”** button switches them all to SW (or change the single “Line Out NN Volume Control”);
 the Monitor knob no longer acts on them until they go back to HW. The internal matrix is split by mix (Mix A,
 Mix B, …) and each row shows the source of the mixer input (e.g. “Mix A ← in 03: PCM 5”); big groups are built
 when you open them. In the mixer panel (F10) the card shows its controls grouped (Inputs, Outputs and monitors,
 Mix, Routing, Other): switches, menus and sliders act immediately; 48V phantom asks for confirmation. A Mixer cue
 with the action **“Set a card control”** takes a control to a value (e.g. input 1 to Inst, speaker switching to
 Alt, direct monitor off). It needs `amixer` (package **alsa-utils**). Control names depend on the model and on the
-kernel version: CueStage reads them from the card.
+kernel version: Cuevivo reads them from the card.
 
 ### Ducking (microphone that lowers the music)
 
@@ -763,18 +768,18 @@ An *underrun* is a small gap in the audio: the card asked for the next block bef
 (it happens mostly with video on the output or with a busy computer). In **Settings › Audio › Audio buffer** you
 choose the size: *Minimum latency* 128 samples (~12 ms), *Very low latency* 256 (~25 ms), *Low latency* 512 (~50 ms),
 *Normal* 1024 (~120 ms, default), *Safe* 2048 (~250 ms), *Maximum safety* 4096 (~500 ms). The first number is the
-block that CueStage computes each time, the second the queue in front of the card (the card's latency shown in
+block that Cuevivo computes each time, the second the queue in front of the card (the card's latency shown in
 Diagnostics): the queue absorbs momentary slowdowns of the computer and is also the delay between GO and sound.
 128 and 256 are for fast, idle computers, preferably with the card used directly or through PipeWire;
 **Help › Diagnostics › Performance** tells which one this computer can handle. A bigger buffer removes the gaps; in exchange a cue is heard a few tenths of a
 second after GO. If there were gaps in the last 10 seconds, the status bar shows it in yellow with their number.
-The “ALSA lib … underrun occurred” messages are no longer written to the terminal (CueStage counts them); to see
-them again: `CUESTAGE_ALSA_MESSAGES=1 cuestage`. With PipeWire it is better to use the “pipewire” or “default”
+The “ALSA lib … underrun occurred” messages are no longer written to the terminal (Cuevivo counts them); to see
+them again: `CUEVIVO_ALSA_MESSAGES=1 cuevivo`. With PipeWire it is better to use the “pipewire” or “default”
 card instead of direct access (hw:), which is more sensitive to delays.
 
 ### Diagnostics
 
-**Help › Diagnostics…** opens a window updated twice a second: **CPU** load of CueStage and of the system (load
+**Help › Diagnostics…** opens a window updated twice a second: **CPU** load of Cuevivo and of the system (load
 average and peak memory where available); for every **sound card** the audio buffer (block size in samples and
 milliseconds, latency reported by the card), the **time needed to compute each block** (average and maximum, also as a
 percentage of the block's duration: near 100 % the audio starts to drop out) and the **underruns**; the active voices
@@ -810,7 +815,7 @@ voices with an effect rack can play together. The last result is kept and includ
 
 ### Effects: cue racks and effect buses
 
-CueStage has its own built-in audio effects (written in numpy + scipy, identical on Linux, Windows and macOS; no
+Cuevivo has its own built-in audio effects (written in numpy + scipy, identical on Linux, Windows and macOS; no
 external plugins): **gate**, **parametric EQ** (5 bands — bell, low shelf, high shelf — plus Butterworth high-pass
 and low-pass at 12 or 24 dB/octave, with the response curve), **compressor** (threshold, ratio, soft knee, attack,
 release, make-up gain), **delay** (time, feedback with high-/low-pass filters, ping-pong, **pitch**, dry/wet) and
@@ -829,7 +834,7 @@ send only the effect to the PA.
 - **Cue rack** (inspector › **Effects** tab, audio and video cues): gate, EQ and compressor in the order you choose
   (drag to reorder, tick to switch on/off, “+ Effect”, “Remove”). They work **before** the cue's volume, curve and
   fades. Every effect is adjusted in its own **floating window** (double-click, or “Adjust…”) that stays above
-  CueStage; changes apply at once, also while the cue is playing. In the **EQ** window the band points on the
+  Cuevivo; changes apply at once, also while the cue is playing. In the **EQ** window the band points on the
   response curve can be **dragged with the mouse** (frequency and gain; Shift = gain only) and the **wheel** over a
   point widens or narrows the band (Q); behind the curve an **RTA** shows the spectrum of the EQ's input (1/6
   octave). **Gate** and **compressor** show their **transfer curve** (input → output level, with threshold, knee
@@ -987,7 +992,7 @@ model and serial number (read from the EDID), the port (HDMI-1, DP-2…) and its
 projector even if the screens come up in a different order or the cable goes into another port. With two identical
 projectors without a serial number the port decides. If the chosen screen is not connected, the output goes to the
 last screen (windowed if only the control screen is left), the menu shows which one is missing and the Diagnostics
-log says so once. **Screens connected or unplugged while CueStage is open** are written in the log and the visible
+log says so once. **Screens connected or unplugged while Cuevivo is open** are written in the log and the visible
 output moves at once: back onto the projector when it comes back, off it when it goes away. Shows saved before this
 version keep using the position until a screen is chosen again.
 
@@ -1003,15 +1008,15 @@ version keep using the position until a screen is chosen again.
   then shown through OpenGL.
 - **Raster (CPU only)** — everything on the processor, for computers without working graphics drivers.
 
-If the GPU is not available (no OpenGL, a virtual or remote screen, Qt Quick on the software renderer) CueStage
+If the GPU is not available (no OpenGL, a virtual or remote screen, Qt Quick on the software renderer) Cuevivo
 **falls back automatically** to the classic engine and writes a line in the diagnostics log; the show is not
-interrupted. `CUESTAGE_VIDEO_ENGINE=quick|gl|raster` forces an engine from the command line. The engine in use and
+interrupted. `CUEVIVO_VIDEO_ENGINE=quick|gl|raster` forces an engine from the command line. The engine in use and
 its graphics API (OpenGL, Vulkan, Metal, Direct3D) are shown in **Help › Diagnostics**.
 
 ### Preloaded videos (immediate start and loops without waiting)
 
 Opening a big video (and jumping to the IN point) can take from a few tenths of a second to a few seconds. With
-**“Preload”** (video cue inspector, next to the loop; on by default) CueStage keeps the video **ready in
+**“Preload”** (video cue inspector, next to the loop; on by default) Cuevivo keeps the video **ready in
 advance**: file open and paused on the first frame to show. On GO it starts immediately.
 
 - The videos kept ready are those **near the playhead** of each list (the standby cue and the next 3), then
@@ -1022,7 +1027,7 @@ advance**: file open and paused on the first frame to show. On GO it starts imme
   loops of at least 1 second.
 - Each ready video takes a decoder and some memory: with many 4K videos turn “Preload” off for those that do not
   need it, or turn it all off from **Video output › Preload videos**.
-- The video's audio (CueStage engine) is already decoded when the show is opened (in the audio disk cache, see the
+- The video's audio (Cuevivo engine) is already decoded when the show is opened (in the audio disk cache, see the
   technical notes).
 
 ## Digital mixers
@@ -1112,15 +1117,15 @@ Commands:
   on air, source, key level/gain, mix level; SPLIT/VFX A/B on/off and type; OUTPUT FADE; audio level (in dB, from
   the table of the manual) and mute of HDMI 1–8, AUDIO IN and the audio output. PGM/PST/AUX and PinP/DSK on air use
   SysEx (DT1), the rest Control Changes and Program Changes, as in the *V-8HD Reference Manual*.
-- **V-1HD** (on the unit: SETUP › MIDI › Rx SOURCE = USB, Rx CHANNEL = the channel set in CueStage): **bus A** and
+- **V-1HD** (on the unit: SETUP › MIDI › Rx SOURCE = USB, Rx CHANNEL = the channel set in Cuevivo): **bus A** and
   **bus B** input; **CUT to** / **AUTO to** an input (loads it on the off-air bus and moves the A/B fader: the V-1HD
-  has no MIDI command for AUTO, so CueStage moves the fader over the **AUTO time**); cut to bus A / B; A/B fader;
+  has no MIDI command for AUTO, so Cuevivo moves the fader over the **AUTO time**); cut to bus A / B; A/B fader;
   transition type (WIPE, MIX, CUT); memories 1–8; EFFECTS A/B; OUTPUT FADE; FREEZE; audio levels of HDMI 1–4,
   AUDIO IN, MIC and master (raw 0–127 values).
 
 - **OBS Studio** (WebSocket): **obs-websocket 5**, built into OBS 28 and later (Tools › WebSocket Server Settings ›
   “Enable WebSocket server”, port 4455), and **obs-websocket 4.x**, the plugin for **OBS 27** and earlier (usually
-  port 4444) or the “4.x Compat” plugin; optional password, entered in CueStage too. The protocol is recognised on
+  port 4444) or the “4.x Compat” plugin; optional password, entered in Cuevivo too. The protocol is recognised on
   its own (version 5 greets with a Hello, 4.x does not) and the commands are the same; with 4.x the *Cut to*
   command recognises the “Cut” transition by its default name (Cut, Taglio, Schnitt…) and otherwise makes the
   current transition as short as possible. OBS can run on the
@@ -1138,7 +1143,7 @@ Commands:
   OBS reports its state: the values shown are the real ones (⟲ Read refreshes them).
 
 - **Blackmagic ATEM Mini, Mini Pro / Pro ISO, Mini Extreme / Extreme ISO** (network): connect the ATEM's
-  **Ethernet** port to the network (the IP address is set with ATEM Setup over USB). CueStage speaks the ATEM
+  **Ethernet** port to the network (the IP address is set with ATEM Setup over USB). Cuevivo speaks the ATEM
   protocol on **UDP port 9910**, the same as ATEM Software Control (which can stay open); nothing to install.
   **🔍 Search for switchers on the network** finds the ATEMs on the local /24 networks and reads their model; the
   model (“Automatic detection” by default) decides the commands available. Sources are referred to by their ATEM
@@ -1152,7 +1157,7 @@ Commands:
   protocol is not documented by Blackmagic: it is implemented as in the open libraries that have used it for years
   (SKAARHOJ ATEMmax, PyATEMMax, atem-connection); audio volumes are not read back from the ATEM.
 
-The Roland switchers do not report their state: the values shown are the last ones sent by CueStage (for the V-1HD,
+The Roland switchers do not report their state: the values shown are the last ones sent by Cuevivo (for the V-1HD,
 “CUT to” / “AUTO to” assume the fader starts on bus A). Check the commands on the unit before the show. Shows
 saved with a switcher among the mixers are converted when opened (the switcher moves to Video switchers and its
 Mixer cues become Video switcher cues). Other switchers can be added as plugins in the mixer plugin folder
@@ -1184,7 +1189,7 @@ Redundancy always receives the whole project.
 - local folder: the files go there (same folder structure as on the master; files outside the show folder in
   `_esterni/`) together with the copy of the show, which stays usable without the master too.
 
-After synchronisation CueStage **reports hardware that differs** from the master's (missing sound cards or cards
+After synchronisation Cuevivo **reports hardware that differs** from the master's (missing sound cards or cards
 with fewer channels, mixers configured differently or ALSA cards not connected, missing MIDI outputs) and colours
 in **red** the cues that use it (the reason is in the row's tooltip).
 
@@ -1249,7 +1254,7 @@ while it is off the QR code is greyed out. The server answers on **all the compu
 with the name of their interface, and the drop-down chooses the one for the **QR code** to frame with the phone
 camera (the one of the network the phone is connected to); the other addresses are shown under the QR code, and
 when the server starts the status bar lists them all. With “Include the PIN in the QR code” whoever frames it gets
-in without typing the PIN. The QR is generated by CueStage itself (no extra library). The page shows:
+in without typing the PIN. The QR is generated by Cuevivo itself (no extra library). The page shows:
 - **GO** (follows “GO on”), the waiting cue with its list, **STOP**, **Pause / Resume**;
 - the MAIN and PANEL tabs; tapping a cue puts it in standby in its list; in the PANELs, with “GO on: MAIN”,
   there is the PANEL's **local GO** with its **STOP**;
@@ -1305,8 +1310,8 @@ OSC input on UDP **53000** (configurable): `/go`, `/stop`, `/panic`, `/pause`, `
 (on the GO list), `/playhead/<n>`, `/list/<name>`, `/list/<name>/go`, `/cue/<n>/start|stop|pause|resume`,
 `/cue/<n>/level <dB> [sec]`, plus a custom address for each cue. Full list in *Help → Commands*.
 
-**Programs that send OSC to CueStage** (e.g. Script Follower) can introduce themselves with
-`/cuestage/client/hello`: the master remembers them and passes them to its secondary instances, and when a
+**Programs that send OSC to Cuevivo** (e.g. Script Follower) can introduce themselves with
+`/cuestage/client/hello` (or `/cuevivo/client/hello`): the master remembers them and passes them to its secondary instances, and when a
 secondary is **promoted** it sends each of them `/cuestage/master` with its own address, so they move their
 commands to the new master. The protocol is described in [OSC_CLIENTS.md](OSC_CLIENTS.md).
 
@@ -1318,7 +1323,7 @@ chosen in the dialog even before pressing OK). The map also includes **Crossfade
 
 In Settings › MIDI › “MIDI input devices and filters” you tick **all the MIDI devices** to use: they are opened
 together (ticked devices that are disconnected stay in the list as “not connected” and reopen when you restart
-CueStage with the device connected). Each command — GO, Stop, the faders, the crossfader, the trigger and the
+Cuevivo with the device connected). Each command — GO, Stop, the faders, the crossfader, the trigger and the
 faders of each cue — can state **which device** it must come from, after “@”: `note 1 60 @ Akai APC mini`,
 `cc 1 7 @ nanoKONTROL2`. “Learn” adds by itself the device the message comes from (untick “Only from the device it
 comes from” to accept it from all). Without “@” the command applies from any device. So the same note or the same
@@ -1357,16 +1362,16 @@ The fader is “absolute”: on the first movement the value jumps to the fader 
 
 For each MIDI input device (Settings › Audio, OSC and MIDI › MIDI, filters of the selected device) a **Value
 feedback** port can be chosen — **Automatic: same device** (the output with the same name, as with USB
-controllers such as the Behringer BCR2000 / BCF2000) or any MIDI output. CueStage then sends that controller the
+controllers such as the Behringer BCR2000 / BCF2000) or any MIDI output. Cuevivo then sends that controller the
 **current value** of every control mapped on it, so LED rings and motorised faders show the real state even when
-values change from CueStage (mouse, fades, cues, another instance):
+values change from Cuevivo (mouse, fades, cues, another instance):
 - volume and transparency of the cues with a MIDI fader (live while the cue plays, otherwise the programmed value);
 - “volume / transparency of the selected cue”, updated when the selection changes;
 - the crossfader (resting side);
 - LEDs: cue running (the cue's MIDI trigger, note or CC: 127 / 0), DIM, Duck, Pause all.
 
 CC are sent back as CC (0–127), pitch bend as pitch bend (14 bit), notes as Note On 127 / 0. A control moved on the
-controller does not get its value back while it is moving (half a second) nor afterwards if CueStage reached the
+controller does not get its value back while it is moving (half a second) nor afterwards if Cuevivo reached the
 same value, so motorised faders do not fight the hand. When a show is opened or the settings change, all values
 are sent again. A redundant instance connected to a live master sends nothing (the master does).
 
@@ -1419,7 +1424,7 @@ fields and the preview are separated by a draggable divider, so the window alway
   macOS without a console the messages go to `cuestage.log` in the data folder.
 - Quick regression tests (no sound card, with a simulated X32 mixer and two instances on the local network):
   `python3 tests/test_smoke.py`. Each package also has `--self-test`.
-- Bundled ffmpeg: BtbN LGPL builds (Linux, Windows) and zackees/ffmpeg_bins static builds (macOS); CueStage uses it
+- Bundled ffmpeg: BtbN LGPL builds (Linux, Windows) and zackees/ffmpeg_bins static builds (macOS); Cuevivo uses it
   as an external program.
 - The show is a `.cueshow` JSON file; paths are also saved relative to the show, so the folder can be moved to
   another computer.
@@ -1435,3 +1440,26 @@ fields and the preview are separated by a draggable divider, so the window alway
 - Video output: GPU engine with Qt Quick (`video_quick.py`, `qml/`) or classic engine with QPainter (`video_output.py`);
   if the GPU or OpenGL is not available the output automatically switches to the classic or software rendering.
 - `perf.py` is the built-in benchmark of the Performance tab in Help › Diagnostics.
+
+## Renamed from CueStage
+
+Before version 1.0.30 the program was called **CueStage**; from version 1.0.30 it is **Cuevivo**. With the
+new name nothing has to be redone:
+
+- **Shows** keep the `.cueshow` extension and the same format; CueStage and Cuevivo open each other's files.
+- **Settings** (language, last show, preferences, cluster) are copied from CueStage at the first start, as long as
+  Cuevivo has none yet.
+- **User data** (autosaves, plugins, OSC/MIDI profiles, caches) are copied from the CueStage folder at the first
+  start (`~/.local/share/cuestage` → `~/.local/share/cuevivo`, `%APPDATA%\CueStage` → `%APPDATA%\Cuevivo`,
+  `~/Library/Application Support/CueStage` → `…/Cuevivo`); the old folder stays where it was.
+- **Linux, install.sh**: the previous installation is moved to `~/.local/share/cuevivo` (the Python environment is
+  rebuilt), the old menu entry and icon are removed and the `cuestage` command keeps working.
+- **Windows**: the new installer updates the CueStage installation (same installer id) and removes the old program
+  file, shortcuts, file association and firewall rule.
+- **macOS**: the app is now `Cuevivo.app` with the same bundle identifier, so network and microphone permissions are
+  kept; delete `CueStage.app` from Applications after installing.
+- **Environment variables**: `CUEVIVO_…` (e.g. `CUEVIVO_LANG`); the `CUESTAGE_…` ones still work.
+- **Network**: instances of different versions still recognise each other in the cluster; OSC programs (e.g.
+  Script Follower) may use `/cuestage/…` or `/cuevivo/…` and get answers in the same namespace; the web page
+  accepts both PIN headers.
+- The Python package folder stays `cuestage/`.

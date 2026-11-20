@@ -1,8 +1,8 @@
 """Ritorno MIDI (feedback) verso i controller: anelli LED, fader motorizzati e LED dei pulsanti.
 
 Per ogni scheda MIDI in ingresso si può indicare una «porta di ritorno» (Impostazioni › MIDI, filtri della
-scheda): CueStage le manda il valore attuale di ogni controllo mappato su quella scheda, così il controller
-mostra lo stato vero anche quando i valori cambiano da CueStage (mouse, fade, cue, altra istanza):
+scheda): Cuevivo le manda il valore attuale di ogni controllo mappato su quella scheda, così il controller
+mostra lo stato vero anche quando i valori cambiano da Cuevivo (mouse, fade, cue, altra istanza):
 
   - volume e trasparenza delle cue con un fader MIDI (dal vivo se la cue suona, altrimenti il valore programmato);
   - «volume / trasparenza della cue selezionata» (cambia con la selezione);
@@ -25,7 +25,7 @@ SETTLE = 1                  # differenza (0..127) considerata uguale a quella ap
 
 
 def db_to_fader(db):
-    """Inverso della legge dei fader MIDI di CueStage (0 = −∞, ~70% = 0 dB, in cima = +6 dB)."""
+    """Inverso della legge dei fader MIDI di Cuevivo (0 = −∞, ~70% = 0 dB, in cima = +6 dB)."""
     if db is None or db <= MIN_DB + 0.01:
         return 0.0
     return max(0.0, min(1.0, math.sqrt(10 ** (db / 20.0) / 2.0)))

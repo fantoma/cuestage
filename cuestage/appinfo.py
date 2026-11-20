@@ -10,9 +10,9 @@ La cartella del codice (il pacchetto Python) resta «cuestage».
 import os
 import sys
 
-APP_NAME = "CueStage"
-APP_SLUG = "cuestage"
-ENV_PREFIX = "CUESTAGE"
+APP_NAME = "Cuevivo"
+APP_SLUG = "cuevivo"
+ENV_PREFIX = "CUEVIVO"
 PROTOCOL_ID = "CueStage"
 
 # nomi precedenti del programma: preferenze, cartella dei dati e variabili d'ambiente si riprendono da lì
