@@ -15,15 +15,19 @@ class RemoteMixin:
         """Programmi collegati via OSC (es. Script Follower): si presentano, così un nuovo master può
         dire loro dove mandare i comandi (vedi OSC_CLIENTS.md)."""
         from ..remote import osc_send_args
+        from ..appinfo import OSC_NAMESPACES, OSC_NS
         a = addr.rstrip("/").lower()
+        ns = next((n for n in OSC_NAMESPACES if a.startswith(n + "/client/")), OSC_NS)
+        a = OSC_NS + a[len(ns):]            # nome precedente o attuale: stessi comandi
         hub = self.cluster
         if a == "/cuestage/client/hello":
             c, new = hub.osc_hello(sender, args)
             if c is None:
                 return
+            c["ns"] = ns                     # le risposte usano lo spazio dei nomi del programma
             s = self.show_data.settings
             try:
-                osc_send_args(sender, c["port"], "/cuestage/client/ack",
+                osc_send_args(sender, c["port"], ns + "/client/ack",
                               [hub.name, int(s.get("osc_in_port", 53000)), ",".join(hub.osc_members())])
             except Exception:  # noqa: BLE001
                 pass

@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
-from .appinfo import APP_NAME
+from .appinfo import APP_NAME, PIN_HEADERS
 from .i18n import tr
 
 COMMANDS = {"go", "go_list", "stop_list", "xfade", "stop_all", "pause_all", "resume_all", "stop_cue", "pause_cue", "playhead",
@@ -108,14 +108,14 @@ class _Handler(BaseHTTPRequestHandler):
         pin = self.server.web.pin
         if not pin:
             return True
-        got = self.headers.get("X-CueStage-Pin", "")
+        got = next((self.headers.get(h) for h in PIN_HEADERS if self.headers.get(h)), "")
         return hmac.compare_digest(got.encode(), pin.encode())
 
     def do_OPTIONS(self):
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, X-CueStage-Pin")
+        self.send_header("Access-Control-Allow-Headers", ", ".join(("Content-Type",) + PIN_HEADERS))
         self.send_header("Access-Control-Allow-Private-Network", "true")
         self.send_header("Access-Control-Max-Age", "600")
         self.send_header("Content-Length", "0")

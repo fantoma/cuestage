@@ -1209,7 +1209,7 @@ class ClusterHub(QObject):
             if not host or not port:
                 continue
             try:
-                osc_send_args(host, int(port), "/cuestage/master",
+                osc_send_args(host, int(port), (c.get("ns") or "/cuestage") + "/master",
                               [route_ip(host), int(osc_port), self.name, old_host or ""])
             except Exception:  # noqa: BLE001
                 continue

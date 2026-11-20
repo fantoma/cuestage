@@ -15,11 +15,29 @@ APP_SLUG = "cuestage"
 ENV_PREFIX = "CUESTAGE"
 PROTOCOL_ID = "CueStage"
 
+# nomi precedenti del programma: preferenze, cartella dei dati e variabili d'ambiente si riprendono da lì
+LEGACY = (("CueStage", "cuestage", "CUESTAGE"),)
+# spazio dei nomi OSC dei programmi collegati (OSC_CLIENTS.md): quello storico vale sempre
+OSC_NS = "/cuestage"
+OSC_NAMESPACES = tuple(dict.fromkeys((OSC_NS, "/" + APP_SLUG)))
+# intestazione del PIN dell'interfaccia web (si accettano anche quelle dei nomi precedenti)
+PIN_HEADER = f"X-{APP_NAME}-Pin"
+PIN_HEADERS = tuple(dict.fromkeys([PIN_HEADER] + [f"X-{n}-Pin" for n, _s, _e in LEGACY]))
+MIGRATED_MARK = ".migrated-from"
+
+
+def _legacy():
+    """Nomi precedenti diversi da quello attuale."""
+    return [x for x in LEGACY if x[0] != APP_NAME]
+
 
 def env(key, default=None):
-    """Variabile d'ambiente del programma: env("LANG") legge <ENV_PREFIX>_LANG."""
-    v = os.environ.get(f"{ENV_PREFIX}_{key}")
-    return default if v is None else v
+    """Variabile d'ambiente del programma: env("LANG") legge <ENV_PREFIX>_LANG (o quella del nome precedente)."""
+    for pre in dict.fromkeys([ENV_PREFIX] + [e for _n, _s, e in LEGACY]):
+        v = os.environ.get(f"{pre}_{key}")
+        if v is not None:
+            return v
+    return default
 
 
 def has_env(key):
@@ -46,3 +64,71 @@ def data_base(name=None, slug=None):
     if sys.platform == "darwin":
         return os.path.join(os.path.expanduser("~"), "Library", "Application Support", name)
     return os.path.join(os.path.expanduser("~"), ".local", "share", slug)
+
+
+# ------------------------------------------------------------------ dal nome precedente
+_COPY_SKIP = {".venv", "cuestage", "__pycache__", "run.sh", "requirements.txt", "README.md"}
+
+
+def migrate_settings(app=None, legacy=None):
+    """Preferenze del nome precedente → nome attuale, se quelle attuali sono ancora vuote. Ritorna il nome da cui
+    sono state copiate, o None."""
+    from PySide6.QtCore import QSettings
+    app = app or APP_NAME
+    cur = QSettings(app, app)
+    if cur.allKeys():
+        return None
+    for name, _slug, _env in (legacy if legacy is not None else _legacy()):
+        if name == app:
+            continue
+        old = QSettings(name, name)
+        keys = old.allKeys()
+        if not keys:
+            continue
+        for k in keys:
+            cur.setValue(k, old.value(k))
+        cur.setValue("migrated_from", name)
+        cur.sync()
+        return name
+    return None
+
+
+def migrate_data(app=None, slug=None, legacy=None):
+    """Cartella dei dati del nome precedente → nuova cartella, se questa non c'è ancora (si copia: la vecchia
+    resta, per tornare indietro). Ritorna la cartella copiata, o None."""
+    import shutil
+    new = data_base(app, slug)
+    if os.path.exists(new):
+        return None
+    for name, oslug, _env in (legacy if legacy is not None else _legacy()):
+        old = data_base(name, oslug)
+        if old == new or not os.path.isdir(old):
+            continue
+        try:
+            shutil.copytree(old, new, symlinks=True,
+                            ignore=lambda d, names, root=old: [n for n in names if d == root and n in _COPY_SKIP])
+            with open(os.path.join(new, MIGRATED_MARK), "w", encoding="utf-8") as f:
+                f.write(old + "\n")
+        except OSError:
+            return None
+        return old
+    return None
+
+
+def migrate():
+    """All'avvio: riprende preferenze e dati del nome precedente del programma. Ritorna i messaggi per il
+    registro (vuoto se non c'era niente da fare)."""
+    out = []
+    try:
+        n = migrate_settings()
+        if n:
+            out.append(f"{APP_NAME}: preferenze riprese da {n}")
+    except Exception:
+        pass
+    try:
+        d = migrate_data()
+        if d:
+            out.append(f"{APP_NAME}: dati ripresi da {d}")
+    except Exception:
+        pass
+    return out

@@ -4093,6 +4093,74 @@ def t_screen_identity(w):
     w.show_data.dirty = False
 
 
+def t_rename_compat(w):
+    """Cambio di nome del programma: variabili d'ambiente, preferenze e cartella dei dati riprese dal nome
+    precedente; programmi OSC con lo spazio dei nomi vecchio o nuovo; PIN web con l'intestazione vecchia."""
+    from cuestage import appinfo
+    from PySide6.QtCore import QSettings
+    os.environ[f"{appinfo.LEGACY[0][2]}_PROVA_NOME"] = "1"
+    try:
+        assert appinfo.env("PROVA_NOME") == "1"
+    finally:
+        del os.environ[f"{appinfo.LEGACY[0][2]}_PROVA_NOME"]
+    legacy = (("ProvaVecchio", "provavecchio", "PROVAVECCHIO"),)
+    old_qs, new_qs = QSettings("ProvaVecchio", "ProvaVecchio"), QSettings("ProvaNuovo", "ProvaNuovo")
+    old_qs.clear()
+    new_qs.clear()
+    old_qs.setValue("language", "sl")
+    old_qs.setValue("cluster/dir", "/tmp/x")
+    old_qs.sync()
+    try:
+        assert appinfo.migrate_settings("ProvaNuovo", legacy) == "ProvaVecchio"
+        n = QSettings("ProvaNuovo", "ProvaNuovo")
+        assert n.value("language") == "sl" and n.value("cluster/dir") == "/tmp/x"
+        assert appinfo.migrate_settings("ProvaNuovo", legacy) is None          # una volta sola
+    finally:
+        old_qs.clear()
+        new_qs.clear()
+        QSettings("ProvaNuovo", "ProvaNuovo").clear()
+    home = os.path.join(TMP, "home_rename")
+    old_home = os.environ.get("HOME")
+    os.environ["HOME"] = home
+    try:
+        old = appinfo.data_base("ProvaVecchio", "provavecchio")
+        os.makedirs(os.path.join(old, "plugins"))
+        os.makedirs(os.path.join(old, ".venv", "bin"))
+        open(os.path.join(old, "plugins", "mio.py"), "w").write("# plugin")
+        open(os.path.join(old, ".senza-titolo.cueshow.autosave"), "w").write("{}")
+        new = appinfo.data_base("ProvaNuovo", "provanuovo")
+        assert appinfo.migrate_data("ProvaNuovo", "provanuovo", legacy) == old
+        assert os.path.exists(os.path.join(new, "plugins", "mio.py"))
+        assert os.path.exists(os.path.join(new, ".senza-titolo.cueshow.autosave"))
+        assert not os.path.exists(os.path.join(new, ".venv"))                  # l'ambiente Python no
+        assert os.path.exists(os.path.join(new, appinfo.MIGRATED_MARK)) and os.path.isdir(old)
+        assert appinfo.migrate_data("ProvaNuovo", "provanuovo", legacy) is None
+    finally:
+        if old_home is None:
+            del os.environ["HOME"]
+        else:
+            os.environ["HOME"] = old_home
+    # programmi OSC: anche con lo spazio dei nomi del nome nuovo; le risposte usano il loro
+    from cuestage import remote as _remote
+    sent = []
+    orig_ns, orig_send = appinfo.OSC_NAMESPACES, _remote.osc_send_args
+    appinfo.OSC_NAMESPACES = ("/cuestage", "/nuovonome")
+    _remote.osc_send_args = lambda host, port, addr, args: sent.append(addr)
+    try:
+        w._osc_client("127.0.0.1", "/nuovonome/client/hello", ["prova", "1.0", "regia", 39999, "pr1"])
+        assert sent == ["/nuovonome/client/ack"], sent
+        assert w.cluster.osc_clients["pr1"]["ns"] == "/nuovonome"
+        w._osc_client("127.0.0.1", "/cuestage/client/hello", ["prova", "1.0", "regia", 39998, "pr2"])
+        assert sent[-1] == "/cuestage/client/ack"
+        w._osc_client("127.0.0.1", "/nuovonome/client/bye", ["pr1"])
+        w._osc_client("127.0.0.1", "/cuestage/client/bye", ["pr2"])
+        assert "pr1" not in w.cluster.osc_clients and "pr2" not in w.cluster.osc_clients
+    finally:
+        appinfo.OSC_NAMESPACES = orig_ns
+        _remote.osc_send_args = orig_send
+    assert "X-CueStage-Pin" in appinfo.PIN_HEADERS and appinfo.PIN_HEADER in appinfo.PIN_HEADERS
+
+
 def make_pdf(name, n=4):
     """PDF di prova: n pagine A4 orizzontali, ognuna di un colore diverso con il suo numero."""
     from PySide6.QtCore import QMarginsF, QRectF
@@ -5043,6 +5111,8 @@ if __name__ == "__main__":
           lambda: t_newer_show(w))
     check("schermo di uscita per identità (EDID, porta), non collegato, collegato e staccato",
           lambda: t_screen_identity(w))
+    check("cambio di nome: preferenze, dati, variabili, OSC e PIN web ripresi dal nome precedente",
+          lambda: t_rename_compat(w))
     check("Normalizza: LUFS delle cue, correzione relativa del volume, misuratore in tempo reale", lambda: t_normalize(w))
     check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))

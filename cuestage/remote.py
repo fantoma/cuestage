@@ -117,7 +117,8 @@ class OscServer(QObject):
         self.port = None
 
     def _handle(self, client_address, address, *args):
-        if address.lower().startswith("/cuestage/client/"):
+        from .appinfo import OSC_NAMESPACES
+        if any(address.lower().startswith(ns + "/client/") for ns in OSC_NAMESPACES):
             self.client.emit(client_address[0], address, list(args))
             return
         self.message.emit(address, list(args))

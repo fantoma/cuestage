@@ -4,7 +4,8 @@ import sys
 
 def main():
     from . import i18n                  # prima di tutto: i testi dei moduli si traducono all'importazione
-    from .appinfo import APP_NAME, APP_SLUG, env, has_env
+    from .appinfo import APP_NAME, APP_SLUG, env, has_env, migrate
+    migrate()                           # nome precedente del programma: preferenze e dati ripresi
     i18n.set_language(env("LANG") or i18n.saved_language())
     from .system import IS_LINUX, IS_WIN
     # backend FFmpeg di Qt Multimedia (su tutti i sistemi)
