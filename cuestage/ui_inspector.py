@@ -1,6 +1,7 @@
 """Ispettore: modifica delle proprietà della cue selezionata."""
 
 from .i18n import tr
+from .appinfo import settings as _app_settings
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QFormLayout, QFrame, QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
@@ -61,10 +62,9 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         self.tabs.setUsesScrollButtons(True)
         self.tabs.tabBar().setExpanding(False)
         lay.addWidget(self.tabs)
-        from PySide6.QtCore import QSettings
         self._tab_keys = []
         self._tab_restoring = False
-        self._pref_tab = str(QSettings("CueStage", "CueStage").value("inspector_tab", "") or "")
+        self._pref_tab = str(_app_settings().value("inspector_tab", "") or "")
         self.tabs.currentChanged.connect(self._tab_chosen)
         self.loader.peaksReady.connect(self._media_ready)
         self.loader.thumbsReady.connect(self._media_ready)
@@ -388,8 +388,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         if self._tab_restoring or not (0 <= i < len(self._tab_keys)):
             return
         self._pref_tab = self._tab_keys[i]
-        from PySide6.QtCore import QSettings
-        QSettings("CueStage", "CueStage").setValue("inspector_tab", self._pref_tab)
+        _app_settings().setValue("inspector_tab", self._pref_tab)
 
     def _hotkey_row(self, cue):
         from PySide6.QtGui import QKeySequence

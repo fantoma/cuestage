@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (QDialog, QHBoxLayout, QLabel, QPlainTextEdit, QPr
                                QVBoxLayout, QWidget)
 
 from .i18n import tr
+from .appinfo import APP_NAME, settings as _app_settings
 
 
 def _proc_stat():
@@ -82,7 +83,6 @@ class DiagnosticsDialog(QDialog):
 
     # ---------------------------------------------------------------- valutazione delle prestazioni
     def _perf_page(self):
-        from PySide6.QtCore import QSettings
         w = QWidget()
         v = QVBoxLayout(w)
         lab = QLabel(tr("Prove brevi su questo computer: puntualità del sistema, costo del mixer audio e degli "
@@ -101,7 +101,7 @@ class DiagnosticsDialog(QDialog):
         self.perf_out = QPlainTextEdit()
         self.perf_out.setReadOnly(True)
         v.addWidget(self.perf_out, 1)
-        last = QSettings("CueStage", "CueStage").value("perf/last", "")
+        last = _app_settings().value("perf/last", "")
         if last:
             self.perf_out.setPlainText(tr("Ultima valutazione:") + "\n" + str(last))
         return w
@@ -143,7 +143,6 @@ class DiagnosticsDialog(QDialog):
         QTimer.singleShot(30, self._perf_next)
 
     def _perf_done(self):
-        from PySide6.QtCore import QSettings
         from .perf import summary
         self.perf_btn.setEnabled(True)
         self.perf_bar.setVisible(False)
@@ -156,7 +155,7 @@ class DiagnosticsDialog(QDialog):
         lines = summary(self._perf_res)
         text = time.strftime("%Y-%m-%d %H:%M") + "\n" + "\n".join(lines)
         self.perf_out.setPlainText(text)
-        QSettings("CueStage", "CueStage").setValue("perf/last", text)
+        _app_settings().setValue("perf/last", text)
         self.perf_result = self._perf_res
 
     def reset(self):
@@ -208,7 +207,7 @@ class DiagnosticsDialog(QDialog):
                 val = f"<span style='color:{color};font-weight:bold'>{val}</span>"
             lines.append(f"{label}: {val}")
         head(tr("Processore"))
-        row(tr("CueStage"), tr("{0:.0f} % di un core ({1:.0f} % del totale, {2} core)",
+        row(APP_NAME, tr("{0:.0f} % di un core ({1:.0f} % del totale, {2} core)",
                                self._cpu * 100, self._cpu * 100 / ncpu, ncpu), _color(self._cpu / ncpu))
         if self._sys is not None:
             row(tr("Sistema"), f"{self._sys * 100:.0f} %", _color(self._sys))

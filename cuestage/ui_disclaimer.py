@@ -5,6 +5,8 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QDialog, QFrame, QHBoxLayout, QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget
 
+from .appinfo import APP_NAME
+
 AUTHOR = "Designed by Diego Fantoma"
 
 # un blocco per lingua: (codice, nome, titolo, testo, pulsante accetta, pulsante esci)
@@ -36,7 +38,7 @@ def ordered(lang):
 class DisclaimerDialog(QDialog):
     def __init__(self, lang="it", version="", parent=None):
         super().__init__(parent)
-        self.setWindowTitle("CueStage")
+        self.setWindowTitle(APP_NAME)
         self.setModal(True)
         self.setMinimumWidth(620)
         notes = ordered(lang)

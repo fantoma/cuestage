@@ -1395,7 +1395,6 @@
   "Prove brevi su questo computer: puntualità del sistema, costo del mixer audio e degli effetti, video con il motore classico, lettura dal disco. Alla fine c'è il buffer audio consigliato. Meglio farla con lo show aperto e senza cue in riproduzione.": "Prove brevi su questo computer: puntualità del sistema, costo del mixer audio e degli effetti, video con il motore classico, lettura dal disco. Alla fine c'è il buffer audio consigliato. Meglio farla con lo show aperto e senza cue in riproduzione.",
   "Esegui la valutazione": "Esegui la valutazione",
   "Processore": "Processore",
-  "CueStage": "CueStage",
   "{0:.0f} % di un core ({1:.0f} % del totale, {2} core)": "{0:.0f} % di un core ({1:.0f} % del totale, {2} core)",
   "Buffer": "Buffer",
   "Voci attive": "Voci attive",

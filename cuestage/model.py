@@ -5,6 +5,7 @@ import json
 import os
 import uuid
 
+from .appinfo import PROTOCOL_ID
 from .system import local_path, portable_rel
 
 CUE_TYPES = ["audio", "video", "image", "pdf", "text", "group", "groupexit", "fade", "preset", "control", "stoppanel",
@@ -723,7 +724,7 @@ class Show:
         from . import __version__
         d = copy.deepcopy(getattr(self, "extra", None) or {})   # campi di una versione più recente
         d.update({
-            "app": "CueStage", "version": self.VERSION, "app_version": __version__,
+            "app": PROTOCOL_ID, "version": self.VERSION, "app_version": __version__,
             "settings": self.settings,
             "original_path": self.path,
             "cues": [c.to_dict(base_dir) for c in self.main.cues],

@@ -19,11 +19,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import numpy as np  # noqa: E402
-from PySide6.QtCore import QSettings  # noqa: E402
+from cuestage.appinfo import settings as _app_settings  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
 
 app = QApplication.instance() or QApplication([])
-QSettings("CueStage", "CueStage").remove("last_show")
+_app_settings().remove("last_show")
 from cuestage.system import data_dir  # noqa: E402
 
 for f in glob.glob(os.path.join(data_dir(), ".*.autosave")):
@@ -408,7 +408,7 @@ def t_history_versions(w):
     path = os.path.join(TMP, "versioni.cueshow")
     sh.path = path
     assert w.save()
-    QSettings("CueStage", "CueStage").remove("last_show")   # le finestre aperte dopo non devono riaprirlo
+    _app_settings().remove("last_show")   # le finestre aperte dopo non devono riaprirlo
     assert not sh.dirty
     data = json.load(open(path, encoding="utf-8"))
     assert data["active_version"] == first.id and len(data["versions"]) == 2
@@ -518,7 +518,7 @@ def t_inspector_layout(w):
     assert ins.tabs.currentIndex() == 0
     ins.set_cue(v)
     assert ins.tabs.tabText(ins.tabs.currentIndex()) == tr("Audio")
-    assert QSettings("CueStage", "CueStage").value("inspector_tab") == "Audio"
+    assert _app_settings().value("inspector_tab") == "Audio"
     ins.tabs.setCurrentIndex(0)
     ins.set_cue(b)
     # «Solo trigger»: «T» nella prima colonna, il GO la salta

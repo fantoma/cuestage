@@ -18,6 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from PySide6.QtCore import QObject, Signal
 
+from .appinfo import APP_NAME
 from .system import IS_MAC, IS_WIN, data_dir
 
 PLATFORM_KEY = "win" if IS_WIN else "mac" if IS_MAC else "linux"
@@ -525,7 +526,7 @@ class WebSocketClient:
         key = base64.b64encode(os.urandom(16)).decode()
         hh = f"[{host}]" if ":" in str(host) else host          # IPv6 (es. ::1)
         req = (f"GET {path} HTTP/1.1\r\nHost: {hh}:{port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
-               f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\nUser-Agent: CueStage\r\n"
+               f"Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\nUser-Agent: {APP_NAME}\r\n"
                + (f"Sec-WebSocket-Protocol: {protocol}\r\n" if protocol else "") + "\r\n")
         self.sock.sendall(req.encode())
         head = b""

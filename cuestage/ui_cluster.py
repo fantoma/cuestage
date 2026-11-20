@@ -1,9 +1,10 @@
 """Finestra «Diventa slave»: ricerca del master, modalità, sincronizzazione."""
 from .i18n import tr
+from .appinfo import settings as _app_settings
 import os
 import threading
 
-from PySide6.QtCore import QObject, QSettings, Qt, Signal
+from PySide6.QtCore import QObject, Qt, Signal
 from PySide6.QtWidgets import (QButtonGroup, QCheckBox, QDialog, QFileDialog, QFormLayout, QFrame, QGroupBox, QHBoxLayout,
                                QLabel, QLineEdit, QListWidget, QListWidgetItem, QProgressBar, QPushButton,
                                QRadioButton, QSpinBox, QVBoxLayout, QWidget)
@@ -20,7 +21,7 @@ class BecomeSlaveDialog(QDialog):
         super().__init__(parent)
         self.hub = hub
         self.setWindowTitle(tr("Diventa slave"))
-        self.qs = QSettings("CueStage", "CueStage")
+        self.qs = _app_settings()
         v = QVBoxLayout(self)
         # ---------------------------------------------------- master
         gm = QGroupBox(tr("Master"))

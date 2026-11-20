@@ -8,6 +8,7 @@ lasciare nella traduzione; l'ordine può cambiare. Un testo senza traduzione res
 La lingua si sceglie in Impostazioni › Lingua e vale dal riavvio successivo (è salvata nelle preferenze del
 computer, non nello show).
 """
+from .appinfo import settings as _app_settings
 import json
 import os
 
@@ -96,8 +97,7 @@ def system_language():
 def saved_language():
     """Lingua scelta dall'utente (preferenze del computer), altrimenti quella del sistema."""
     try:
-        from PySide6.QtCore import QSettings
-        v = QSettings("CueStage", "CueStage").value("language", "")
+        v = _app_settings().value("language", "")
     except Exception:
         v = ""
     v = str(v or "")
@@ -105,5 +105,4 @@ def saved_language():
 
 
 def save_language(code):
-    from PySide6.QtCore import QSettings
-    QSettings("CueStage", "CueStage").setValue("language", code)
+    _app_settings().setValue("language", code)

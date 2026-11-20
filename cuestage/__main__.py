@@ -4,7 +4,8 @@ import sys
 
 def main():
     from . import i18n                  # prima di tutto: i testi dei moduli si traducono all'importazione
-    i18n.set_language(os.environ.get("CUESTAGE_LANG") or i18n.saved_language())
+    from .appinfo import APP_NAME, APP_SLUG, env, has_env
+    i18n.set_language(env("LANG") or i18n.saved_language())
     from .system import IS_LINUX, IS_WIN
     # backend FFmpeg di Qt Multimedia (su tutti i sistemi)
     os.environ.setdefault("QT_MEDIA_BACKEND", "ffmpeg")
@@ -13,14 +14,14 @@ def main():
         rt = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
         if "QT_AUDIO_BACKEND" not in os.environ and not os.path.exists(os.path.join(rt, "pipewire-0")):
             os.environ["QT_AUDIO_BACKEND"] = "pulseaudio" if os.path.exists(os.path.join(rt, "pulse")) else "alsa"
-        if "CUESTAGE_ALSA_MESSAGES" not in os.environ:     # messaggi ALSA sul terminale (es. underrun)
+        if not has_env("ALSA_MESSAGES"):     # messaggi ALSA sul terminale (es. underrun)
             from .audio_engine import silence_alsa_messages
             silence_alsa_messages()
     if IS_WIN:
         os.environ.setdefault("SD_ENABLE_ASIO", "1")    # PortAudio con ASIO (incluso in sounddevice per Windows)
         try:                                    # icona e raggruppamento corretti nella barra delle applicazioni
             import ctypes
-            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("CueStage.CueStage")
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(f"{APP_NAME}.{APP_NAME}")
         except Exception:
             pass
     from PySide6.QtCore import QEvent, Qt
@@ -46,9 +47,9 @@ def main():
 
     QApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
     app = _App(sys.argv)
-    app.setApplicationName("CueStage")
+    app.setApplicationName(APP_NAME)
     app.setWindowIcon(QIcon(os.path.join(os.path.dirname(os.path.abspath(__file__)), "icon.png")))
-    app.setDesktopFileName("cuestage")
+    app.setDesktopFileName(APP_SLUG)
     app.setStyle("Fusion")
     pal = QPalette()
     base = {

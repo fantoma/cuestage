@@ -28,6 +28,7 @@ import uuid
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from .appinfo import PROTOCOL_ID
 from .system import file_basename, local_path, portable_rel
 
 
@@ -201,7 +202,7 @@ def discover_masters(port=DEFAULT_PORT, timeout=1.2):
                 info = json.loads(data.decode("utf-8"))
             except ValueError:
                 continue
-            if info.get("app") == "CueStage":
+            if info.get("app") == PROTOCOL_ID:
                 host = ip if ip != "127.0.0.1" or not ips else ip
                 found[(info.get("id"), host)] = dict(info, host=host)
     finally:
@@ -450,7 +451,7 @@ class ClusterHub(QObject):
                 return
             if data.strip() == DISCOVER_MSG:
                 sh = self.show_fn() if self.show_fn else None
-                info = {"app": "CueStage", "id": self.instance_id, "name": self.name, "port": self.port,
+                info = {"app": PROTOCOL_ID, "id": self.instance_id, "name": self.name, "port": self.port,
                         "show": os.path.basename(sh.path) if sh is not None and sh.path else tr("senza titolo"),
                         "slaves": sum(1 for c in self.clients.values() if c.get("accepted"))}
                 try:

@@ -1,5 +1,6 @@
 """Schede dell'ispettore per audio, video e immagini: tempi, uscita audio, crop, preset, fade (parte di Inspector)."""
 from ..i18n import tr
+from ..appinfo import settings as _app_settings
 import os
 
 from PySide6.QtCore import Qt, QTimer
@@ -727,8 +728,7 @@ class MediaTabsMixin:
             grp_pts.setExclusive(True)
             grp_pts.buttonClicked.connect(lambda b: self.timeline.set_point_mode(b.property("mode")))
             self._pts_group = grp_pts
-        from PySide6.QtCore import QSettings
-        qs = QSettings("CueStage", "CueStage")
+        qs = _app_settings()
         sn = QToolButton()
         sn.setText(tr("Snap"))
         sn.setCheckable(True)
@@ -741,7 +741,7 @@ class MediaTabsMixin:
 
         def snap_toggled(on):
             self.timeline.set_snap(on)
-            QSettings("CueStage", "CueStage").setValue("timeline_snap", "true" if on else "false")
+            _app_settings().setValue("timeline_snap", "true" if on else "false")
         sn.toggled.connect(snap_toggled)
         row.addWidget(sn)
         bc = QToolButton()

@@ -1,9 +1,9 @@
 """Istanze secondarie: master, slave, ridondanza (parte di MainWindow)."""
 from ..i18n import tr
+from ..appinfo import settings as _app_settings
 import copy
 import os
 
-from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import (
     QMessageBox, )
 
@@ -536,7 +536,7 @@ class ClusterMixin:
         hub = self.cluster
         self.lost_alarm.alarm(hub.master_info.get("name") or hub.master_info.get("host") or "?")
         self.fire_event("master_lost")
-        if QSettings("CueStage", "CueStage").value("cluster/auto_promote", "false") in (True, "true"):
+        if _app_settings().value("cluster/auto_promote", "false") in (True, "true"):
             self.cluster_promote(ask=False)
 
     def _cluster_back(self):

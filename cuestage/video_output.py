@@ -1,5 +1,4 @@
 """Uscita video: composizione dei layer e correzione geometrica a 4 angoli (corner pin)."""
-import os
 from .i18n import tr
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt, Signal, QTimer
 from PySide6.QtGui import QColor, QFont, QPainter, QPen, QPolygonF, QTransform, QBrush
@@ -488,7 +487,8 @@ def engine_labels():
 
 def resolve_engine(engine):
     """Motore video da usare davvero: «auto» = GPU se possibile, altrimenti classico (OpenGL o raster)."""
-    env = os.environ.get("CUESTAGE_VIDEO_ENGINE", "").strip().lower()
+    from .appinfo import env as _env
+    env = (_env("VIDEO_ENGINE") or "").strip().lower()
     if env in ENGINES:
         engine = env
     if engine not in ENGINES:

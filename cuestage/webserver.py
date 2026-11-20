@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from .appinfo import APP_NAME
 from .i18n import tr
 
 COMMANDS = {"go", "go_list", "stop_list", "xfade", "stop_all", "pause_all", "resume_all", "stop_cue", "pause_cue", "playhead",
@@ -77,7 +78,7 @@ def local_addresses():
 
 
 class _Handler(BaseHTTPRequestHandler):
-    server_version = "CueStage"
+    server_version = APP_NAME
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):     # niente log su stderr a ogni richiesta

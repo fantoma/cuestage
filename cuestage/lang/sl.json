@@ -1395,7 +1395,6 @@
   "Prove brevi su questo computer: puntualità del sistema, costo del mixer audio e degli effetti, video con il motore classico, lettura dal disco. Alla fine c'è il buffer audio consigliato. Meglio farla con lo show aperto e senza cue in riproduzione.": "Kratki preizkusi na tem računalniku: točnost sistema, obremenitev zvočnega mešalnika in učinkov, video s klasičnim pogonom, branje z diska. Na koncu je priporočen zvočni medpomnilnik. Najbolje z odprto predstavo in brez predvajanih iztočnic.",
   "Esegui la valutazione": "Zaženi oceno",
   "Processore": "Procesor",
-  "CueStage": "CueStage",
   "{0:.0f} % di un core ({1:.0f} % del totale, {2} core)": "{0:.0f} % enega jedra ({1:.0f} % skupaj, {2} jeder)",
   "Buffer": "Medpomnilnik",
   "Voci attive": "Aktivni glasovi",

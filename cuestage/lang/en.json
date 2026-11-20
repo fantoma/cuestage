@@ -1395,7 +1395,6 @@
   "Prove brevi su questo computer: puntualità del sistema, costo del mixer audio e degli effetti, video con il motore classico, lettura dal disco. Alla fine c'è il buffer audio consigliato. Meglio farla con lo show aperto e senza cue in riproduzione.": "Short tests on this computer: system timing accuracy, cost of the audio mixer and effects, video with the classic engine, disk reads. At the end you get the recommended audio buffer. Best run with the show open and no cues playing.",
   "Esegui la valutazione": "Run the evaluation",
   "Processore": "Processor",
-  "CueStage": "CueStage",
   "{0:.0f} % di un core ({1:.0f} % del totale, {2} core)": "{0:.0f} % of one core ({1:.0f} % of total, {2} cores)",
   "Buffer": "Buffer",
   "Voci attive": "Active voices",

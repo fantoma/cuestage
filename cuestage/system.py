@@ -11,19 +11,9 @@ OS_NAME = tr("Windows") if IS_WIN else "macOS" if IS_MAC else tr("Linux")
 
 
 def data_dir(*sub):
-    """Cartella dei dati utente (autosalvataggi, plugin e profili aggiunti dall'utente).
-
-    Linux:   ~/.local/share/cuestage           (come sempre)
-    Windows: %APPDATA%\\CueStage
-    macOS:   ~/Library/Application Support/CueStage
-    """
-    if IS_WIN:
-        base = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~\\AppData\\Roaming"), "CueStage")
-    elif IS_MAC:
-        base = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "CueStage")
-    else:
-        base = os.path.join(os.path.expanduser("~"), ".local", "share", "cuestage")
-    return os.path.join(base, *sub)
+    """Cartella dei dati utente (autosalvataggi, plugin e profili aggiunti dall'utente): vedi appinfo.data_base."""
+    from .appinfo import data_base
+    return os.path.join(data_base(), *sub)
 
 
 def data_dir_label(*sub):
@@ -37,7 +27,8 @@ def bundle_dir():
     """Cartella del programma impacchettato (PyInstaller/AppImage), oppure None se avviato dai sorgenti."""
     if getattr(sys, "frozen", False):
         return getattr(sys, "_MEIPASS", os.path.dirname(sys.executable))
-    return os.environ.get("CUESTAGE_APPIMAGE_DIR") or None
+    from .appinfo import env
+    return env("APPIMAGE_DIR") or None
 
 
 def subprocess_flags():

@@ -1,9 +1,10 @@
 """Finestra principale di CueStage."""
 from .i18n import tr
+from .appinfo import APP_NAME, settings as _app_settings
 import os
 import time
 
-from PySide6.QtCore import QSettings, Qt, QTimer
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QColor, QFont, QFontDatabase, QKeySequence, QPainter, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QHBoxLayout, QHeaderView, QLabel,
@@ -35,7 +36,7 @@ from .window.remote import RemoteMixin
 from .window.video import VideoMixin
 from .window.web import WebMixin
 
-FILE_FILTER = "Show CueStage (*.cueshow);;JSON (*.json);;Tutti i file (*)"
+FILE_FILTER = f"Show {APP_NAME} (*.cueshow);;JSON (*.json);;Tutti i file (*)"
 AUTOSAVE_SECONDS = 5
 
 
@@ -193,7 +194,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         self.output = None
         self._select_guard = False
         self._edit_on = False
-        self.qs = QSettings("CueStage", "CueStage")
+        self.qs = _app_settings()
 
         self._history_init()
         self._build_ui()
@@ -757,7 +758,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         from . import __version__
         from .ui_disclaimer import AUTHOR
         QMessageBox.about(
-            self, "CueStage",
+            self, APP_NAME,
             tr("<b>CueStage</b><br>Sistema di cue per spettacolo: audio, video, immagini, "
                "fade, comandi, OSC e MIDI.<br>Python + Qt6 (PySide6) · motore audio PortAudio.")
             + f"<br><br>{tr('Versione {0}', __version__)}<br><b>{AUTHOR}</b><br><br>"
@@ -1096,7 +1097,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
         other = i18n.load(code).get(msg, msg)
         if other != txt:
             txt += "\n\n" + other
-        QMessageBox.information(self, "CueStage", txt)
+        QMessageBox.information(self, APP_NAME, txt)
 
     # =========================================================== ducking
     def ducking_dialog(self):

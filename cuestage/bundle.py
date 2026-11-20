@@ -13,6 +13,7 @@ import time
 import zipfile
 
 from .i18n import tr
+from .appinfo import PROTOCOL_ID
 from .system import file_basename, local_path, portable_rel
 
 MANIFEST = "cuestage-bundle.json"
@@ -75,7 +76,7 @@ def export_bundle(show, zip_path, progress=None):
     if not show_name.lower().endswith(".cueshow"):
         show_name += ".cueshow"
     from . import __version__
-    manifest = {"app": "CueStage", "bundle": 1, "version": __version__, "show": show_name,
+    manifest = {"app": PROTOCOL_ID, "bundle": 1, "version": __version__, "show": show_name,
                 "created": time.strftime("%Y-%m-%d %H:%M:%S"), "files": len(files), "missing": missing}
     total = sum(os.path.getsize(p) for p in files) or 1
     done = 0
