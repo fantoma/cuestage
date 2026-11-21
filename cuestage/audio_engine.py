@@ -612,8 +612,10 @@ class AudioEngine:
             d = nxt - time.monotonic()
             if d > 0:
                 time.sleep(d)
-            else:
-                nxt = time.monotonic()
+            elif d < -0.25:
+                nxt = time.monotonic()      # molto in ritardo (sistema fermo): si riparte da adesso
+            # in leggero ritardo (sleep poco preciso, macchina virtuale lenta): si calcolano subito i blocchi
+            # mancanti, così il tempo delle uscite senza scheda resta quello vero
 
     # ------------------------------------------------------------ API voci
     def play(self, vid, voice, dev_id=None):
