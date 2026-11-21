@@ -3927,6 +3927,8 @@ def t_marker_jumps(w):
         run(0.4)
         assert fired == [] and abs(lvl() + 20.0) < 0.1, (fired, lvl())
         w.ctrl.restart_from(a, 1.0)                      # indietro: il marker a 0,5 s non riparte, il preset si toglie
+        # subito, senza aspettare il ciclo del motore (su un sistema lento il primo ciclo arriva tardi)
+        assert abs(lvl() - a.level_db) < 0.1 and "audio" not in inst._mk_applied, lvl()
         run(0.3)
         assert fired == [] and abs(lvl() - a.level_db) < 0.1 and "audio" not in inst._mk_applied, (fired, lvl())
         assert wait_until(lambda: inst.position() > 2.3, 3)

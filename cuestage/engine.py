@@ -454,8 +454,10 @@ class KeyframeMixin:
         if jump is not None:
             # dopo un salto i marker saltati non scattano: si aspetta che la posizione arrivi al punto
             # (il video ci mette qualche istante), poi si ricostruisce lo stato dei Recall Preset già passati
-            target, deadline = jump
-            near = abs(pos - target) <= 0.25
+            target, deadline, t0 = jump
+            # arrivata al punto (anche se nel frattempo è andata avanti: con un sistema lento il primo
+            # controllo può arrivare dopo un po')
+            near = target - 0.25 <= pos <= target + max(0.0, self.ctrl.clock - t0) + 0.25
             if not near and self.ctrl.clock < deadline:
                 self._mk_pos = None
                 return
@@ -490,16 +492,23 @@ class KeyframeMixin:
             items.append((at, dur, m))
         return items
 
-    def markers_jumped(self, file_pos=None):
+    def markers_jumped(self, file_pos=None, applied=False):
         """Chiamata dopo un salto (Ricomincia da qui, trascinamento, allineamento al master): i marker tra il
         punto di partenza e quello di arrivo non scattano (né in avanti né indietro), e lo stato dei Recall
-        Preset si ricostruisce come se la cue avesse suonato fino a lì. file_pos: posizione del file attesa."""
+        Preset si ricostruisce come se la cue avesse suonato fino a lì. file_pos: posizione del file attesa.
+        applied: il salto è già avvenuto (audio nel motore): lo stato si ricostruisce subito."""
         if file_pos is None:
             try:
                 file_pos = float(self.position())
             except Exception:
                 return
-        self._mk_jump = (float(file_pos), self.ctrl.clock + 3.0)   # il video può metterci fino a 2,5 s
+        if applied:
+            self._mk_jump = None
+            self._mk_pos = float(file_pos) - 0.001           # un marker proprio sul punto di arrivo scatta
+            if getattr(self.cue, "markers", None) and self.cue.type in ("audio", "video"):
+                self._markers_rebuild(float(file_pos))
+            return
+        self._mk_jump = (float(file_pos), self.ctrl.clock + 3.0, self.ctrl.clock)  # video: fino a 2,5 s
         self._mk_pos = None
 
     def _markers_rebuild(self, pos):
@@ -815,7 +824,7 @@ class AudioInstance(RoutedVoice, KeyframeMixin, Instance):
     def seek_to(self, t):
         self.ctrl.audio.seek(self.key, max(0.0, float(t)))
         self.elapsed = self.voice.played / SR
-        self.markers_jumped()
+        self.markers_jumped(applied=True)            # l'audio è già al punto nuovo
 
     def tick(self, now, dt):
         v = self.voice
@@ -1081,7 +1090,7 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
                 return
             self.ctrl.audio.seek(self.key, t)
             self._seek_video(self.voice.pos / SR)
-            self.markers_jumped(self.voice.pos / SR)
+            self.markers_jumped(self.voice.pos / SR, applied=True)
         elif getattr(self, "player", None) is not None:
             self._seek_video(float(self.cue.start or 0.0) + t)
             self.markers_jumped(float(self.cue.start or 0.0) + t)
@@ -1105,7 +1114,7 @@ class VideoInstance(RoutedVoice, KeyframeMixin, Instance):
                     self.ctrl.audio.seek(self.key, t)
                     self.elapsed = t
                     self._seek_video(v.pos / SR)
-                    self.markers_jumped(v.pos / SR)
+                    self.markers_jumped(v.pos / SR, applied=True)
             return
         if v.wraps != self.wraps:             # l'audio è ripartito dall'inizio del loop
             self.wraps = v.wraps
