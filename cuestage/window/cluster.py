@@ -233,6 +233,8 @@ class ClusterMixin:
                         if oc.to_dict(None) != nc.to_dict(None):
                             for k in Cue.FIELDS:
                                 setattr(oc, k, getattr(nc, k))
+                            if getattr(oc, "is_link", False):
+                                oc.link_target = nc.link_target
                             changed.add(oc.id)
                         cues.append(oc)
                     else:
@@ -248,6 +250,7 @@ class ClusterMixin:
                     nl.cues = cues
                     lists.append(nl)
             sh.lists = lists
+            sh.refresh_links()
             sh.versions = new.versions
             sh.active_version = new.active_version
             sh.view = next((i for i, l in enumerate(sh.lists) if l.id == view_id), 0)

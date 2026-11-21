@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView, QFileDialog, QMessageBox, )
 
 from ..model import (
-    TYPE_LABELS, Cue, type_for_file,
+    TYPE_LABELS, Cue, link_target_ok, new_cue, type_for_file,
 )
 
 FILE_FILTER = "Show Cuevivo (*.cueshow);;JSON (*.json);;Tutti i file (*)"
@@ -86,8 +86,11 @@ class EditingMixin:
             self.qs.setValue("last_dir", os.path.dirname(paths[0]))
             cues = [self._cue_for_file(p, ctype) for p in paths]
         else:
-            c = Cue(ctype, number=self.show_data.next_number())
+            c = new_cue(ctype, number=self.show_data.next_number())
             cur = self._current_cue()
+            if ctype == "link":
+                # collegamento alla cue selezionata (se può esserlo); altrimenti si sceglie nell'ispettore
+                c.link_target = cur.id if link_target_ok(cur) else ""
             if ctype in ("fade", "control", "preset") and cur is not None:
                 c.target = cur.number or cur.id
                 if ctype == "preset":
@@ -257,14 +260,69 @@ class EditingMixin:
             if extra and QMessageBox.question(
                     self, tr("Elimina gruppo"), tr("Eliminare il gruppo insieme alle sue {0} cue?\n(«No» elimina solo il gruppo: le cue restano nella lista)", len(extra))) == QMessageBox.Yes:
                 rows = sorted(set(rows) | set(extra))
-        for r in rows:
-            self.ctrl.stop_cue(cues[r].id, 0)
+        doomed = [cues[r] for r in rows]
+        # originali con collegamenti (fuori da quelli che si cancellano già): cancellarli o farli puntare altrove
+        gone = {c.id for c in doomed}
+        links = [l for l in self.show_data.links_to(gone) if l.id not in gone]
+        extra_links = []
+        if links:
+            ans = self.ask_links_on_delete([c for c in doomed if any(l.link_target == c.id for l in links)], links)
+            if ans is None:
+                return
+            if ans[0] == "delete":
+                extra_links = links
+            else:
+                for l in links:
+                    l.set_target(ans[1])
+        for c in doomed + extra_links:
+            self.ctrl.stop_cue(c.id, 0)
         self.model.beginResetModel()
         for r in reversed(rows):
             del cues[r]
+        if extra_links:                            # collegamenti anche in altri PANEL
+            drop = {id(l) for l in extra_links}
+            for lst in self.show_data.lists:
+                lst.cues[:] = [c for c in lst.cues if id(c) not in drop]
         self.model.endResetModel()
         self._structure_changed()
         self._select_row(min(rows[0], len(cues) - 1))
+
+    def ask_links_on_delete(self, originals, links):
+        """Si cancellano cue che hanno collegamenti: ("delete", None) cancella anche i collegamenti,
+        ("retarget", cue) li fa puntare a un'altra cue, None annulla."""
+        from PySide6.QtWidgets import QInputDialog
+        names = ", ".join(c.label() for c in originals[:4]) + (" …" if len(originals) > 4 else "")
+        mb = QMessageBox(self)
+        mb.setIcon(QMessageBox.Warning)
+        mb.setWindowTitle(tr("Cue con collegamenti"))
+        mb.setText(tr("{0} ha {1} collegamenti nella scaletta. Cosa ne faccio?", names, len(links)))
+        b_del = mb.addButton(tr("Elimina anche i collegamenti"), QMessageBox.DestructiveRole)
+        b_re = mb.addButton(tr("Collegali a un'altra cue…"), QMessageBox.AcceptRole)
+        mb.addButton(tr("Annulla"), QMessageBox.RejectRole)
+        mb.exec()
+        clicked = mb.clickedButton()
+        if clicked is b_del:
+            return ("delete", None)
+        if clicked is not b_re:
+            return None
+        gone = {c.id for c in originals}
+        cands = [c for c in self.show_data.all_cues() if link_target_ok(c) and c.id not in gone]
+        if not cands:
+            QMessageBox.information(self, tr("Cue con collegamenti"), tr("Non ci sono altre cue a cui collegarli."))
+            return None
+        labels = [f"{c.number or '·'} – {c.name or TYPE_LABELS.get(c.type, c.type)}" for c in cands]
+        item, ok = QInputDialog.getItem(self, tr("Collegali a un'altra cue"), tr("Nuova cue originale:"), labels, 0, False)
+        if not ok:
+            return None
+        return ("retarget", cands[labels.index(item)])
+
+    def create_link(self):
+        """Crea un collegamento alla cue selezionata, subito dopo di essa."""
+        cur = self._current_cue()
+        if not link_target_ok(cur):
+            self.status(tr("Collegamento: scegli una cue (non un gruppo né un altro collegamento)"))
+            return
+        self.add_cue("link")
 
     def renumber(self):
         sh = self.show_data

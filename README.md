@@ -144,6 +144,7 @@ The web interface for phones and tablets and the start-up self-test messages are
 | **Full screen** | **Open**: the video output window opens full screen on the screen chosen in the Video output menu (with a single screen it stays windowed, so the control window is not covered). **Close**: it leaves full screen and stays open as a window on the same screen, or is hidden (“Also hide the output window”). The “Full screen” setting does not change; old “Close full screen” cues are converted automatically |
 | **Wait** | Timed pause, useful in chains |
 | **Memo** | Note for the operator: only for show; GO skips it (the playhead never stops on a Memo) |
+| **Link** | Repeats another cue (the *original*) at another point of the cue list or in a PANEL/GRID, exactly as it is: type, file, times, trigger, pre-wait, volumes, matrix, presets, effects… all come from the original, so changing the original changes all its links. The only setting is the original (Link tab, with “Go to the original”): it cannot be a group or another link. A link has its own playback, so it can play even together with the original; MIDI, OSC, hotkey and event triggers stay with the original only. Create it with **Cue › Create link to the selected cue** (Ctrl+L), the list's right-click menu or “New cue › Link” (it points at the selected cue), then move it where needed. Deleting an original that has links asks whether to delete the links too or to point them at another cue. The original's Base tab shows how many links it has |
 
 ## Cue lists: MAIN and PANEL
 

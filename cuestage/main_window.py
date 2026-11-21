@@ -573,6 +573,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
 
         self.inspector = Inspector(lambda: self.show_data, self.ctrl, self.loader)
         self.inspector.duck_dialog_fn = lambda: self.ducking_dialog()
+        self.inspector.reveal_fn = self.reveal_cue
         self.inspector.bus_dialog_fn = lambda: self.bus_dialog()
         self.inspector.edited.connect(self._inspector_edited)
         self.inspector.size_fn = self._visual_size
@@ -650,6 +651,7 @@ class MainWindow(HardwareMixin, ClusterMixin, PlaybackMixin, EditingMixin, Group
             add(m, tr("Nuova cue {0}", TYPE_LABELS[t]), lambda _=False, t=t: self.add_cue(t))
         m.addSeparator()
         add(m, tr("Duplica"), self.duplicate, "Ctrl+D")
+        add(m, tr("Crea collegamento alla cue selezionata"), self.create_link, "Ctrl+L")
         add(m, tr("Elimina"), self.delete_cues, "Delete")
         add(m, tr("Sposta su"), lambda: self.move_selected(-1), "Ctrl+Up")
         add(m, tr("Sposta giù"), lambda: self.move_selected(1), "Ctrl+Down")

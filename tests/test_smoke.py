@@ -4216,6 +4216,123 @@ def t_group_go_xfade(w):
         run(0.2)
 
 
+def t_link_cue(w):
+    """Cue Collegamento: esegue l'originale com'è (con una sua esecuzione), non si modifica, niente gruppi né
+    collegamenti come originale; salvataggio; cancellazione dell'originale: elimina o ricollega i collegamenti."""
+    import wave as _wave
+    import numpy as _np
+    from PySide6.QtCore import Qt
+    from cuestage.model import LinkCue, link_target_ok
+    path = os.path.join(TMP, "link.wav")
+    x = (_np.sin(_np.arange(48000 * 10) / 48000 * 2 * _np.pi * 440) * 6000).astype(_np.int16)
+    with _wave.open(path, "wb") as wf:
+        wf.setnchannels(2)
+        wf.setsampwidth(2)
+        wf.setframerate(48000)
+        wf.writeframes(_np.repeat(x[:, None], 2, axis=1).tobytes())
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("audio", number="1", name="Tuono", file=path, level_db=-6.0, midi="note 1 60")
+    b = Cue("audio", number="2", name="Pioggia", file=path)
+    g = Cue("group", number="3", name="Gruppo")
+    sh.cues = [a, b, g]
+    pan = sh.add_panel("Effetti")
+    w._set_show(sh)
+    run(0.2)
+    w._select_row(0)
+    w.add_cue("link")                                     # collegamento alla cue selezionata, subito dopo
+    l1 = w.show_data.cues[1]
+    assert isinstance(l1, LinkCue) and l1.link_target == a.id and l1.number == "4"
+    assert l1.type == "audio" and l1.name == "↪ Tuono" and l1.level_db == -6.0 and l1.file == path
+    assert l1.midi == "" and l1.trigger == a.trigger      # i comandi esterni restano all'originale
+    l1.level_db = 0.0
+    l1.name = "altro"
+    assert l1.level_db == -6.0 and a.level_db == -6.0 and l1.name == "↪ Tuono"    # non si modifica
+    a.level_db = -3.0
+    assert l1.level_db == -3.0                            # segue l'originale
+    assert not link_target_ok(g) and not link_target_ok(l1) and link_target_ok(b)
+    w._select_row(w.show_data.cues.index(g))
+    n = len(w.show_data.cues)
+    w.create_link()                                       # su un gruppo: niente
+    assert len(w.show_data.cues) == n
+    # in un PANEL
+    l2 = LinkCue(link_target=a.id, number="5")
+    pan.cues.append(l2)
+    w._structure_changed()
+    assert l2.name == "↪ Tuono" and len(w.show_data.links_to([a.id])) == 2
+    # ispettore: solo la scheda Collegamento; scelta dell'originale senza gruppi né collegamenti
+    w.inspector.set_cue(l1)
+    run(0.1)
+    ins = w.inspector
+    assert ins.tabs.count() == 1 and ins._tab_keys == ["Collegamento"]
+    ids = [ins.link_combo.itemData(i) for i in range(ins.link_combo.count())]
+    assert a.id in ids and b.id in ids and g.id not in ids and l1.id not in ids and l2.id not in ids
+    assert not (w.model.flags(w.model.index(1, 1)) & Qt.ItemIsEditable)
+    # originale e collegamento suonano insieme, ognuno con la sua esecuzione
+    w.ctrl.start_cue(a)
+    w.ctrl.start_cue(l1)
+    run(0.3)
+    ia, il = w.ctrl.instances.get(a.id), w.ctrl.instances.get(l1.id)
+    assert ia is not None and il is not None and ia is not il and il.cue is l1
+    w.ctrl.stop_cue(l1.id, 0)
+    run(0.2)
+    assert w.ctrl.instances.get(a.id) is not None and w.ctrl.instances.get(l1.id) is None
+    w.ctrl.stop_all(0)
+    run(0.2)
+    w.ctrl.set_playhead(1)                               # GO sulla riga del collegamento
+    w.go()
+    assert wait_until(lambda: w.ctrl.instances.get(l1.id) is not None, 2) and w.ctrl.instances.get(a.id) is None
+    w.ctrl.stop_all(0)
+    run(0.2)
+    # salvataggio: il collegamento salva solo il riferimento
+    p = os.path.join(TMP, "links.cueshow")
+    w.show_data.save(p)
+    s2 = Show.load(p)
+    k = s2.cues[1]
+    assert isinstance(k, LinkCue) and k.link_target == a.id and k.level_db == -3.0
+    d = k.to_dict()
+    assert set(d) == {"id", "type", "number", "group", "grid_pos", "link_target"} and d["type"] == "link"
+    # duplicare un collegamento: un altro collegamento allo stesso originale
+    w._select_row(1)
+    w.duplicate()
+    l3 = w.show_data.cues[2]
+    assert isinstance(l3, LinkCue) and l3.link_target == a.id and l3.id != l1.id
+    # cancellare l'originale: «ricollega» a un'altra cue
+    asked = []
+    w.ask_links_on_delete = lambda origs, links: asked.append(len(links)) or ("retarget", b)
+    w._select_row(0)
+    w.delete_cues()
+    assert asked == [3] and a not in w.show_data.cues
+    assert all(x.link_target == b.id and x.name == "↪ Pioggia" for x in (l1, l2, l3))
+    w._history_flush()                                    # (un passo di cronologia per ogni cancellazione)
+    # cancellare l'originale: «elimina anche i collegamenti» (anche nel PANEL)
+    w.ask_links_on_delete = lambda origs, links: ("delete", None)
+    w._select_row(w.show_data.cues.index(b))
+    w.delete_cues()
+    assert not any(isinstance(c, LinkCue) for c in w.show_data.all_cues())
+    w.undo()                                              # si annulla come ogni modifica
+    run(0.3)
+    assert any(isinstance(c, LinkCue) and c.name == "↪ Pioggia" for c in w.show_data.all_cues())
+    # annulla nella domanda: niente cancellato
+    w.ask_links_on_delete = lambda origs, links: None
+    bb = next(c for c in w.show_data.cues if c.name == "Pioggia")
+    w._select_row(w.show_data.cues.index(bb))
+    w.delete_cues()
+    assert bb in w.show_data.cues
+    # collegamento rotto: non parte
+    lk = next(c for c in w.show_data.all_cues() if isinstance(c, LinkCue))
+    lk.set_target(None)
+    lk.link_target = "inesistente"
+    lk.forget_original()
+    n0 = len(w.ctrl.log)
+    assert w.ctrl.start_cue(lk) is None and lk.is_broken() and "⚠" in lk.name
+    from cuestage.i18n import tr as _tr
+    want = _tr("Collegamento '{0}': la cue originale non c'è più", lk.number or lk.id)
+    assert any(m == want for _t, m in list(w.ctrl.log)[n0:])
+    del w.ask_links_on_delete
+    w.show_data.dirty = False
+
+
 def make_pdf(name, n=4):
     """PDF di prova: n pagine A4 orizzontali, ognuna di un colore diverso con il suo numero."""
     from PySide6.QtCore import QMarginsF, QRectF
@@ -5169,6 +5286,8 @@ if __name__ == "__main__":
     check("cambio di nome: preferenze, dati, variabili, OSC e PIN web ripresi dal nome precedente",
           lambda: t_rename_compat(w))
     check("gruppo Sequence con «GO esegue crossfade»", lambda: t_group_go_xfade(w))
+    check("cue Collegamento: esegue l'originale, non si modifica, salvataggio, cancellazione dell'originale",
+          lambda: t_link_cue(w))
     check("Normalizza: LUFS delle cue, correzione relativa del volume, misuratore in tempo reale", lambda: t_normalize(w))
     check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))

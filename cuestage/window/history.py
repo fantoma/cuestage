@@ -128,6 +128,7 @@ class HistoryMixin:
     def _after_replace(self, sel_ids=(), insp_id=None):
         """Aggiorna lista, griglia, schede e ispettore dopo che liste e cue sono state sostituite."""
         sh = self.show_data
+        sh.refresh_links()
         self.model.set_show(sh)
         for c in sh.all_cues():
             self._preload(c)

@@ -4,24 +4,25 @@ import copy
 import json
 import os
 import uuid
+import weakref
 
 from .appinfo import PROTOCOL_ID
 from .system import local_path, portable_rel
 
 CUE_TYPES = ["audio", "video", "image", "pdf", "text", "group", "groupexit", "fade", "preset", "control", "stoppanel",
-             "osc", "midiout", "projector", "mixer", "switcher", "buscontrol", "fullscreen", "wait", "memo"]
+             "osc", "midiout", "projector", "mixer", "switcher", "buscontrol", "fullscreen", "wait", "memo", "link"]
 TYPE_LABELS = {
     "audio": tr("Audio"), "video": tr("Video"), "image": tr("Immagine"), "pdf": tr("PDF"), "fade": tr("Fade"),
     "preset": tr("Cambia preset"), "control": tr("Comando"), "osc": "OSC", "projector": tr("Proiettore"), "mixer": tr("Mixer"),
     "switcher": tr("Regia video"),
     "group": tr("Gruppo"), "groupexit": tr("Esci dal gruppo"), "text": tr("Testo"), "midiout": tr("MIDI out"),
     "wait": tr("Attesa"), "memo": tr("Memo"), "stoppanel": tr("Stop panel"),
-    "fullscreen": tr("Schermo intero"), "buscontrol": tr("Controllo bus"),
+    "fullscreen": tr("Schermo intero"), "buscontrol": tr("Controllo bus"), "link": tr("Collegamento"),
 }
 TYPE_ICONS = {
     "audio": "♪", "video": "▶", "image": "▣", "pdf": "▤", "fade": "◢", "preset": "⇢", "control": "⌘", "projector": "⌖",
     "osc": "⇄", "wait": "⧗", "memo": "✎", "mixer": "≣", "group": "◫", "groupexit": "⇥", "text": "T", "midiout": "♫",
-    "stoppanel": "⊠", "switcher": "◧", "fullscreen": "⛶", "buscontrol": "⇶",
+    "stoppanel": "⊠", "switcher": "◧", "fullscreen": "⛶", "buscontrol": "⇶", "link": "↪",
 }
 
 # campi salvati nei preset (per tipo di preset)
@@ -251,6 +252,8 @@ class Cue:
     @classmethod
     def from_dict(cls, d, base_dir=None):
         t = d.get("type", "memo")
+        if t == "link":
+            return LinkCue.from_link_dict(d)
         known = t in CUE_TYPES or t in LEGACY_TYPES
         c = cls(t if known else "memo")
         if not known:
@@ -310,6 +313,131 @@ class Cue:
     def clone(self):
         c = Cue.from_dict(self.to_dict())
         c.id = uuid.uuid4().hex
+        return c
+
+    is_link = False
+
+
+def new_cue(ctype, **kw):
+    """Nuova cue del tipo indicato (un Collegamento è una LinkCue)."""
+    if ctype == "link":
+        return LinkCue(**kw)
+    return Cue(ctype, **kw)
+
+
+def link_target_ok(cue):
+    """Una cue può essere l'originale di un collegamento? (no i gruppi, no altri collegamenti)"""
+    return cue is not None and not getattr(cue, "is_link", False) and cue.type not in ("group", "groupexit", "link")
+
+
+_SHOWS = weakref.WeakSet()       # show aperti: un collegamento cerca l'originale nel suo show
+
+
+class LinkCue(Cue):
+    """Cue «Collegamento»: una riga della scaletta che esegue un'altra cue (l'originale) esattamente com'è.
+
+    Ha di suo solo identità e posto nella scaletta (id, numero, gruppo, casella del GRID) e il riferimento
+    all'originale (link_target = id). Tutto il resto — tipo, nome, file, tempi, trigger, pre-wait, volumi,
+    preset, effetti… — si legge dall'originale: cambiando l'originale cambiano tutti i suoi collegamenti, e le
+    modifiche fatte sul collegamento vengono ignorate. Nel motore suona con una sua esecuzione (chiave = id del
+    collegamento): originale e collegamenti possono suonare anche insieme. I comandi esterni che avviano una cue
+    (MIDI, OSC, tasto, eventi) restano solo all'originale, per non farla partire più volte."""
+    is_link = True
+    OWN = frozenset({"id", "number", "group", "grid_pos", "link_target", "midi", "midi_vol", "midi_op",
+                     "osc_trigger", "event_trig", "hotkey", "collapsed"})
+    FWD = frozenset(set(Cue.FIELDS) - OWN) | {"type"}
+
+    def __init__(self, link_target="", **kw):
+        object.__setattr__(self, "_ready", False)
+        object.__setattr__(self, "_orig", None)
+        object.__setattr__(self, "_show_ref", None)
+        super().__init__("link", **{k: v for k, v in kw.items() if k in self.OWN})
+        self.link_target = str(link_target or "")
+        object.__setattr__(self, "_ready", True)
+
+    def __setattr__(self, name, value):
+        if name in LinkCue.OWN or name.startswith("_") or not self.__dict__.get("_ready"):
+            object.__setattr__(self, name, value)
+        # gli altri campi sono dell'originale: sul collegamento non si cambiano
+
+    def __getattribute__(self, name):
+        if name in LinkCue.FWD:
+            orig = object.__getattribute__(self, "original")()
+            if name == "name":
+                if orig is None:
+                    return "↪ ⚠ " + tr("collegamento rotto")
+                return "↪ " + (orig.name or TYPE_LABELS.get(orig.type, orig.type))
+            if orig is not None:
+                return getattr(orig, name)
+        return object.__getattribute__(self, name)
+
+    def __deepcopy__(self, memo):
+        c = LinkCue.from_link_dict(self.to_dict())
+        memo[id(self)] = c
+        return c
+
+    def __copy__(self):
+        return self.__deepcopy__({})
+
+    def _show(self):
+        ref = self.__dict__.get("_show_ref")
+        sh = ref() if ref is not None else None
+        if sh is not None and any(c is self for c in sh.all_cues()):
+            return sh
+        for sh in list(_SHOWS):
+            if any(c is self for c in sh.all_cues()):
+                object.__setattr__(self, "_show_ref", weakref.ref(sh))
+                return sh
+        return None
+
+    def original(self):
+        """La cue originale (None se non c'è più, se è un gruppo o un altro collegamento: collegamento rotto)."""
+        tid = self.__dict__.get("link_target") or ""
+        if not tid:
+            return None
+        cached = self.__dict__.get("_orig")
+        if cached is not None and cached.id == tid:
+            return cached
+        sh = self._show()
+        orig = sh.by_id(tid) if sh is not None else None
+        if not link_target_ok(orig):
+            orig = None
+        object.__setattr__(self, "_orig", orig)
+        return orig
+
+    def forget_original(self):
+        """Da richiamare quando la scaletta cambia (originale cancellato o sostituito)."""
+        object.__setattr__(self, "_orig", None)
+
+    def set_target(self, cue):
+        """Fa puntare il collegamento a un'altra cue (id)."""
+        self.link_target = cue.id if cue is not None else ""
+        object.__setattr__(self, "_orig", cue if link_target_ok(cue) else None)
+
+    def is_broken(self):
+        return self.original() is None
+
+    def label(self):
+        return f"{self.number} {self.name}" if self.number else self.name
+
+    def to_dict(self, base_dir=None):
+        d = {"id": self.id, "type": "link", "number": self.number, "group": self.group,
+             "grid_pos": copy.deepcopy(self.__dict__.get("grid_pos") or []), "link_target": self.link_target}
+        for k, v in (self.__dict__.get("_extra") or {}).items():
+            d.setdefault(k, copy.deepcopy(v))
+        return d
+
+    @classmethod
+    def from_link_dict(cls, d):
+        c = cls(link_target=d.get("link_target", ""))
+        c.id = d.get("id") or c.id
+        c.number = str(d.get("number") or "")
+        c.group = d.get("group") or ""
+        c.grid_pos = list(d.get("grid_pos") or [])
+        extra = {k: copy.deepcopy(v) for k, v in d.items()
+                 if k not in ("id", "type", "number", "group", "grid_pos", "link_target")}
+        if extra:
+            c._extra = extra
         return c
 
 
@@ -487,6 +615,7 @@ class Show:
     VERSION = 1
 
     def __init__(self):
+        _SHOWS.add(self)
         self.on_change = None          # chiamata a ogni modifica (dirty = True): cronologia undo/redo
         self.lists = [CueList("MAIN", list_id=MAIN_ID)]   # [0] = MAIN, poi i PANEL
         self.view = 0                                      # lista visualizzata/modificata
@@ -661,6 +790,17 @@ class Show:
     def index_of(self, cue_id):
         """Indice nella lista visualizzata."""
         return self.current.index_of(cue_id)
+
+    def refresh_links(self):
+        """I collegamenti ritrovano il loro originale (dopo cancellazioni, annulla, sincronizzazione)."""
+        for c in self.every_cue():
+            if getattr(c, "is_link", False):
+                c.forget_original()
+
+    def links_to(self, cue_ids):
+        """Collegamenti (in tutte le liste della versione attiva) che puntano a una di queste cue."""
+        ids = set(cue_ids)
+        return [c for c in self.all_cues() if getattr(c, "is_link", False) and c.link_target in ids]
 
     def by_id(self, cue_id):
         for c in self.all_cues():

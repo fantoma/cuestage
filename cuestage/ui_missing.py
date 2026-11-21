@@ -33,7 +33,8 @@ def _basename(path):
 
 def missing_cues(show):
     """Cue (di tutte le versioni dello show) con un file multimediale che non c'è."""
-    return [c for c in show.every_cue() if c.is_media() and c.file and not os.path.exists(c.file)]
+    return [c for c in show.every_cue() if c.is_media() and c.file and not os.path.exists(c.file)
+            and not getattr(c, "is_link", False)]          # i collegamenti seguono il file dell'originale
 
 
 def score(old, cand):

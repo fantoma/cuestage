@@ -333,6 +333,7 @@ class ListsMixin:
         m.addSeparator()
         if rows:
             m.addAction(tr("Duplica"), self.duplicate)
+            m.addAction(tr("Crea collegamento"), self.create_link)
             m.addAction(tr("Elimina"), self.delete_cues)
             sub = m.addMenu(tr("Sposta in"))
             self._fill_move_menu(sub)

@@ -32,6 +32,7 @@ class GroupsMixin:
         from ..groups import normalize
         for lst in self.show_data.lists:
             normalize(lst.cues)
+        self.show_data.refresh_links()
         self._ensure_exit_cues()
         self.model.beginResetModel()
         self.model.endResetModel()

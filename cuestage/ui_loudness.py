@@ -27,7 +27,7 @@ def audio_cues(show):
     out = []
     for lst in show.lists:
         for c in lst.cues:
-            if c.type in ("audio", "video") and c.file:
+            if c.type in ("audio", "video") and c.file and not getattr(c, "is_link", False):
                 out.append((lst, c))
     return out
 

@@ -2804,7 +2804,10 @@ class Controller(QObject):
             old.user_stopped = True
             old.done = True
             old.cleanup()
-        if cue.is_media() and not cue.file:
+        if getattr(cue, "is_link", False) and cue.original() is None:
+            self.message.emit(tr("Collegamento '{0}': la cue originale non c'è più", cue.number or cue.id))
+            inst = None
+        elif cue.is_media() and not cue.file:
             self.message.emit(tr("La cue '{0}' non ha un file", cue.label()))
             inst = None
         else:

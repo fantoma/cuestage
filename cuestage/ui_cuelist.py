@@ -498,7 +498,8 @@ class CueTableModel(QAbstractTableModel):
         if not idx.isValid():
             return base
         f = base | Qt.ItemIsSelectable | Qt.ItemIsDragEnabled
-        if idx.column() in (C_NUM, C_NAME):
+        link = getattr(self.show.cues[idx.row()], "is_link", False) if idx.row() < len(self.show.cues) else False
+        if idx.column() in (C_NUM, C_NAME) and not link:        # i collegamenti non si modificano
             f |= Qt.ItemIsEditable
         return f
 

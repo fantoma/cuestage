@@ -307,9 +307,14 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
             self.header.setText(tr("Nessuna cue selezionata"))
             self._tab_restoring = False
             return
-        self.header.setText(tr("Cue {0} — {1}", cue.number or '·', TYPE_LABELS[cue.type]))
-
         self._tab_keys = []
+        if getattr(cue, "is_link", False):       # collegamento: solo la scelta della cue originale
+            self.header.setText(tr("Cue {0} — {1}", cue.number or '·', TYPE_LABELS["link"]))
+            self.tabs.addTab(self._scrolled(self._tab_link()), tr("Collegamento"))
+            self._tab_keys.append("Collegamento")
+            self._tab_restoring = False
+            return
+        self.header.setText(tr("Cue {0} — {1}", cue.number or '·', TYPE_LABELS[cue.type]))
 
         def add(widget, title, scroll=True, key=None):
             # ogni scheda scorre se il pannello è basso: nessun campo resta nascosto
@@ -477,11 +482,69 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         row.addWidget(b2)
         return row
 
+    def _tab_link(self):
+        """Collegamento: si sceglie solo la cue originale; tutto il resto è quello dell'originale."""
+        from .model import link_target_ok
+        cue = self.cue
+        sh = self.show_fn()
+        w = QWidget()
+        v = QVBoxLayout(w)
+        row = QHBoxLayout()
+        row.addWidget(QLabel(tr("Cue originale")))
+        cb = QComboBox()
+        cb.addItem(tr("— scegli —"), "")
+        for lst in sh.lists:
+            for c in lst.cues:
+                if link_target_ok(c):
+                    cb.addItem(f"{lst.name} · {c.number or '·'} – {c.name or TYPE_LABELS.get(c.type, c.type)}", c.id)
+        i = cb.findData(cue.link_target)
+        if i < 0 and cue.link_target:
+            cb.addItem("⚠ " + tr("collegamento rotto"), cue.link_target)
+            i = cb.count() - 1
+        cb.setCurrentIndex(max(0, i))
+
+        def changed(j):
+            tid = cb.itemData(j) or ""
+            cue.set_target(sh.by_id(tid) if tid else None)
+            self._emit()
+            QTimer.singleShot(0, self.rebuild)
+        cb.currentIndexChanged.connect(changed)
+        row.addWidget(cb, 1)
+        go = QPushButton(tr("Vai all'originale"))
+        go.setEnabled(cue.original() is not None)
+        go.clicked.connect(lambda: self.reveal_fn(cue.link_target) if getattr(self, "reveal_fn", None) else None)
+        row.addWidget(go)
+        v.addLayout(row)
+        orig = cue.original()
+        if orig is None:
+            msg = QLabel(tr("⚠ La cue originale non c'è più (o non è valida): il collegamento non parte. "
+                            "Scegline un'altra."))
+            msg.setStyleSheet("color:#e05050;")
+        else:
+            others = len(sh.links_to([orig.id]))
+            msg = QLabel(tr("Esegue «{0}» ({1}) esattamente com'è: file, tempi, trigger, pre-wait, volumi, preset, "
+                            "effetti. Per cambiarli modifica l'originale: vale per tutti i suoi collegamenti "
+                            "({2} in tutto). Il collegamento ha una sua esecuzione: può suonare anche insieme "
+                            "all'originale. MIDI, OSC, tasto ed eventi che avviano l'originale restano solo "
+                            "all'originale.", orig.label(), TYPE_LABELS.get(orig.type, orig.type), others))
+            msg.setStyleSheet("color:#999;")
+        msg.setWordWrap(True)
+        v.addWidget(msg)
+        v.addStretch(1)
+        self.link_combo = cb
+        return w
+
     def _tab_base(self):
         """Numero, nome, prova/stop · file (cue con file) · avvio, ritardo, colore · note."""
         cue = self.cue
         w = QWidget()
         v = QVBoxLayout(w)
+        nl = len(self.show_fn().links_to([cue.id]))
+        if nl:                                  # originale di collegamenti: le modifiche valgono anche per loro
+            ll = QLabel(tr("↪ Questa cue ha {0} collegamenti nella scaletta: le modifiche valgono anche per loro.", nl))
+            ll.setStyleSheet("color:#50c8ff;")
+            ll.setWordWrap(True)
+            v.addWidget(ll)
         row = QHBoxLayout()
         row.addWidget(QLabel(tr("Numero")))
         num = self._line("number")
