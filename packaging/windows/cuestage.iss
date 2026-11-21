@@ -3,7 +3,7 @@
 ; Prende la cartella creata da PyInstaller (dist\Cuevivo) e produce dist\Cuevivo-<versione>-windows-setup.exe
 
 #ifndef AppVersion
-  #define AppVersion "1.0.30"
+  #define AppVersion "1.0.31"
 #endif
 #define Root "..\.."
 
