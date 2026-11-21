@@ -191,6 +191,13 @@ class Cue:
         # sequence: «GO esegue crossfade» — una cue del gruppo che parte col GO ferma le altre del gruppo
         # ancora attive, sfumandole con il proprio tempo di ingresso (fade in)
         "group_go_xfade": False,
+        # stinger: ogni cue del gruppo è preceduta da un collegamento PRE e seguita da un collegamento POST
+        # (id delle cue originali, "" = nessuna) con la loro partenza: «with» assieme · «after» alla fine ·
+        # «go» con un GO; si può saltare la PRE della prima cue e la POST dell'ultima
+        "st_pre": "", "st_pre_start": "with", "st_post": "", "st_post_start": "after",
+        "st_skip_first_pre": False, "st_skip_last_post": False,
+        # cue di un gruppo Stinger: la partenza la decide il gruppo; qui quella di prima, da rimettere se esce
+        "st_saved_trigger": "",
         # Tap Tempo (sequence, loop, random loop): una cue ogni «div» battiti al tempo «bpm», come un GO;
         # il tempo si batte con un tasto, una nota/CC MIDI o un messaggio OSC
         "group_tap": False, "group_tap_div": 1.0, "group_bpm": 120.0,
@@ -344,7 +351,8 @@ class LinkCue(Cue):
     (MIDI, OSC, tasto, eventi) restano solo all'originale, per non farla partire più volte."""
     is_link = True
     OWN = frozenset({"id", "number", "group", "grid_pos", "link_target", "midi", "midi_vol", "midi_op",
-                     "osc_trigger", "event_trig", "hotkey", "collapsed"})
+                     "osc_trigger", "event_trig", "hotkey", "collapsed", "st_role", "st_trigger"})
+    ROLE_LABELS = {"pre": "PRE", "post": "POST"}
     FWD = frozenset(set(Cue.FIELDS) - OWN) | {"type"}
 
     def __init__(self, link_target="", **kw):
@@ -353,6 +361,8 @@ class LinkCue(Cue):
         object.__setattr__(self, "_show_ref", None)
         super().__init__("link", **{k: v for k, v in kw.items() if k in self.OWN})
         self.link_target = str(link_target or "")
+        self.st_role = str(kw.get("st_role") or "")         # «pre» / «post»: riga gestita da un gruppo Stinger
+        self.st_trigger = str(kw.get("st_trigger") or "")   # partenza decisa dal gruppo Stinger
         object.__setattr__(self, "_ready", True)
 
     def __setattr__(self, name, value):
@@ -362,11 +372,17 @@ class LinkCue(Cue):
 
     def __getattribute__(self, name):
         if name in LinkCue.FWD:
+            if name == "trigger":
+                st = object.__getattribute__(self, "__dict__").get("st_trigger")
+                if st:
+                    return st
             orig = object.__getattribute__(self, "original")()
             if name == "name":
+                role = LinkCue.ROLE_LABELS.get(object.__getattribute__(self, "__dict__").get("st_role"), "")
+                pre = f"↪ {role} · " if role else "↪ "
                 if orig is None:
-                    return "↪ ⚠ " + tr("collegamento rotto")
-                return "↪ " + (orig.name or TYPE_LABELS.get(orig.type, orig.type))
+                    return pre + "⚠ " + tr("collegamento rotto")
+                return pre + (orig.name or TYPE_LABELS.get(orig.type, orig.type))
             if orig is not None:
                 return getattr(orig, name)
         return object.__getattribute__(self, name)
@@ -423,19 +439,23 @@ class LinkCue(Cue):
     def to_dict(self, base_dir=None):
         d = {"id": self.id, "type": "link", "number": self.number, "group": self.group,
              "grid_pos": copy.deepcopy(self.__dict__.get("grid_pos") or []), "link_target": self.link_target}
+        if self.st_role:
+            d["st_role"] = self.st_role
+        if self.st_trigger:
+            d["st_trigger"] = self.st_trigger
         for k, v in (self.__dict__.get("_extra") or {}).items():
             d.setdefault(k, copy.deepcopy(v))
         return d
 
     @classmethod
     def from_link_dict(cls, d):
-        c = cls(link_target=d.get("link_target", ""))
+        c = cls(link_target=d.get("link_target", ""), st_role=d.get("st_role", ""), st_trigger=d.get("st_trigger", ""))
         c.id = d.get("id") or c.id
         c.number = str(d.get("number") or "")
         c.group = d.get("group") or ""
         c.grid_pos = list(d.get("grid_pos") or [])
         extra = {k: copy.deepcopy(v) for k, v in d.items()
-                 if k not in ("id", "type", "number", "group", "grid_pos", "link_target")}
+                 if k not in ("id", "type", "number", "group", "grid_pos", "link_target", "st_role", "st_trigger")}
         if extra:
             c._extra = extra
         return c

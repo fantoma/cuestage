@@ -341,6 +341,19 @@ The kind is chosen in the inspector's **Group** tab:
   GO leaves the group; STOP stops it.
 - **Random playlist** — like Playlist, but in random order: each cue plays once, in a different order at every
   start (the same on the master and on redundant instances).
+- **Stinger** — like Sequence, but every cue of the group is preceded by a **PRE** and followed by a **POST**: two
+  cues chosen in the Group tab (e.g. a jingle in and a jingle out kept in a PANEL), played through **Link** cues that
+  Cuevivo inserts and keeps by itself around every cue (also around cues added later, dragged in or grouped),
+  marked “PRE” and “POST” in the list. Options: **the cue after the PRE** starts *together with the PRE*, *when the
+  PRE ends* or *with a GO*; **the POST** starts *together with the cue*, *when the cue ends* or *with a GO*;
+  **don't play the PRE of the first cue** and **don't play the POST of the last cue**; **GO crossfades** (the PRE of
+  a new block fades out the previous blocks — PRE, cue and POST — with its own fade-in). The starts of the cues
+  and of the PRE/POST rows are decided by the group (the Trigger field of the cues is locked; it comes back when a
+  cue leaves the group). GO on the group starts the first PRE (or the first cue if that PRE is excluded); the
+  playhead stops only on the rows that wait for a GO. With “when the PRE ends” the PRE plays once even if its cue
+  loops (the Group tab warns about it). Changing the PRE or POST cue re-links all the rows; choosing “none”, or
+  changing the group to another type, removes them. Deleting the PRE/POST original asks, as for any link, whether to
+  delete the rows or link them to another cue.
 
 In playlists the **loop of single cues is ignored** (each plays once per round; in the inspector the cue's
 “Loop” box appears disabled). With **Loop** on for the group, after the last cue the playlist starts again; the

@@ -71,7 +71,8 @@ class EditingMixin:
         for c in cues:
             self._preload(c)
         self._structure_changed()
-        self._select_row(row)
+        # (un gruppo Stinger può aver aggiunto PRE/POST attorno: si seleziona la cue nuova)
+        self._select_row(next((k for k, x in enumerate(self.show_data.cues) if x is cues[0]), row) if cues else row)
 
     def add_cue(self, ctype, row=None, group=None):
         """Nuova cue (dopo la selezione). row/group: posizione e gruppo imposti (GRID, gruppo aperto)."""
@@ -274,6 +275,11 @@ class EditingMixin:
             else:
                 for l in links:
                     l.set_target(ans[1])
+            for h in self.show_data.all_cues():      # gruppi Stinger che usano le cue cancellate come PRE/POST
+                if h.type == "group" and h.group_mode == "stinger":
+                    for f in ("st_pre", "st_post"):
+                        if getattr(h, f) in gone:
+                            setattr(h, f, ans[1].id if ans[0] == "retarget" else "")
         for c in doomed + extra_links:
             self.ctrl.stop_cue(c.id, 0)
         self.model.beginResetModel()
@@ -351,6 +357,10 @@ class EditingMixin:
 
     def _inspector_edited(self, file_changed):
         cue = self.inspector.cue
+        if cue is not None and cue.type == "group" and self._normalize_stingers():
+            r = self._current_row()                   # Stinger: PRE/POST aggiunte, tolte o ricollegate
+            self._structure_changed(select=[r] if r >= 0 else None)
+            self.inspector.refresh_fields()
         if cue is not None and cue.type == "group":
             need = cue.group_mode == "rloop" and cue.group_advance == "go"
             has = any(c.type == "groupexit" and c.group == cue.id for c in self.show_data.cues)

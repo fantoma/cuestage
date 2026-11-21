@@ -33,6 +33,7 @@ class GroupsMixin:
         for lst in self.show_data.lists:
             normalize(lst.cues)
         self.show_data.refresh_links()
+        self._normalize_stingers()
         self._ensure_exit_cues()
         self.model.beginResetModel()
         self.model.endResetModel()
@@ -41,6 +42,26 @@ class GroupsMixin:
         if select is not None:
             self._select_rows(select)
         self._update_standby()
+
+    def _normalize_stingers(self):
+        """Gruppi Stinger: PRE e POST attorno a ogni cue, partenze decise dal gruppo (vedi groups.py)."""
+        from ..groups import normalize_stingers
+        sh = self.show_data
+        nxt = [None]
+
+        def new_number():
+            if nxt[0] is None:
+                try:
+                    nxt[0] = int(sh.next_number())
+                except ValueError:
+                    nxt[0] = sum(len(l.cues) for l in sh.lists) + 1
+            n = nxt[0]
+            nxt[0] += 1
+            return str(n)
+        if normalize_stingers(sh, new_number):
+            sh.refresh_links()
+            return True
+        return False
 
     def _ensure_exit_cues(self):
         """Un random loop avanzato col GO ha in coda la cue «Esci dal gruppo» (richiamabile anche da altri

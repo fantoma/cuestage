@@ -567,7 +567,12 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         row = QHBoxLayout()
         row.addWidget(QLabel(tr("Avvio")))
         trig = self._combo("trigger", TRIGGERS, TRIGGER_LABELS)
-        trig.setToolTip(tr("Manuale: parte con GO.\nInsieme alla precedente: parte quando parte la cue "
+        hdr = self.show_fn().by_id(cue.group) if cue.group else None
+        st_note = ""
+        if hdr is not None and hdr.type == "group" and hdr.group_mode == "stinger":
+            trig.setEnabled(False)                 # nello Stinger la partenza la decide il gruppo
+            st_note = tr("In un gruppo Stinger la partenza la decide il gruppo (scheda Gruppo).") + "\n"
+        trig.setToolTip(st_note + tr("Manuale: parte con GO.\nInsieme alla precedente: parte quando parte la cue "
                            "sopra, dopo il ritardo.\nAlla fine della precedente: parte quando la cue sopra "
                            "termina, dopo il ritardo.\nSolo trigger: il GO non la avvia (la salta); parte "
                            "con il suo trigger MIDI/OSC, la scorciatoia, una cue Comando o un clic nel GRID. "

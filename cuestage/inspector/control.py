@@ -182,7 +182,9 @@ class ControlTabsMixin:
         mc.currentIndexChanged.connect(mode_changed)
         f.addRow(tr("Tipo"), mc)
         m = cue.group_mode
-        if m == "sequence":
+        if m == "stinger":
+            self._stinger_rows(f, cue)
+        if m in ("sequence", "stinger"):
             gx = self._check("group_go_xfade", tr("GO esegue crossfade"))
             gx.setToolTip(tr("Ogni cue del gruppo che parte col GO ferma quelle del gruppo ancora attive, sfumandole "
                              "con il proprio tempo di ingresso (fade in; per i video il più lungo tra audio e "
@@ -238,6 +240,11 @@ class ControlTabsMixin:
                           "si esce con ESC o con la cue «Esci dal gruppo» (creata in coda: si può richiamare da "
                           "altri PANEL, via MIDI o OSC)."),
                  "all": tr("GO avvia tutte le cue insieme; il pre-wait di ognuna è rispettato. Il GO successivo esce."),
+                 "stinger": tr("Come Sequence, ma ogni cue del gruppo è preceduta da un collegamento alla cue PRE e "
+                            "seguita da un collegamento alla cue POST, inseriti da soli (anche per le cue aggiunte "
+                            "dopo) e segnati PRE e POST. La partenza della cue e della POST la decide il gruppo: "
+                            "assieme, alla fine o con un GO. Il GO sul gruppo avvia la PRE della prima cue (o la "
+                            "cue, se quella PRE è esclusa). Il GO successivo all'ultima cue esce dal gruppo."),
                  "playlist": tr("GO avvia la prima cue; le altre partono da sole, ognuna appena finisce la precedente "
                              "(o in crossfade), nell'ordine della lista. Pre-wait e «con/dopo la precedente» delle "
                              "cue del gruppo non contano. Ogni cue suona una volta (il suo loop è ignorato): dopo "
@@ -250,6 +257,62 @@ class ControlTabsMixin:
         h.setWordWrap(True)
         f.addRow(h)
         return w
+
+    def _stinger_rows(self, f, cue):
+        """Gruppo Stinger: cue PRE e POST (collegamenti attorno a ogni cue), loro partenza, eccezioni."""
+        from ..model import TYPE_LABELS, link_target_ok
+        sh = self.show_fn()
+        starts = ("with", "after", "go")
+
+        def target_combo(field):
+            cb = QComboBox()
+            cb.addItem(tr("— nessuna —"), "")
+            for lst in sh.lists:
+                for c in lst.cues:
+                    if link_target_ok(c) and c.group != cue.id:
+                        cb.addItem(f"{lst.name} · {c.number or '·'} – {c.name or TYPE_LABELS.get(c.type, c.type)}",
+                                   c.id)
+            cb.setCurrentIndex(max(0, cb.findData(getattr(cue, field))))
+
+            def changed(j):
+                setattr(cue, field, cb.itemData(j) or "")
+                self._emit()
+                QTimer.singleShot(0, self.rebuild)
+            cb.currentIndexChanged.connect(changed)
+            return cb
+
+        def start_combo(field, texts):
+            cb = QComboBox()
+            for k in starts:
+                cb.addItem(texts[k], k)
+            cb.setCurrentIndex(max(0, cb.findData(getattr(cue, field))))
+
+            def changed(j):
+                setattr(cue, field, cb.itemData(j))
+                self._emit()
+                QTimer.singleShot(0, self.rebuild)
+            cb.currentIndexChanged.connect(changed)
+            return cb
+        self.st_pre_combo = target_combo("st_pre")
+        f.addRow(tr("Cue PRE"), self.st_pre_combo)
+        f.addRow(tr("La cue dopo la PRE"), start_combo("st_pre_start", {
+            "with": tr("parte assieme alla PRE"), "after": tr("parte alla fine della PRE"),
+            "go": tr("parte con un GO")}))
+        self.st_post_combo = target_combo("st_post")
+        f.addRow(tr("Cue POST"), self.st_post_combo)
+        f.addRow(tr("La POST"), start_combo("st_post_start", {
+            "with": tr("parte assieme alla cue"), "after": tr("parte alla fine della cue"),
+            "go": tr("parte con un GO")}))
+        f.addRow(self._check("st_skip_first_pre", tr("Non eseguire la PRE della prima cue")))
+        f.addRow(self._check("st_skip_last_post", tr("Non eseguire la POST dell'ultima cue")))
+        pre = sh.by_id(cue.st_pre) if cue.st_pre else None
+        if pre is not None and cue.st_pre_start == "after" and pre.type in ("audio", "video") and pre.loop \
+                and int(pre.loop_count or 0) == 0:
+            warn = QLabel(tr("⚠ La cue PRE «{0}» è in loop infinito: qui, con «alla fine», suona una volta sola "
+                             "(loop disattivato), altrimenti la cue non partirebbe mai.", pre.label()))
+            warn.setWordWrap(True)
+            warn.setStyleSheet("color:#e0b040;")
+            f.addRow(warn)
 
     def _tap_box(self, cue):
         """Tap Tempo del gruppo: BPM battuti a mano (tasto, MIDI, OSC o pulsante) e divisore."""

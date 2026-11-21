@@ -4333,6 +4333,112 @@ def t_link_cue(w):
     w.show_data.dirty = False
 
 
+def t_stinger(w):
+    """Gruppo Stinger: PRE prima e POST dopo ogni cue (collegamenti inseriti da soli, anche per le cue nuove),
+    partenze assieme / alla fine / con GO, PRE della prima e POST dell'ultima escluse, PRE «alla fine» senza
+    loop, crossfade tra blocchi, cambio di tipo, cancellazione della cue PRE."""
+    import wave as _wave
+    import numpy as _np
+    from cuestage.model import LinkCue
+
+    def wav(name, sec):
+        path = os.path.join(TMP, name)
+        x = (_np.sin(_np.arange(int(48000 * sec)) / 48000 * 2 * _np.pi * 440) * 6000).astype(_np.int16)
+        with _wave.open(path, "wb") as wf:
+            wf.setnchannels(2)
+            wf.setsampwidth(2)
+            wf.setframerate(48000)
+            wf.writeframes(_np.repeat(x[:, None], 2, axis=1).tobytes())
+        return path
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    g = Cue("group", number="1", name="Scena", group_mode="stinger")
+    a = Cue("audio", number="2", name="A", file=wav("st_a.wav", 1.0), group=g.id)
+    b = Cue("audio", number="3", name="B", file=wav("st_b.wav", 1.0), group=g.id)
+    sh.cues = [g, a, b]
+    pan = sh.add_panel("Stinger")
+    jin = Cue("audio", number="90", name="In", file=wav("st_in.wav", 0.6), loop=True)
+    jout = Cue("audio", number="91", name="Out", file=wav("st_out.wav", 0.6))
+    pan.cues = [jin, jout]
+    w._set_show(sh)
+    run(0.2)
+    cues = w.show_data.cues
+    roles = lambda: [(getattr(c, "st_role", "") or c.name, c.trigger) for c in cues[1:]]
+    g.st_pre, g.st_post = jin.id, jout.id
+    g.st_pre_start, g.st_post_start = "with", "after"
+    w._structure_changed()
+    assert roles() == [("pre", "manual"), ("A", "with_prev"), ("post", "after_prev"),
+                       ("pre", "manual"), ("B", "with_prev"), ("post", "after_prev")], roles()
+    assert all(isinstance(c, LinkCue) and c.group == g.id for c in cues[1:] if getattr(c, "st_role", ""))
+    assert cues[1].name.startswith("↪ PRE") and cues[1].link_target == jin.id and cues[3].link_target == jout.id
+    nums = [c.number for c in cues]
+    assert len(set(nums)) == len(nums), nums                              # numeri nuovi, unici
+    # nuova cue nel gruppo: PRE e POST attorno (la sua partenza di prima si ricorda)
+    w._select_row(cues.index(b))
+    c = Cue("audio", number="", name="C", file=wav("st_c.wav", 1.0), trigger="after_prev")
+    w._insert_cues([c], cues.index(b) + 1)
+    assert w._current_cue() is c and c.group == g.id
+    assert [x.name for x in cues[1:] if not getattr(x, "st_role", "")] == ["A", "B", "C"]
+    k = cues.index(c)
+    assert cues[k - 1].st_role == "pre" and cues[k + 1].st_role == "post" and c.trigger == "with_prev"
+    assert c.st_saved_trigger == "after_prev"
+    # escludere la PRE della prima e la POST dell'ultima
+    g.st_skip_first_pre = g.st_skip_last_post = True
+    w._structure_changed()
+    assert cues[1] is a and a.trigger == "manual" and not getattr(cues[-1], "st_role", "")
+    assert cues[-1] is c
+    # GO: PRE assieme, POST alla fine; il playhead si ferma solo sulle righe con GO
+    g.st_skip_first_pre = g.st_skip_last_post = False
+    w._structure_changed()
+    alive = lambda x: x is not None and w.ctrl.instances.get(x.id) is not None
+    w.ctrl.set_playhead(0)
+    w.go()                                                                 # gruppo: PRE + A
+    pre1, post1 = cues[1], cues[3]
+    assert wait_until(lambda: alive(pre1) and alive(a), 2)
+    assert cues[w.ctrl.playhead].st_role == "pre" and w.ctrl.playhead == 4  # prossima riga con GO
+    assert wait_until(lambda: alive(post1), 3)                            # A finita: parte la POST
+    w.ctrl.stop_all(0)
+    run(0.2)
+    # PRE alla fine (in loop: suona una volta), POST con GO
+    g.st_pre_start, g.st_post_start = "after", "go"
+    w._structure_changed()
+    assert a.trigger == "after_prev" and cues[3].trigger == "manual"
+    w.ctrl.set_playhead(0)
+    w.go()
+    assert wait_until(lambda: alive(pre1), 2) and not alive(a)
+    assert w.ctrl.instances[pre1.id].no_loop                              # loop della PRE disattivato
+    assert wait_until(lambda: alive(a), 3)                                # PRE finita: parte A
+    assert w.ctrl.playhead == 3 and cues[3].st_role == "post"             # la POST aspetta il GO
+    w.ctrl.stop_all(0)
+    run(0.2)
+    # crossfade: la PRE del blocco 2 sfuma il blocco 1, non il proprio
+    g.st_pre_start, g.st_post_start, g.group_go_xfade = "with", "with", True
+    w._structure_changed()
+    w.ctrl.set_playhead(0)
+    w.go()
+    assert wait_until(lambda: alive(a) and alive(cues[3]), 2)
+    w.go()                                                                 # blocco 2: PRE + B + POST
+    assert wait_until(lambda: alive(b), 2)
+    run(0.3)
+    assert not alive(a) and alive(b) and alive(cues[cues.index(b) - 1])
+    w.ctrl.stop_all(0)
+    run(0.2)
+    # cancellare la cue PRE originale: ricollegare a un'altra cue
+    w.show_list(1)
+    w.ask_links_on_delete = lambda origs, links: ("retarget", jout)
+    w._select_row(0)
+    w.delete_cues()
+    del w.ask_links_on_delete
+    assert g.st_pre == jout.id and all(x.link_target == jout.id for x in cues if getattr(x, "st_role", ""))
+    w.show_list(0)
+    # torna Sequence: righe PRE/POST tolte, partenze di prima
+    g.group_mode = "sequence"
+    w._structure_changed()
+    assert [x.name for x in cues[1:]] == ["A", "B", "C"]
+    assert a.trigger == "manual" and c.trigger == "after_prev" and not c.st_saved_trigger
+    w.show_data.dirty = False
+
+
 def make_pdf(name, n=4):
     """PDF di prova: n pagine A4 orizzontali, ognuna di un colore diverso con il suo numero."""
     from PySide6.QtCore import QMarginsF, QRectF
@@ -5288,6 +5394,8 @@ if __name__ == "__main__":
     check("gruppo Sequence con «GO esegue crossfade»", lambda: t_group_go_xfade(w))
     check("cue Collegamento: esegue l'originale, non si modifica, salvataggio, cancellazione dell'originale",
           lambda: t_link_cue(w))
+    check("gruppo Stinger: PRE e POST attorno a ogni cue, partenze, esclusioni, crossfade, cambio di tipo",
+          lambda: t_stinger(w))
     check("Normalizza: LUFS delle cue, correzione relativa del volume, misuratore in tempo reale", lambda: t_normalize(w))
     check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))

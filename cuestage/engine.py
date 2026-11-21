@@ -60,7 +60,7 @@ class Instance:
         self.elapsed = 0.0
         self.started_at = ctrl.clock
         # avviata da una Playlist: suona una volta sola, anche se la cue ha il loop
-        self.no_loop = getattr(ctrl, "_play_once", None) == cue.id
+        self.no_loop = getattr(ctrl, "_play_once", None) == cue.id or stinger_once(ctrl, cue)
         # BLIND: cue di un GRID in prova cieca: tutto funziona (tempi, barre, vumeter) ma niente audio né video
         blind = getattr(ctrl, "blind_lists", None)
         self.blind = False
@@ -376,6 +376,18 @@ def state_at(cue, T):
     view.override("fit", vals["fit"])
     view.active = (na, nb, f)
     return view
+
+
+def stinger_once(ctrl, cue):
+    """PRE di un gruppo Stinger con la cue che parte «alla fine»: suona una volta (il loop non vale), altrimenti
+    la cue non partirebbe mai."""
+    if not getattr(cue, "is_link", False) or cue.st_role != "pre" or not cue.group:
+        return False
+    try:
+        hdr = ctrl.show.by_id(cue.group)
+    except Exception:
+        return False
+    return hdr is not None and hdr.group_mode == "stinger" and hdr.st_pre_start == "after"
 
 
 def go_xfade_time(cue):
@@ -1845,7 +1857,7 @@ class GroupInstance(Instance):
         depth = ctrl._depth + 1
         self.tap = tap_active(c)
         self.beat_next = ctrl.clock + tap_interval(c) if self.tap else None
-        if self.mode == "sequence":
+        if self.mode in ("sequence", "stinger"):
             self.cascade = False          # le «dopo la precedente» seguono l'ultima cue del gruppo
             ctrl.trigger(self.pool[0], cascade=True, depth=depth)
             if self.tap:                  # Tap Tempo: i GO successivi li dà il battito (vedi Controller._tick)
@@ -2589,7 +2601,7 @@ class Controller(QObject):
             return
         if cue.type == "group":
             end = block_end(cues, i)
-            if cue.group_mode == "sequence" and i + 1 < end:
+            if cue.group_mode in ("sequence", "stinger") and i + 1 < end:
                 j = i + 2                          # dopo la prima cue del gruppo
             else:
                 j = end                            # gli altri tipi: il GO successivo esce dal gruppo
@@ -2846,13 +2858,20 @@ class Controller(QObject):
         if cue.trigger != "manual" or not cue.group or cue.type not in self.GO_XFADE_TYPES:
             return
         hdr = self.show.by_id(cue.group)
-        if hdr is None or hdr.type != "group" or hdr.group_mode != "sequence" \
+        if hdr is None or hdr.type != "group" or hdr.group_mode not in ("sequence", "stinger") \
                 or not getattr(hdr, "group_go_xfade", False):
             return
+        blocks = None
+        if hdr.group_mode == "stinger":        # Stinger: sfuma i blocchi precedenti (PRE, cue, POST), non il proprio
+            from .groups import stinger_blocks
+            lst, hi = self.show.list_of(hdr.id)
+            blocks = stinger_blocks(lst.cues, hi) if lst is not None else {}
         t = go_xfade_time(cue)
         for other in list(self.instances.values()):
             if other is inst or other.done or other.user_stopped or other.cue.group != hdr.id \
                     or other.cue.type not in self.GO_XFADE_TYPES:
+                continue
+            if blocks is not None and blocks.get(other.cue.id, -1) == blocks.get(cue.id, -2):
                 continue
             other.stop(t)
 
@@ -2878,7 +2897,7 @@ class Controller(QObject):
             return cues[j] if j < len(cues) else None
         if cue.group:
             hdr = self.show.by_id(cue.group)
-            if hdr is not None and hdr.group_mode != "sequence":
+            if hdr is not None and hdr.group_mode not in ("sequence", "stinger"):
                 return None
         if i + 1 >= len(cues):
             return None
