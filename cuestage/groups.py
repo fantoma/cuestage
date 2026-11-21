@@ -160,6 +160,9 @@ def normalize_stingers(show, new_number):
                         p.set_target(pre_o)
                         changed = True
                     p.group = g.id
+                    if p.disabled != bool(m.disabled):     # PRE e POST seguono la loro cue (anche disabilitata)
+                        p.disabled = bool(m.disabled)
+                        changed = True
                     changed |= _set_trigger(p, "manual")
                     new_rows.append(p)
                     changed |= _set_trigger(m, ST_TRIGGER.get(g.st_pre_start, "with_prev"))
@@ -175,6 +178,9 @@ def normalize_stingers(show, new_number):
                         q.set_target(post_o)
                         changed = True
                     q.group = g.id
+                    if q.disabled != bool(m.disabled):
+                        q.disabled = bool(m.disabled)
+                        changed = True
                     changed |= _set_trigger(q, ST_TRIGGER.get(g.st_post_start, "after_prev"))
                     new_rows.append(q)
             if [c.id for c in new_rows] != [c.id for c in rows]:

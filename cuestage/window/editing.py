@@ -322,6 +322,22 @@ class EditingMixin:
             return None
         return ("retarget", cands[labels.index(item)])
 
+    def toggle_disabled(self):
+        """Abilita / disabilita le cue selezionate (un gruppo vale per tutte le sue cue): se ce n'è almeno una
+        abilitata le disabilita tutte, altrimenti le riabilita."""
+        rows = self._selected_rows()
+        cues = [self.show_data.cues[r] for r in rows if 0 <= r < len(self.show_data.cues)]
+        if not cues:
+            return
+        on = not all(c.disabled for c in cues)
+        for c in cues:
+            c.disabled = on
+        self.show_data.dirty = True
+        self._normalize_stingers()                 # Stinger: PRE e POST seguono la loro cue
+        self.status(tr("{0} cue disabilitate", len(cues)) if on else tr("{0} cue abilitate", len(cues)))
+        self._refresh_disabled()
+        self.inspector.refresh_fields()
+
     def create_link(self):
         """Crea un collegamento alla cue selezionata, subito dopo di essa."""
         cur = self._current_cue()
@@ -357,7 +373,7 @@ class EditingMixin:
 
     def _inspector_edited(self, file_changed):
         cue = self.inspector.cue
-        if cue is not None and cue.type == "group" and self._normalize_stingers():
+        if cue is not None and (cue.type == "group" or cue.group) and self._normalize_stingers():
             r = self._current_row()                   # Stinger: PRE/POST aggiunte, tolte o ricollegate
             self._structure_changed(select=[r] if r >= 0 else None)
             self.inspector.refresh_fields()

@@ -23,7 +23,8 @@ class ListsMixin:
                     any(p[1] in lst.cues for p in self.ctrl.pending):
                 running.add(i)
         self.list_tabs.set_lists([("▦ " if l.is_grid else "") + l.name for l in sh.lists], sh.view, go, running,
-                                 kinds=[l.kind for l in sh.lists])
+                                 kinds=[l.kind for l in sh.lists],
+                                 disabled=[i for i, l in enumerate(sh.lists) if i > 0 and l.disabled])
 
     def show_list(self, i):
         """Mostra (e rende modificabile) la lista i: 0 = MAIN, poi i PANEL."""
@@ -61,6 +62,27 @@ class ListsMixin:
             if lst.is_grid:
                 self.grid.set_list(lst)
                 self._grid_sync(force=True)
+
+    def set_panel_disabled(self, i, on):
+        """PANEL disabilitato: nessuna sua cue parte (nome barrato e grigio)."""
+        sh = self.show_data
+        if not (0 < i < len(sh.lists)):
+            return
+        lst = sh.lists[i]
+        lst.disabled = bool(on)
+        if on:                                     # quello che suona va avanti: si ferma con STOP
+            self.status(tr("PANEL «{0}» disabilitato: le sue cue non partono", lst.name))
+        else:
+            self.status(tr("PANEL «{0}» abilitato", lst.name))
+        sh.dirty = True
+        self._refresh_disabled()
+
+    def _refresh_disabled(self):
+        self._update_tabs()
+        self.model.refresh()
+        if self.show_data.current.is_grid:
+            self._grid_sync(force=True)
+        self._update_standby()
 
     def reveal_cue(self, cue_id):
         """Mostra la lista che contiene la cue e la seleziona (senza spostare il playhead)."""
@@ -334,6 +356,7 @@ class ListsMixin:
         if rows:
             m.addAction(tr("Duplica"), self.duplicate)
             m.addAction(tr("Crea collegamento"), self.create_link)
+            m.addAction(tr("Abilita / disabilita"), self.toggle_disabled)
             m.addAction(tr("Elimina"), self.delete_cues)
             sub = m.addMenu(tr("Sposta in"))
             self._fill_move_menu(sub)

@@ -100,6 +100,12 @@ class GridCanvas(QWidget):
     def _paint_cue(self, p, rect, cue, ctrl, sel, nxt, pending, local_go, f_small, f_name, cell):
         bg = QColor(cue.color or DEFAULT_BG)
         fg = QColor(G.text_color(cue.color or DEFAULT_BG))
+        if self.panel.mw.show_data.cue_disabled(cue, self.panel.lst):    # disabilitata: grigia e barrata
+            bg = QColor("#3a3a40")
+            fg = QColor(130, 130, 136)
+            f_small, f_name = QFont(f_small), QFont(f_name)
+            f_small.setStrikeOut(True)
+            f_name.setStrikeOut(True)
         inst = ctrl.instances.get(cue.id)
         active = inst is not None and not inst.done
         waiting = cue.id in pending

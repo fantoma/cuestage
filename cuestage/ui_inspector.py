@@ -482,6 +482,24 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         row.addWidget(b2)
         return row
 
+    def _disabled_check(self):
+        """Disabilitata: la cue (o tutto il gruppo) non parte; il GO la salta."""
+        cue = self.cue
+        text = tr("Gruppo disabilitato (nessuna sua cue parte)") if cue.type == "group" and not cue.is_link \
+            else tr("Disabilitata (non parte; il GO la salta)")
+        cb = self._check("disabled", text)
+        sh = self.show_fn()
+        lst, _i = sh.list_of(cue.id)
+        why = []
+        if lst is not None and lst is not sh.main and lst.disabled:
+            why.append(tr("il PANEL «{0}» è disabilitato", lst.name))
+        hdr = sh.by_id(cue.group) if cue.group else None
+        if hdr is not None and hdr.disabled:
+            why.append(tr("il gruppo «{0}» è disabilitato", hdr.label()))
+        if why:
+            cb.setToolTip(tr("Non parte comunque: {0}", ", ".join(why)))
+        return cb
+
     def _tab_link(self):
         """Collegamento: si sceglie solo la cue originale; tutto il resto è quello dell'originale."""
         from .model import link_target_ok
@@ -515,6 +533,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         go.clicked.connect(lambda: self.reveal_fn(cue.link_target) if getattr(self, "reveal_fn", None) else None)
         row.addWidget(go)
         v.addLayout(row)
+        v.addWidget(self._disabled_check())
         orig = cue.original()
         if orig is None:
             msg = QLabel(tr("⚠ La cue originale non c'è più (o non è valida): il collegamento non parte. "
@@ -539,6 +558,7 @@ class Inspector(MediaTabsMixin, TextTabMixin, ControlTabsMixin, MixerTabMixin, S
         cue = self.cue
         w = QWidget()
         v = QVBoxLayout(w)
+        v.addWidget(self._disabled_check())
         nl = len(self.show_fn().links_to([cue.id]))
         if nl:                                  # originale di collegamenti: le modifiche valgono anche per loro
             ll = QLabel(tr("↪ Questa cue ha {0} collegamenti nella scaletta: le modifiche valgono anche per loro.", nl))

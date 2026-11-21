@@ -146,6 +146,20 @@ The web interface for phones and tablets and the start-up self-test messages are
 | **Memo** | Note for the operator: only for show; GO skips it (the playhead never stops on a Memo) |
 | **Link** | Repeats another cue (the *original*) at another point of the cue list or in a PANEL/GRID, exactly as it is: type, file, times, trigger, pre-wait, volumes, matrix, presets, effects… all come from the original, so changing the original changes all its links. The only setting is the original (Link tab, with “Go to the original”): it cannot be a group or another link. A link has its own playback, so it can play even together with the original; MIDI, OSC, hotkey and event triggers stay with the original only. Create it with **Cue › Create link to the selected cue** (Ctrl+L), the list's right-click menu or “New cue › Link” (it points at the selected cue), then move it where needed. Deleting an original that has links asks whether to delete the links too or to point them at another cue. The original's Base tab shows how many links it has |
 
+### Disabling cues, groups and PANELs
+
+A cue, a group or a PANEL can be **disabled**: it stays in the show (and can be edited) but nothing starts it —
+neither GO nor MIDI, OSC, hotkeys, Command cues, GRID clicks or events. In the list, the GRID and the PANEL tabs it
+is shown **grey and struck through**. GO skips it, and the cues after it that start “with previous” or “after
+previous” start as if it weren't there. A disabled group disables all its cues; a disabled PANEL all the cues of
+the PANEL (the MAIN cannot be disabled). In a Stinger group the PRE and POST of a disabled cue are disabled with it.
+Links to a disabled original still play (a PANEL of “templates” can be disabled), while a disabled link does not.
+Cues already playing keep playing (STOP stops them).
+
+How: **Cue › Enable / disable the selected cues** (Ctrl+Shift+D) or the list's right-click menu; the
+“Disabled” box at the top of the Base tab (for a group: “Group disabled”); for a PANEL, right-click on its tab ›
+**Disable PANEL / Enable PANEL**.
+
 ## Cue lists: MAIN and PANEL
 
 Above the table are the list tabs: **MAIN** (the main list) and the **PANELs**, additional lists (e.g.

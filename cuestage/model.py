@@ -96,6 +96,9 @@ class Cue:
     FIELDS = {
         # comuni
         "number": "", "name": "", "trigger": "manual", "delay": 0.0, "notes": "",
+        # disabilitata: non parte in nessun modo (GO, MIDI, OSC, tasto, Comando, GRID); in un gruppo vale per tutte
+        # le sue cue. Il GO la salta e le cue che la seguono «con/dopo la precedente» partono come se non ci fosse
+        "disabled": False,
         "midi": "",              # trigger MIDI per questa cue (es. "note 1 60")
         "midi_vol": "",          # controllo MIDI continuo per il volume (es. "cc 1 7")
         "midi_op": "",           # controllo MIDI continuo per la trasparenza (es. "cc 1 8")
@@ -351,7 +354,7 @@ class LinkCue(Cue):
     (MIDI, OSC, tasto, eventi) restano solo all'originale, per non farla partire più volte."""
     is_link = True
     OWN = frozenset({"id", "number", "group", "grid_pos", "link_target", "midi", "midi_vol", "midi_op",
-                     "osc_trigger", "event_trig", "hotkey", "collapsed", "st_role", "st_trigger"})
+                     "osc_trigger", "event_trig", "hotkey", "collapsed", "st_role", "st_trigger", "disabled"})
     ROLE_LABELS = {"pre": "PRE", "post": "POST"}
     FWD = frozenset(set(Cue.FIELDS) - OWN) | {"type"}
 
@@ -439,6 +442,8 @@ class LinkCue(Cue):
     def to_dict(self, base_dir=None):
         d = {"id": self.id, "type": "link", "number": self.number, "group": self.group,
              "grid_pos": copy.deepcopy(self.__dict__.get("grid_pos") or []), "link_target": self.link_target}
+        if self.__dict__.get("disabled"):
+            d["disabled"] = True
         if self.st_role:
             d["st_role"] = self.st_role
         if self.st_trigger:
@@ -454,8 +459,10 @@ class LinkCue(Cue):
         c.number = str(d.get("number") or "")
         c.group = d.get("group") or ""
         c.grid_pos = list(d.get("grid_pos") or [])
+        c.disabled = bool(d.get("disabled", False))
         extra = {k: copy.deepcopy(v) for k, v in d.items()
-                 if k not in ("id", "type", "number", "group", "grid_pos", "link_target", "st_role", "st_trigger")}
+                 if k not in ("id", "type", "number", "group", "grid_pos", "link_target", "st_role", "st_trigger",
+                              "disabled")}
         if extra:
             c._extra = extra
         return c
@@ -515,7 +522,8 @@ class CueList:
     GRID_DEFAULTS = {"kind": "list", "grid_rows": 4, "grid_cols": 6, "grid_pages": [tr("Pagina 1")],
                      "grid_click": "toggle",
                      "grid_solo": False,     # Solo: una cue che parte ferma le altre attive del GRID
-                     "grid_fade": 0.5}       # fade out (s) degli stop del GRID (clic, Solo, STOP del PANEL)
+                     "grid_fade": 0.5,       # fade out (s) degli stop del GRID (clic, Solo, STOP del PANEL)
+                     "disabled": False}      # PANEL disabilitato: nessuna sua cue parte
 
     def __init__(self, name, cues=None, list_id=None, kind="list"):
         self.id = list_id or uuid.uuid4().hex[:8]
@@ -810,6 +818,21 @@ class Show:
     def index_of(self, cue_id):
         """Indice nella lista visualizzata."""
         return self.current.index_of(cue_id)
+
+    def cue_disabled(self, cue, lst=None):
+        """La cue non può partire? (disabilitata lei, il suo gruppo o il suo PANEL)"""
+        if getattr(cue, "disabled", False):
+            return True
+        if lst is None:
+            lst, _i = self.list_of(cue.id)
+        if lst is not None and getattr(lst, "disabled", False) and lst is not self.main:
+            return True
+        if cue.group:
+            cues = lst.cues if lst is not None else self.all_cues()
+            hdr = next((c for c in cues if c.id == cue.group), None)
+            if hdr is not None and getattr(hdr, "disabled", False):
+                return True
+        return False
 
     def refresh_links(self):
         """I collegamenti ritrovano il loro originale (dopo cancellazioni, annulla, sincronizzazione)."""

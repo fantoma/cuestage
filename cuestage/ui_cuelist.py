@@ -427,6 +427,14 @@ class CueTableModel(QAbstractTableModel):
                 return TRIGGER_SHORT.get(cue.trigger, cue.trigger)
             if col in (C_STATE, C_PFL):
                 return ""
+        if role in (Qt.FontRole, Qt.ForegroundRole) and self.show.cue_disabled(cue, self.show.current):
+            # disabilitata (lei, il suo gruppo o il PANEL): testo grigio e barrato
+            if role == Qt.ForegroundRole:
+                return QColor(125, 125, 132)
+            f = QFont()
+            f.setStrikeOut(True)
+            f.setBold((cue.type == "group" and col in (C_TYPE, C_NAME)) or col in (C_PLAYHEAD, C_NUM))
+            return f
         if role == Qt.FontRole and cue.type == "group" and col in (C_TYPE, C_NAME):
             f = QFont()
             f.setBold(True)

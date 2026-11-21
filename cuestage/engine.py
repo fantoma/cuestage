@@ -1840,6 +1840,7 @@ class GroupInstance(Instance):
         ctrl = self.ctrl
         self.lst, i = ctrl.show.list_of(c.id)
         self.pool = members(self.lst.cues, i, playable=True) if self.lst is not None else []
+        self.pool = [m for m in self.pool if not ctrl.show.cue_disabled(m, self.lst)]   # senza le disabilitate
         self.spawned = set()
         self.current = None
         self.xf = None
@@ -2581,10 +2582,10 @@ class Controller(QObject):
         i = self.playhead_of(lst)
         if not (0 <= i < len(cues)):
             return
-        if cues[i].trigger == "trigger" or cues[i].type == "memo":
-            # «Solo trigger» o Memo (solo una nota): il GO la salta e avvia la prossima manuale
+        if cues[i].trigger == "trigger" or cues[i].type == "memo" or self.show.cue_disabled(cues[i], lst):
+            # «Solo trigger», Memo (solo una nota) o disabilitata: il GO la salta e avvia la prossima manuale
             j = i + 1
-            while j < len(cues) and not _goable(cues[j]):
+            while j < len(cues) and not self._go_ok(cues[j], lst):
                 j += 1
             if j >= len(cues):
                 return
@@ -2601,15 +2602,22 @@ class Controller(QObject):
             return
         if cue.type == "group":
             end = block_end(cues, i)
-            if cue.group_mode in ("sequence", "stinger") and i + 1 < end:
-                j = i + 2                          # dopo la prima cue del gruppo
+            first = next((k for k in range(i + 1, end) if cues[k].type not in ("groupexit", "memo")
+                          and not self.show.cue_disabled(cues[k], lst)), None)
+            if cue.group_mode in ("sequence", "stinger") and first is not None:
+                j = first + 1                      # dopo la prima cue del gruppo (quella che il gruppo avvia)
             else:
                 j = end                            # gli altri tipi: il GO successivo esce dal gruppo
         else:
             j = i + 1
-        while j < len(cues) and not _goable(cues[j]):
+        while j < len(cues) and not self._go_ok(cues[j], lst):
             j += 1
         self.set_playhead(j, lst)
+
+    def _go_ok(self, cue, lst=None):
+        """La cue si ferma sotto il playhead (parte col GO)? No le «Solo trigger», le Memo, quelle che seguono la
+        precedente e le disabilitate."""
+        return _goable(cue) and not self.show.cue_disabled(cue, lst)
 
     # ---------------------------------------------------- volume / opacità dal vivo (fader MIDI)
     def set_live_level(self, cue, db):
@@ -2647,9 +2655,9 @@ class Controller(QObject):
         """Avvia la cue in standby (e le sue «con la precedente») a volume/opacità zero."""
         cues = lst.cues
         i = self.playhead_of(lst)
-        while 0 <= i < len(cues) and not _goable(cues[i]):     # «Solo trigger» e Memo: il crossfade le salta
+        while 0 <= i < len(cues) and not self._go_ok(cues[i], lst):     # «Solo trigger», Memo, disabilitate
             i += 1
-            while i < len(cues) and not _goable(cues[i]):
+            while i < len(cues) and not self._go_ok(cues[i], lst):
                 i += 1
         if not (0 <= i < len(cues)):
             return None
@@ -2810,6 +2818,14 @@ class Controller(QObject):
                 inst.stop(fade)
 
     def start_cue(self, cue, cascade=True, silent=False, depth=0):
+        if self.show.cue_disabled(cue):
+            # disabilitata (lei, il suo gruppo o il suo PANEL): non parte; chi la segue «con/dopo la precedente»
+            # parte come se non ci fosse
+            if cascade and depth <= MAX_CHAIN:
+                nxt = self._next(cue)
+                if nxt is not None and nxt.trigger in ("with_prev", "after_prev"):
+                    self.trigger(nxt, True, depth + 1)
+            return None
         self._grid_solo(cue)
         old = self.instances.pop(cue.id, None)
         if old is not None:

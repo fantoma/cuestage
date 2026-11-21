@@ -34,6 +34,7 @@ class ListTabs(QWidget):
     moveRequested = Signal(int, int)        # indice, direzione
     addGridRequested = Signal()
     kindRequested = Signal(int, str)        # indice, «list» / «grid»
+    disableRequested = Signal(int, bool)    # indice, disabilitato
     cuesDropped = Signal(int, list, bool)   # cue trascinate su un tab: indice, id, copia (Ctrl)
 
     def __init__(self, parent=None):
@@ -75,22 +76,28 @@ class ListTabs(QWidget):
         h.addWidget(self.add_grid_btn)
         h.addStretch(1)
         self.kinds = []
+        self.disabled = set()
         self._guard = False
 
-    def set_lists(self, names, current, go_index, running, kinds=None):
-        """names: nomi delle liste ([0] = MAIN) · go_index: lista di GO · running: set di indici in play."""
+    def set_lists(self, names, current, go_index, running, kinds=None, disabled=None):
+        """names: nomi delle liste ([0] = MAIN) · go_index: lista di GO · running: set di indici in play ·
+        disabled: indici dei PANEL disabilitati (nome barrato e grigio)."""
         self.kinds = list(kinds or [])
+        self.disabled = set(disabled or ())
         self._guard = True
         while self.bar.count() > len(names):
             self.bar.removeTab(self.bar.count() - 1)
         for i, n in enumerate(names):
+            if i in self.disabled:             # barrato: il tab non ha un carattere proprio
+                n = "".join(ch + "\u0336" for ch in n)
             text = ("▶ " if i in running else "") + n + ("  ⏵GO" if i == go_index else "")
             if i < self.bar.count():
                 if self.bar.tabText(i) != text:
                     self.bar.setTabText(i, text)
             else:
                 self.bar.addTab(text)
-            self.bar.setTabTextColor(i, GO_COL if i == go_index and i != current else QColor())
+            self.bar.setTabTextColor(i, QColor(125, 125, 132) if i in self.disabled else
+                                     GO_COL if i == go_index and i != current else QColor())
             if len(names) > 1:          # stesso colore dell'etichetta nel pannello «Cue attive»
                 self.bar.setTabIcon(i, _dot(list_color(i)))
             else:
@@ -171,6 +178,9 @@ class ListTabs(QWidget):
             a = m.addAction(tr("Sposta a destra"), lambda: self.moveRequested.emit(i, 1))
             a.setEnabled(i < self.bar.count() - 1)
             m.addSeparator()
+            off = i in getattr(self, "disabled", set())
+            m.addAction(tr("Abilita PANEL") if off else tr("Disabilita PANEL"),
+                        lambda: self.disableRequested.emit(i, not off))
             m.addAction(tr("Elimina PANEL…"), lambda: self.deleteRequested.emit(i))
         m.exec(self.bar.mapToGlobal(pos))
 

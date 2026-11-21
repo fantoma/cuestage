@@ -4431,11 +4431,101 @@ def t_stinger(w):
     del w.ask_links_on_delete
     assert g.st_pre == jout.id and all(x.link_target == jout.id for x in cues if getattr(x, "st_role", ""))
     w.show_list(0)
+    # cue disabilitata: la sua PRE e la sua POST anche
+    w._select_rows([cues.index(b)])
+    w.toggle_disabled()
+    kb = cues.index(b)
+    assert b.disabled and cues[kb - 1].disabled and cues[kb + 1].disabled and not cues[1].disabled
+    w.toggle_disabled()
+    assert not cues[kb - 1].disabled
     # torna Sequence: righe PRE/POST tolte, partenze di prima
     g.group_mode = "sequence"
     w._structure_changed()
     assert [x.name for x in cues[1:]] == ["A", "B", "C"]
     assert a.trigger == "manual" and c.trigger == "after_prev" and not c.st_saved_trigger
+    w.show_data.dirty = False
+
+
+def t_disable(w):
+    """Cue, gruppi e PANEL disabilitati: non partono in nessun modo, il GO li salta, chi li segue «con/dopo la
+    precedente» parte come se non ci fossero; testo grigio e barrato; salvataggio; collegamenti."""
+    from PySide6.QtCore import Qt
+    from cuestage.model import LinkCue
+    sh = Show()
+    sh.settings["output_fullscreen"] = False
+    a = Cue("wait", number="1", name="A", duration=5.0)
+    b = Cue("wait", number="2", name="B", duration=5.0, trigger="with_prev")
+    c = Cue("wait", number="3", name="C", duration=5.0, trigger="with_prev")
+    d = Cue("wait", number="4", name="D", duration=5.0)
+    g = Cue("group", number="5", name="G")
+    m1 = Cue("wait", number="6", name="M1", duration=5.0, group=g.id)
+    e = Cue("wait", number="7", name="E", duration=5.0)
+    sh.cues = [a, b, c, d, g, m1, e]
+    pan = sh.add_panel("Effetti")
+    p1 = Cue("wait", number="8", name="P1", duration=5.0)
+    pan.cues = [p1]
+    w._set_show(sh)
+    run(0.2)
+    alive = lambda x: w.ctrl.instances.get(x.id) is not None
+    w._select_rows([1])
+    w.toggle_disabled()                                    # B disabilitata
+    assert b.disabled and sh.cue_disabled(b) and not sh.cue_disabled(a)
+    idx = w.model.index(1, 2)
+    assert w.model.data(idx, Qt.FontRole).strikeOut() and w.model.data(idx, Qt.ForegroundRole) is not None
+    assert w.model.data(w.model.index(0, 2), Qt.FontRole) is None
+    w.ctrl.set_playhead(0)
+    w.go()                                                 # A; B saltata; C «con la precedente» parte lo stesso
+    run(0.2)
+    assert alive(a) and not alive(b) and alive(c)
+    assert w.ctrl.playhead == 3                            # prossima con GO: D
+    assert w.ctrl.start_cue(b) is None and not alive(b)    # in nessun modo
+    w.ctrl.stop_all(0)
+    run(0.1)
+    d.disabled = True                                      # il GO salta anche una cue manuale disabilitata
+    g.disabled = True                                      # e un gruppo intero
+    w.ctrl.set_playhead(3)
+    w.go()
+    run(0.2)
+    assert alive(e) and not alive(d) and not alive(g) and not alive(m1)
+    assert sh.cue_disabled(m1)                             # le cue del gruppo disabilitato
+    w.ctrl.trigger(m1)
+    run(0.1)
+    assert not alive(m1)
+    w.ctrl.stop_all(0)
+    run(0.1)
+    # PANEL disabilitato
+    w.set_panel_disabled(1, True)
+    assert pan.disabled and sh.cue_disabled(p1)
+    tab = w.list_tabs.bar.tabText(1)
+    assert "\u0336" in tab
+    assert w.ctrl.start_cue(p1) is None
+    w.set_panel_disabled(1, False)
+    assert not sh.cue_disabled(p1) and "\u0336" not in w.list_tabs.bar.tabText(1)
+    w.ctrl.start_cue(p1)
+    assert alive(p1)
+    w.ctrl.stop_all(0)
+    run(0.1)
+    # collegamento a un originale disabilitato: suona; collegamento disabilitato: no
+    lk = LinkCue(link_target=e.id, number="9")
+    e.disabled = True
+    sh.cues.append(lk)
+    w._structure_changed()
+    assert w.ctrl.start_cue(lk) is not None
+    w.ctrl.stop_all(0)
+    lk.disabled = True
+    assert w.ctrl.start_cue(lk) is None
+    # salvataggio
+    pan.disabled = True
+    path = os.path.join(TMP, "disabled.cueshow")
+    sh.save(path)
+    s2 = Show.load(path)
+    assert [x.disabled for x in s2.cues] == [False, True, False, True, True, False, True, True]
+    assert s2.lists[1].disabled and not s2.lists[0].disabled
+    w._select_rows([1, 2])                                 # B disabilitata, C no: le disabilita tutte
+    w.toggle_disabled()
+    assert b.disabled and c.disabled
+    w.toggle_disabled()                                    # tutte disabilitate: le riabilita
+    assert not b.disabled and not c.disabled
     w.show_data.dirty = False
 
 
@@ -5396,6 +5486,7 @@ if __name__ == "__main__":
           lambda: t_link_cue(w))
     check("gruppo Stinger: PRE e POST attorno a ogni cue, partenze, esclusioni, crossfade, cambio di tipo",
           lambda: t_stinger(w))
+    check("cue, gruppi e PANEL disabilitati: non partono, il GO li salta, grigi e barrati", lambda: t_disable(w))
     check("Normalizza: LUFS delle cue, correzione relativa del volume, misuratore in tempo reale", lambda: t_normalize(w))
     check("durante il play: ispettore fermo sulla cue scelta, marker creati e spostati, «Ricomincia da qui»", lambda: t_markers_live(w))
     check("schermo 1366×768: la finestra non esce dallo schermo", lambda: t_small_screen(w))
